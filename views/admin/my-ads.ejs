@@ -1,0 +1,99 @@
+<% 
+  const safeMyAdsList = typeof myAdsList !== 'undefined' ? myAdsList : [];
+  const dashboardContent = `
+    <div class="container mx-auto px-4 py-8">
+      <div class="bg-white rounded-lg shadow-sm p-8">
+        <div class="flex justify-between items-center mb-8">
+          <h2 class="text-2xl font-semibold text-gray-800">Kampeni Zangu za Matangazo</h2>
+          <a href="/admin/upload-video" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
+            <i class="fas fa-plus mr-2"></i>Tangazo Jipya
+          </a>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead>
+              <tr class="bg-secondary-light">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina la Tangazo</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maonyesho</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Ilietumika</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe Iliyoundwa</th>
+                <th class="relative px-6 py-3">
+                  <span class="sr-only">Vitendo</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200" id="my-ads-table">
+              ${safeMyAdsList.length > 0 ?
+                safeMyAdsList.map(ad => `
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${ad.title}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="${ad.status === 'active' ? 'bg-green-100 text-green-800' : ad.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
+                        ${ad.status === 'active' ? 'Inayofanya Kazi' : ad.status === 'pending' ? 'Inasubiri' : 'Isiyofanya Kazi'}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ad.views ? ad.views.toLocaleString() : '0'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ad.dataUsed ? ad.dataUsed + ' GB' : '0 GB'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(ad.created_at).toLocaleDateString('sw-TZ')}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <a href="/admin/edit-ad/${ad.id}" class="text-primary hover:text-primary-dark">Hariri</a>
+                      <a href="/admin/delete-ad/${ad.id}" class="text-red-600 hover:text-red-800 ml-4" onclick="return confirm('Je, una uhakika unataka kufuta tangazo hili?')">Futa</a>
+                    </td>
+                  </tr>
+                `).join('') :
+                '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Hakuna matangazo yaliyopatikana</td></tr>'
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <script>
+      function sanitizeHTML(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        fetch('/api/my-ads')
+          .then(response => response.json())
+          .then(data => {
+            if (!data.success) return;
+            const tableBody = document.getElementById('my-ads-table');
+            tableBody.innerHTML = '';
+            if (!data.data || data.data.length === 0) {
+              tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Hakuna matangazo</td></tr>';
+              return;
+            }
+            data.data.forEach(ad => {
+              const statusClass = ad.status === 'active' ? 'bg-green-100 text-green-800' : ad.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
+              const statusText = ad.status === 'active' ? 'Inayofanya Kazi' : ad.status === 'pending' ? 'Inasubiri' : 'Isiyofanya Kazi';
+              const row = document.createElement('tr');
+              row.innerHTML = [
+                '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + sanitizeHTML(ad.title) + '</td>',
+                '<td class="px-6 py-4 whitespace-nowrap">',
+                '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ' + statusClass + '">' + statusText + '</span>',
+                '</td>',
+                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (ad.views ? ad.views.toLocaleString() : '0') + '</td>',
+                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (ad.dataUsed ? ad.dataUsed + ' GB' : '0 GB') + '</td>',
+                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + new Date(ad.created_at).toLocaleDateString('sw-TZ') + '</td>',
+                '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">',
+                '<a href="/admin/edit-ad/' + ad.id + '" class="text-primary hover:text-primary-dark">Hariri</a>',
+                '<a href="/admin/delete-ad/' + ad.id + '" class="text-red-600 hover:text-red-800 ml-4" onclick="return confirm(\\'Je, una uhakika unataka kufuta tangazo hili?\\')">Futa</a>',
+                '</td>'
+              ].join('');
+              tableBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('My ads fetch error:', error));
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Matangazo Yangu',
+    activePage: 'my-ads',
+    body: dashboardContent
+}) %>

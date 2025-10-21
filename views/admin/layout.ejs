@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HotBando - <%= typeof title !== 'undefined' ? title : 'Dashibodi' %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            light: '#ff9d5c',
+                            DEFAULT: '#FF7A30',
+                            dark: '#e05a10',
+                        },
+                        secondary: {
+                            light: '#f1f1f1',
+                            DEFAULT: '#f9f9f9',
+                            dark: '#0f0f0f',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .sidebar {
+            width: 280px;
+            transition: all 0.3s ease;
+            background-image: linear-gradient(to bottom, #FF7A30, #333333);
+            color: #fff;
+        }
+        .main-content {
+            margin-left: 280px;
+            transition: all 0.3s ease;
+        }
+        .collapsed .sidebar {
+            width: 80px;
+        }
+        .collapsed .main-content {
+            margin-left: 80px;
+        }
+        .active-nav-item {
+            position: relative;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-left: 4px solid #fff;
+        }
+        .active-nav-item i, .active-nav-item span {
+            color: #fff !important;
+        }
+        .sidebar-item-hover:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .notification-dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #EF4444;
+        }
+        .logo-container {
+            background-color: #fff;
+            border-radius: 9999px;
+            padding: 0.5rem;
+            margin: 1rem auto;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .logo-container img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+        }
+        .sidebar-text {
+            transition: opacity 0.2s ease;
+        }
+        .collapsed .sidebar-text {
+            opacity: 0;
+            display: none;
+        }
+        .collapsed .logo-text {
+            display: none;
+        }
+        .collapsed .logo-container {
+            width: 50px;
+            height: 50px;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 80px;
+            }
+            .main-content {
+                margin-left: 80px;
+            }
+            .sidebar-text {
+                display: none;
+            }
+            .logo-container {
+                width: 50px;
+                height: 50px;
+            }
+            .logo-text {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="font-poppins bg-secondary flex">
+    <div class="sidebar fixed h-full shadow-md z-10">
+        <div class="flex flex-col items-center py-4">
+            <div class="logo-container">
+                <img src="/assets/hot-bando-logo.png" alt="HotBando Logo">
+            </div>
+        </div>
+        <div class="p-4">
+            <ul class="space-y-2">
+                <li>
+                    <a href="/admin/dashboard" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'dashboard' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-home text-white"></i>
+                        <span class="ml-3 sidebar-text">Dashibodi</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/my-ads" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'my-ads' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-ad text-white"></i>
+                        <span class="ml-3 sidebar-text">Matangazo Yangu</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/upload-video" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'upload-video' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-upload text-white"></i>
+                        <span class="ml-3 sidebar-text">Pakia Video</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/analytics" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'analytics' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-chart-line text-white"></i>
+                        <span class="ml-3 sidebar-text">Takwimu</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/users" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'users' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-user-tie text-white"></i>
+                        <span class="ml-3 sidebar-text">Watumiaji</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/approve-content" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'approve-content' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-check-circle text-white"></i>
+                        <span class="ml-3 sidebar-text">Idhini Maudhui</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/reports" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'reports' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-chart-pie text-white"></i>
+                        <span class="ml-3 sidebar-text">Ripoti</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/settings" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'settings' ? 'active-nav-item' : '' %>">
+                        <i class="fas fa-cog text-white"></i>
+                        <span class="ml-3 sidebar-text">Mipangilio</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="absolute bottom-0 w-full p-4 border-t border-white border-opacity-20">
+            <a href="/admin/logout" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                <i class="fas fa-sign-out-alt text-white"></i>
+                <span class="ml-3 sidebar-text">Toka</span>
+            </a>
+            <form id="logout-form" action="/admin/logout" method="POST" style="display: none;">
+                <input type="hidden" name="_token" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+            </form>
+        </div>
+    </div>
+    <div class="main-content w-full min-h-screen">
+        <header class="bg-white shadow-sm">
+            <div class="flex items-center justify-between p-4">
+                <div class="flex items-center">
+                    <button id="sidebar-toggle" class="p-2 rounded-lg hover:bg-gray-100 mr-2">
+                        <i class="fas fa-bars text-gray-700"></i>
+                    </button>
+                    <h1 class="text-xl font-semibold"><%= typeof title !== 'undefined' ? title : 'Dashibodi' %></h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <button class="p-2 rounded-lg hover:bg-gray-100">
+                            <i class="fas fa-bell text-gray-700"></i>
+                            <span class="notification-dot"></span>
+                        </button>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="ml-2">
+                            <p class="text-sm font-medium"><%= typeof userName !== 'undefined' ? userName : 'Mtumiaji' %></p>
+                            <p class="text-xs text-gray-500">Msimamizi</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <div class="p-6">
+            <%- body %>
+        </div>
+    </div>
+    <script>
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const body = document.body;
+        if (localStorage.getItem('sidebarCollapsed') === 'true') {
+            body.classList.add('collapsed');
+        }
+        sidebarToggle.addEventListener('click', () => {
+            body.classList.toggle('collapsed');
+            localStorage.setItem('sidebarCollapsed', body.classList.contains('collapsed'));
+        });
+        if (window.innerWidth < 768) {
+            body.classList.add('collapsed');
+        }
+        window.addEventListener('resize', () => {
+            if (window.innerWidth < 768) {
+                body.classList.add('collapsed');
+            } else {
+                if (localStorage.getItem('sidebarCollapsed') !== 'true') {
+                    body.classList.remove('collapsed');
+                }
+            }
+        });
+    </script>
+    <%- typeof scripts !== 'undefined' ? scripts : '' %>
+</body>
+</html>

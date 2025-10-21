@@ -1,0 +1,53 @@
+<%- include('layout', {
+    title: 'Ripoti',
+    activePage: 'reports',
+    body: `
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6">Ripoti za Mfumo</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <div class="bg-secondary-light p-4 rounded-lg">
+                <p class="text-sm text-gray-500">Jumla ya Maonyesho ya Matangazo (Siku 30 Iliyopita)</p>
+                <p class="text-2xl font-bold text-gray-800" id="total-ad-views">Loading...</p>
+                <a href="#" class="text-primary text-sm hover:text-primary-dark mt-2 inline-block">Angalia Maelezo</a>
+            </div>
+            <div class="bg-secondary-light p-4 rounded-lg">
+                <p class="text-sm text-gray-500">Watumiaji Wapya (Wiki Hii)</p>
+                <p class="text-2xl font-bold text-gray-800" id="new-users">Loading...</p>
+                <a href="#" class="text-primary text-sm hover:text-primary-dark mt-2 inline-block">Angalia Maelezo</a>
+            </div>
+            <div class="bg-secondary-light p-4 rounded-lg">
+                <p class="text-sm text-gray-500">Idhini Zinazosubiri</p>
+                <p class="text-2xl font-bold text-gray-800" id="pending-approvals">Loading...</p>
+                <a href="#" class="text-primary text-sm hover:text-primary-dark mt-2 inline-block">Angalia Maelezo</a>
+            </div>
+        </div>
+        <div class="bg-secondary-light rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Pakua Ripoti</h3>
+            <div class="flex flex-wrap gap-4">
+                <button onclick="downloadReport('csv')" class="bg-primary/20 text-primary px-4 py-2 rounded-lg hover:bg-primary/30 transition-colors">
+                    <i class="fas fa-file-csv mr-2"></i>Pakua CSV
+                </button>
+                <button onclick="downloadReport('pdf')" class="bg-primary/20 text-primary px-4 py-2 rounded-lg hover:bg-primary/30 transition-colors">
+                    <i class="fas fa-file-pdf mr-2"></i>Pakua PDF
+                </button>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/reports-data')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) return;
+                    document.getElementById('total-ad-views').textContent = data.totalAdViews.toLocaleString();
+                    document.getElementById('new-users').textContent = data.newUsers;
+                    document.getElementById('pending-approvals').textContent = data.pendingApprovals;
+                })
+                .catch(error => console.error('Reports data fetch error:', error));
+        });
+        function downloadReport(format) {
+            alert('Ripoti ya ' + format.toUpperCase() + ' inatayarishwa...');
+        }
+    </script>
+    `
+}) %>

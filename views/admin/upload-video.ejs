@@ -1,0 +1,115 @@
+<% 
+  const dashboardContent = `
+    <div class="container mx-auto px-4 py-8">
+      <div class="bg-white rounded-lg shadow-sm p-8">
+        <h2 class="text-2xl font-semibold text-gray-800 mb-8 flex items-center">
+          <i class="fas fa-upload text-primary mr-2"></i> Pakia Tangazo Jipya la Video
+        </h2>
+        <form id="upload-video-form" enctype="multipart/form-data" action="/api/upload-video" method="POST" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="col-span-1">
+            <label for="title" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <i class="fas fa-heading text-primary mr-2"></i> Jina la Tangazo
+            </label>
+            <input type="text" name="title" id="title" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800 shadow-sm" required>
+          </div>
+          <div class="col-span-1">
+            <label for="sponsor_id" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <i class="fas fa-user text-primary mr-2"></i> Muduaji
+            </label>
+            <select name="sponsor_id" id="sponsor_id" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800 shadow-sm" required>
+              <option value="">Chagua Mdhamini</option>
+              ${typeof sponsors !== 'undefined' && sponsors.length > 0 ? 
+                sponsors.map(sponsor => `
+                  <option value="${sponsor.id}">${sponsor.name}</option>
+                `).join('') : ''}
+            </select>
+          </div>
+          <div class="col-span-1 lg:col-span-2">
+            <label for="description" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <i class="fas fa-file-alt text-primary mr-2"></i> Maelezo
+            </label>
+            <textarea name="description" id="description" rows="5" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800 shadow-sm" required></textarea>
+          </div>
+          <div class="col-span-1 lg:col-span-2">
+            <label for="video" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <i class="fas fa-video text-primary mr-2"></i> Chagua Video
+            </label>
+            <input type="file" name="video" id="video" accept="video/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary-dark transition shadow-sm" required>
+          </div>
+          <div class="col-span-1 lg:col-span-2 flex items-center">
+            <input type="checkbox" name="is_active" id="is_active" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded">
+            <label for="is_active" class="ml-2 flex items-center text-sm text-gray-700">
+              <i class="fas fa-toggle-on text-primary mr-2"></i> Tangazo Linatumika
+            </label>
+          </div>
+          <input type="hidden" name="_token" value="${typeof csrfToken !== 'undefined' ? csrfToken : ''}">
+          <div class="col-span-1 lg:col-span-2 flex justify-end space-x-4 mt-6">
+            <button type="button" onclick="window.history.back()" class="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition shadow-sm flex items-center">
+              <i class="fas fa-times mr-2"></i> Ghairi
+            </button>
+            <button type="submit" class="px-6 py-3 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm flex items-center">
+              <i class="fas fa-upload mr-2"></i> Pakia Tangazo
+            </button>
+          </div>
+          <div id="upload-error" class="col-span-1 lg:col-span-2 hidden mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg flex items-center">
+            <i class="fas fa-exclamation-circle mr-2"></i> <span id="error-message"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        // Fetch sponsors if not provided server-side
+        if (!${JSON.stringify(typeof sponsors !== 'undefined' && sponsors.length > 0)}) {
+          fetch('/api/sponsors')
+            .then(response => response.json())
+            .then(data => {
+              if (data.success && data.data) {
+                const select = document.getElementById('sponsor_id');
+                select.innerHTML = '<option value="">Chagua Mdhamini</option>';
+                data.data.forEach(sponsor => {
+                  const option = document.createElement('option');
+                  option.value = sponsor.id;
+                  option.textContent = sponsor.name;
+                  select.appendChild(option);
+                });
+              }
+            })
+            .catch(error => console.error('Sponsors fetch error:', error));
+        }
+
+        // Handle form submission
+        const form = document.getElementById('upload-video-form');
+        const errorDiv = document.getElementById('upload-error');
+        const errorMessage = document.getElementById('error-message');
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          errorDiv.classList.add('hidden');
+          const formData = new FormData(form);
+          try {
+            const response = await fetch('/api/upload-video', {
+              method: 'POST',
+              body: formData
+            });
+            const result = await response.json();
+            if (result.success) {
+              window.location.href = '/admin/my-ads';
+            } else {
+              errorMessage.textContent = result.error || 'Imeshindwa kupakia tangazo';
+              errorDiv.classList.remove('hidden');
+            }
+          } catch (error) {
+            errorMessage.textContent = 'Hitilafu: ' + error.message;
+            errorDiv.classList.remove('hidden');
+          }
+        });
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Pakia Video',
+    activePage: 'upload-video',
+    body: dashboardContent
+}) %>

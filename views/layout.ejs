@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= typeof title !== 'undefined' ? title : 'HotBando WiFi' %></title>
+
+    <!-- Add Tailwind CSS and other assets -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Custom styles -->
+    <style>
+        .mobile-menu {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .mobile-menu.open {
+            max-height: 500px;
+        }
+        .active-nav-item {
+            position: relative;
+        }
+        .active-nav-item:after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: #FF7A30;
+        }
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 4px;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+        }
+        .notification.show {
+            opacity: 1;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 6px solid #ccc;
+            border-top: 6px solid #FF7A30;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-orange-400 font-poppins bg-gray-50 min-h-screen">
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <%- body %>
+    </main>
+
+    <!-- Notification Element -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-90 z-50 flex flex-col items-center justify-center hidden">
+        <div class="text-center mb-8">
+            <img src="/assets/hot-bando-logo.png" alt="Hot Bando Logo" class="h-16 mx-auto">
+        </div>
+        <div class="spinner"></div>
+        <div id="loading-text" class="mt-6 text-center text-gray-700 max-w-md">
+            Inaweza kuchukua mpaka dakika moja.<br>
+            Isipokuunga bonyeza tena.<br>
+            Asante kwa kuvumilia.
+        </div>
+    </div>
+
+    <script>
+        // Mobile menu toggle
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+
+        if (mobileMenuButton && mobileMenu) {
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('open');
+            });
+        }
+
+        // Notification function
+        function showNotification(message, type = 'success') {
+            const notif = document.getElementById('notification');
+            if (!notif) return;
+
+            notif.innerText = message;
+
+            // Set background color based on type
+            if (type === 'success') {
+                notif.classList.add('bg-green-500');
+                notif.classList.remove('bg-red-500', 'bg-gray-800');
+            } else if (type === 'error') {
+                notif.classList.add('bg-red-500');
+                notif.classList.remove('bg-green-500', 'bg-gray-800');
+            } else {
+                notif.classList.add('bg-gray-800');
+                notif.classList.remove('bg-green-500', 'bg-red-500');
+            }
+
+            notif.classList.add('show');
+
+            setTimeout(() => {
+                notif.classList.remove('show');
+            }, 5000);
+        }
+
+        // Display any flash messages
+        <% if (typeof success !== 'undefined' && success) { %>
+            showNotification("<%= success %>", 'success');
+        <% } %>
+
+        <% if (typeof error !== 'undefined' && error) { %>
+            showNotification("<%= error %>", 'error');
+        <% } %>
+    </script>
+
+    <%- typeof scripts !== 'undefined' ? scripts : '' %>
+</body>
+</html>

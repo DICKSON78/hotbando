@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HotBando - Premium Data Solutions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            light: '#FF9D5C',
+                            DEFAULT: '#FF7A30',
+                            dark: '#E43636',
+                        },
+                        secondary: {
+                            DEFAULT: '#121212',
+                            dark: '#0A0A0A',
+                        },
+                        accent: {
+                            DEFAULT: '#E5E5E5',
+                            light: '#F8F8F8',
+                        },
+                        light: {
+                            bg: '#FFFFFF',
+                            card: '#F8FAFC',
+                            text: '#1F2937',
+                            muted: '#6B7280'
+                        }
+                    },
+                    boxShadow: {
+                        'card': '0 8px 24px rgba(0, 0, 0, 0.15)',
+                        'card-hover': '0 12px 32px rgba(0, 0, 0, 0.2)',
+                        'card-light': '0 8px 24px rgba(0, 0, 0, 0.05)',
+                        'card-light-hover': '0 12px 32px rgba(0, 0, 0, 0.1)',
+                    },
+                    borderRadius: {
+                        'xl': '1rem',
+                        '2xl': '1.5rem',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .mobile-menu {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .mobile-menu.open {
+            max-height: 700px;
+        }
+        .active-nav-item {
+            position: relative;
+        }
+        .active-nav-item:after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 10%;
+            right: 10%;
+            height: 3px;
+            background-color: #FF7A30;
+            border-radius: 2px;
+        }
+        section {
+            scroll-margin-top: 7rem;
+            padding: 6rem 0;
+        }
+        .premium-gradient {
+            background: linear-gradient(135deg, #FF7A30 0%, #E43636 100%);
+        }
+        .card-hover {
+            transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.4s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-12px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+        }
+        .card-hover-light:hover {
+            transform: translateY(-12px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+        }
+        .step-number {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background-color: #FF7A30;
+            color: #121212;
+            font-weight: 700;
+            font-size: 1.2rem;
+            margin-right: 16px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .ornament {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><path d="M60 20c-22 0-40 18-40 40s18 40 40 40 40-18 40-40-18-40-40-40zm0 64c-13.3 0-24-10.7-24-24s10.7-24 24-24 24 10.7 24 24-10.7 24-24 24z" fill="%23FF7A30"/><circle cx="60" cy="60" r="10" fill="%23E43636"/></svg>');
+            background-size: 60px;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        .hero-illustration {
+            position: relative;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240"><circle cx="120" cy="120" r="100" fill="%23FF7A30" fill-opacity="0.15"/><path d="M120 50c-38.6 0-70 31.4-70 70s31.4 70 70 70 70-31.4 70-70-31.4-70-70-70zm0 112c-23.2 0-42-18.8-42-42s18.8-42 42-42 42 18.8 42 42-18.8 42-42 42z" fill="%23E43636" fill-opacity="0.5"/><circle cx="120" cy="120" r="20" fill="%23FF7A30"/></svg>') center/80% no-repeat;
+        }
+        .section-divider {
+            width: 80px;
+            height: 4px;
+            background-color: #FF7A30;
+            margin: 1rem auto;
+            border-radius: 2px;
+        }
+        .button-glow {
+            position: relative;
+            overflow: hidden;
+        }
+        .button-glow::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+        .button-glow:hover::before {
+            left: 100%;
+        }
+        .theme-toggle {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 50;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+        .theme-toggle-light {
+            background-color: #FF7A30;
+            color: white;
+        }
+        .theme-toggle-dark {
+            background-color: #1F2937;
+            color: #FF7A30;
+        }
+        body.light-mode {
+            background-color: #FFFFFF;
+            color: #1F2937;
+        }
+        body.light-mode .bg-secondary {
+            background-color: #F8FAFC;
+        }
+        body.light-mode .text-accent {
+            color: #1F2937;
+        }
+        body.light-mode .text-accent\/70 {
+            color: #6B7280;
+        }
+        body.light-mode .shadow-card {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+        }
+        body.light-mode .bg-accent-light {
+            background-color: #FFFFFF;
+        }
+        body.light-mode .card-hover:hover {
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="font-inter bg-secondary text-accent">
+    <!-- Theme Toggle Button -->
+    <div id="theme-toggle" class="theme-toggle theme-toggle-light">
+        <i class="fas fa-moon"></i>
+    </div>
+    <!-- Navigation -->
+    <nav class="bg-secondary text-accent shadow-card sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="flex justify-between h-20 items-center">
+                <div class="flex items-center">
+                    <img src="/assets/hot-bando-logo.png" alt="HotBando Logo" class="h-12">
+                    <span class="text-2xl font-bold text-primary ml-3">HotBando</span>
+                </div>
+                <div class="hidden md:flex md:items-center md:space-x-12">
+                    <a href="#home" class="text-accent hover:text-primary px-4 py-2 rounded-lg text-lg font-medium active-nav-item" id="nav-home">Home</a>
+                    <a href="#bundles" class="text-accent/70 hover:text-primary px-4 py-2 rounded-lg text-lg font-medium" id="nav-bundles">Bundles</a>
+                    <a href="#kuhusu" class="text-accent/70 hover:text-primary px-4 py-2 rounded-lg text-lg font-medium" id="nav-kuhusu">Kuhusu</a>
+                    <a href="/hotspot/signup" class="bg-primary text-secondary px-6 py-3 rounded-xl text-lg font-medium hover:bg-primary-dark transition button-glow">Fungua Akaunti</a>
+                </div>
+                <div class="md:hidden flex items-center">
+                    <button id="mobile-menu-button" class="text-accent hover:text-primary focus:outline-none">
+                        <i class="fas fa-bars text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="mobile-menu" class="mobile-menu md:hidden bg-secondary shadow-card">
+            <div class="px-6 pt-4 pb-6 space-y-3">
+                <a href="#home" class="text-accent hover:text-primary block px-4 py-2 rounded-lg text-lg font-medium active-nav-item" id="mobile-nav-home">Home</a>
+                <a href="#bundles" class="text-accent/70 hover:text-primary block px-4 py-2 rounded-lg text-lg font-medium" id="mobile-nav-bundles">Bundles</a>
+                <a href="#kuhusu" class="text-accent/70 hover:text-primary block px-4 py-2 rounded-lg text-lg font-medium" id="mobile-nav-kuhusu">Kuhusu</a>
+                <a href="/hotspot/signup" class="bg-primary text-secondary block px-4 py-2 rounded-xl text-lg font-medium hover:bg-primary-dark transition button-glow">Fungua Akaunti</a>
+            </div>
+        </div>
+    </nav>
+    <!-- Hero Section -->
+    <section id="home" class="premium-gradient text-secondary overflow-hidden">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12 py-28">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div>
+                    <h1 class="text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+                        Data ya Kipekee
+                        <span class="block text-secondary/90">Kwa Kila Mtu</span>
+                    </h1>
+                    <p class="text-xl mb-10 opacity-90 font-medium max-w-2xl">
+                        Pata huduma za data za hali ya juu kwa wanafunzi, jamii, na biashara, pamoja na data bure kupitia matangazo.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-6">
+                        <a href="/hotspot/login" class="bg-secondary text-primary hover:bg-secondary-dark font-medium py-4 px-8 rounded-xl transition button-glow">
+                            Anza Sasa
+                        </a>
+                        <a href="/hotspot/signup" class="border-2 border-secondary text-secondary hover:bg-secondary/20 font-medium py-4 px-8 rounded-xl transition button-glow">
+                            Jisajili
+                        </a>
+                    </div>
+                </div>
+                <div class="hero-illustration flex justify-center">
+                    <div class="relative w-96 h-96 flex items-center justify-center">
+                        <i class="fas fa-wifi text-9xl text-secondary/90"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- Features Section -->
+    <section id="bundles" class="bg-secondary">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="text-center mb-16">
+                <span class="text-primary font-medium tracking-widest uppercase">Vifurushi</span>
+                <div class="section-divider"></div>
+                <h2 class="text-4xl lg:text-5xl font-bold mt-2 mb-4 text-accent">Chagua Vifurushi Vyako</h2>
+                <p class="text-xl text-accent/70 max-w-3xl mx-auto">
+                    Huduma za data za bei nafuu zinazolingana na mahitaji yako.
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="bg-accent-light p-8 rounded-2xl card-hover shadow-card">
+                    <div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-secondary mb-6">
+                        <i class="fas fa-graduation-cap text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3 text-black">Punguzo kwa Wanafunzi</h3>
+                    <p class="text-black">Bei maalum kwa wanafunzi waliosajiliwa kwa ID ya shule.</p>
+                </div>
+                <div class="bg-accent-light p-8 rounded-2xl card-hover shadow-card">
+                    <div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-secondary mb-6">
+                        <i class="fas fa-ad text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3 text-black">Data Bure kwa Matangazo</h3>
+                    <p class="text-black">Tazama matangazo mafupi upate data bila malipo.</p>
+                </div>
+                <div class="bg-accent-light p-8 rounded-2xl card-hover shadow-card">
+                    <div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-secondary mb-6">
+                        <i class="fas fa-users text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3 text-black">Mipango ya Jamii</h3>
+                    <p class="text-black">Mipango rahisi kwa familia na vikundi vidogo.</p>
+                </div>
+                <div class="bg-accent-light p-8 rounded-2xl card-hover shadow-card">
+                    <div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-secondary mb-6">
+                        <i class="fas fa-building text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3 text-black">Mipango ya Biashara</h3>
+                    <p class="text-black">Suluhisho za data kwa makampuni ya kila ukubwa.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- Free Data Section -->
+    <section id="pata-data" class="bg-secondary">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="text-center mb-16">
+                <span class="text-primary font-medium tracking-widest uppercase">Pata Data Bure</span>
+                <div class="section-divider"></div>
+                <h2 class="text-4xl lg:text-5xl font-bold mt-2 mb-4 text-accent">Tazama Matangazo, Pata Data</h2>
+                <p class="text-xl text-accent/70 max-w-3xl mx-auto">
+                    Pata data bure kwa urahisi kwa kutazama matangazo mafupi.
+                </p>
+            </div>
+            <div class="bg-accent-light rounded-2xl shadow-card">
+                <div class="grid grid-cols-1 lg:grid-cols-2">
+                    <div class="p-12">
+                        <span class="text-primary font-medium uppercase tracking-wider">Jinsi Inavyofanya Kazi</span>
+                        <ol class="mt-8 space-y-8">
+                            <li class="flex items-start">
+                                <div class="step-number">1</div>
+                                <p class="text-black font-medium">Jisajili kwa akaunti ya bure</p>
+                            </li>
+                            <li class="flex items-start">
+                                <div class="step-number">2</div>
+                                <p class="text-black font-medium">Nenda kwenye sehemu ya "Pata Data"</p>
+                            </li>
+                            <li class="flex items-start">
+                                <div class="step-number">3</div>
+                                <p class="text-black font-medium">Tazama video za matangazo</p>
+                            </li>
+                            <li class="flex items-start">
+                                <div class="step-number">4</div>
+                                <p class="text-black font-medium">Pokea data bure kwenye akaunti yako</p>
+                            </li>
+                        </ol>
+                        <div class="mt-10">
+                            <a href="/hotspot/dashboard" class="inline-flex items-center bg-primary hover:bg-primary-dark text-secondary font-medium py-4 px-8 rounded-xl transition button-glow">
+                                Anza Kupata Sasa
+                                <i class="fas fa-arrow-right ml-3"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="bg-primary/5 p-12 flex items-center justify-center">
+                        <div class="text-center">
+                            <div class="w-24 h-24 bg-primary rounded-full flex items-center justify-center text-secondary mx-auto mb-8 ornament">
+                                <i class="fas fa-ad text-4xl"></i>
+                            </div>
+                            <h3 class="text-xl font-semibold mb-4 text-black">Mfano wa Matangazo</h3>
+                            <p class="text-black mb-6">
+                                Dakika 5 = 100MB bure<br>
+                                Dakika 15 = 500MB<br>
+                                Dakika 30 = 1GB
+                            </p>
+                            <div class="w-full bg-secondary/20 rounded-full h-3">
+                                <div class="bg-primary h-3 rounded-full" style="width: 45%"></div>
+                            </div>
+                            <p class="mt-3 text-sm text-black">45% imekamilika - 45MB zimepatikana</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- Pricing Section -->
+    <section id="biashara" class="bg-secondary">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="text-center mb-16">
+                <span class="text-primary font-medium tracking-widest uppercase">Mipango ya Biashara</span>
+                <div class="section-divider"></div>
+                <h2 class="text-4xl lg:text-5xl font-bold mt-2 mb-4 text-accent">Suluhisho za Biashara</h2>
+                <p class="text-xl text-accent/70 max-w-3xl mx-auto">
+                    Data ya hali ya juu kwa kila hitaji la biashara yako.
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+                <div class="bg-accent-light rounded-2xl shadow-card card-hover">
+                    <div class="p-8 border-b border-primary/10">
+                        <h3 class="text-xl font-semibold text-black">Mpango wa Wanafunzi</h3>
+                        <p class="text-black mt-3">Data ya bei nafuu kwa masomo.</p>
+                        <div class="mt-6">
+                            <span class="text-4xl font-bold text-primary">TZS 12,000</span>
+                            <span class="text-black">/mwezi</span>
+                        </div>
+                        <a href="/hotspot/subscription" class="mt-6 block w-full bg-primary hover:bg-primary-dark text-secondary text-center font-medium py-4 rounded-xl transition button-glow">
+                            Nunua Mpango
+                        </a>
+                    </div>
+                    <div class="p-8">
+                        <h4 class="text-sm font-semibold text-black uppercase tracking-wider mb-4">Yaliyomo</h4>
+                        <ul class="space-y-4">
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">5GB data</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">WhatsApp bila kikomo</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">500MB zaidi kwa matangazo</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">Maudhui ya masomo bila malipo</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="bg-accent-light rounded-2xl shadow-card card-hover transform scale-105">
+                    <div class="p-8 border-b border-primary/10">
+                        <div class="flex justify-between items-start">
+                            <h3 class="text-xl font-semibold text-black">Mpango wa Jamii</h3>
+                            <span class="bg-primary text-secondary text-xs font-medium px-3 py-1 rounded-full">Bora Sana</span>
+                        </div>
+                        <p class="text-black mt-3">Bora kwa familia na vikundi.</p>
+                        <div class="mt-6">
+                            <span class="text-4xl font-bold text-primary">TZS 35,000</span>
+                            <span class="text-black">/mwezi</span>
+                        </div>
+                        <a href="/hotspot/subscription" class="mt-6 block w-full bg-primary hover:bg-primary-dark text-secondary text-center font-medium py-4 rounded-xl transition button-glow">
+                            Nunua Mpango
+                        </a>
+                    </div>
+                    <div class="p-8">
+                        <h4 class="text-sm font-semibold text-black uppercase tracking-wider mb-4">Yaliyomo</h4>
+                        <ul class="space-y-4">
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">20GB data ya kushiriki</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">Hadi watumiaji 5</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">1GB zaidi kwa kila mtumiaji</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">Msaada wa kipaumbele</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="bg-accent-light rounded-2xl shadow-card card-hover">
+                    <div class="p-8 border-b border-primary/10">
+                        <h3 class="text-xl font-semibold text-black">Mpango wa Biashara</h3>
+                        <p class="text-black mt-3">Suluhisho kwa makampuni yote.</p>
+                        <div class="mt-6">
+                            <span class="text-4xl font-bold text-primary">TZS 120,000</span>
+                            <span class="text-black">/mwezi</span>
+                        </div>
+                        <a href="/hotspot/subscription" class="mt-6 block w-full bg-primary hover:bg-primary-dark text-secondary text-center font-medium py-4 rounded-xl transition button-glow">
+                            Wasiliana Nasi
+                        </a>
+                    </div>
+                    <div class="p-8">
+                        <h4 class="text-sm font-semibold text-black uppercase tracking-wider mb-4">Yaliyomo</h4>
+                        <ul class="space-y-4">
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">100GB data ya kushiriki</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">Hadi watumiaji 25</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">Chaguo za matangazo</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-check text-primary mt-1 mr-3"></i>
+                                <span class="text-black">Meneja wa akaunti</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- About Section -->
+    <section id="kuhusu" class="bg-secondary">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="text-center mb-16">
+                <span class="text-primary font-medium tracking-widest uppercase">Kuhusu Sisi</span>
+                <div class="section-divider"></div>
+                <h2 class="text-4xl lg:text-5xl font-bold mt-2 mb-4 text-accent">HotBando - Data ya Kipekee</h2>
+                <p class="text-xl text-accent/70 max-w-3xl mx-auto">
+                    Huduma za data za hali ya juu kwa wanafunzi, jamii, na biashara.
+                </p>
+            </div>
+            <div class="bg-accent-light rounded-2xl shadow-card">
+                <div class="p-12">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <div>
+                            <h3 class="text-xl font-semibold mb-4 text-black">Historia Yetu</h3>
+                            <p class="text-black">
+                                HotBando ilianzishwa mwaka 2020 ili kuleta data ya bei nafuu na ya hali ya juu kwa Wanatanzania. Tunahudumia mamilioni kwa huduma bora na za kuaminika.
+                            </p>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-4 text-black">Malengo Yetu</h3>
+                            <ul class="space-y-4 text-accent/70">
+                                <li class="flex items-start">
+                                    <i class="fas fa-check text-primary mr-3 mt-1"></i>
+                                    <span class="text-black">Data ya bei nafuu kwa wanafunzi</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <i class="fas fa-check text-primary mr-3 mt-1"></i>
+                                    <span class="text-black">Mbinu za data bure kupitia matangazo</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <i class="fas fa-check text-primary mr-3 mt-1"></i>
+                                    <span class="text-black">Suluhisho za biashara za hali ya juu</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-16">
+                        <h3 class="text-xl font-semibold mb-8 text-center text-black">Timu Yetu</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                            <div class="text-center">
+                                <div class="w-24 h-24 rounded-full bg-primary/20 mx-auto mb-6 flex items-center justify-center ornament">
+                                    <i class="fas fa-user text-primary text-3xl"></i>
+                                </div>
+                                <p class="font-semibold text-primary">Juma M.</p>
+                                <p class="text-sm text-black">Mkurugenzi</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-24 h-24 rounded-full bg-primary/20 mx-auto mb-6 flex items-center justify-center ornament">
+                                    <i class="fas fa-user text-primary text-3xl"></i>
+                                </div>
+                                <p class="font-semibold text-primary">Asha K.</p>
+                                <p class="text-sm text-black">Meneja wa Teknolojia</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-24 h-24 rounded-full bg-primary/20 mx-auto mb-6 flex items-center justify-center ornament">
+                                    <i class="fas fa-user text-primary text-3xl"></i>
+                                </div>
+                                <p class="font-semibold text-primary">Robert J.</p>
+                                <p class="text-sm text-black">Meneja wa Mauzo</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-24 h-24 rounded-full bg-primary/20 mx-auto mb-6 flex items-center justify-center ornament">
+                                    <i class="fas fa-user text-primary text-3xl"></i>
+                                </div>
+                                <p class="font-semibold text-primary">Neema S.</p>
+                                <p class="text-sm text-black">Meneja wa Huduma</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- CTA Section -->
+    <section class="premium-gradient text-secondary py-20">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12 text-center">
+            <h2 class="text-4xl lg:text-5xl font-bold mb-6">
+                Tayari Kuanza?
+                <span class="block text-secondary/90">Pata Data Bure Leo</span>
+            </h2>
+            <div class="flex flex-col sm:flex-row justify-center gap-6 mt-8">
+                <a href="/hotspot/login" class="bg-secondary text-primary hover:bg-secondary-dark font-medium py-4 px-8 rounded-xl transition button-glow">
+                    Anza Sasa
+                </a>
+                <a href="#kuhusu" class="border-2 border-secondary text-secondary hover:bg-secondary/20 font-medium py-4 px-8 rounded-xl transition button-glow">
+                    Jifunze Zaidi
+                </a>
+            </div>
+        </div>
+    </section>
+    <!-- Footer -->
+    <footer class="bg-secondary text-accent pt-20 pb-12">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
+                <div class="space-y-8">
+                    <div>
+                        <h3 class="text-primary font-medium uppercase tracking-wider mb-4">HotBando</h3>
+                        <p class="text-accent/70 text-sm">
+                            Data ya hali ya juu kwa wanafunzi, jamii, na biashara kwa bei nafuu.
+                        </p>
+                    </div>
+                    <div>
+                        <h4 class="text-accent font-medium uppercase tracking-wider mb-4 text-sm">Pakua App Yetu</h4>
+                        <div class="space-y-4">
+                            <a href="#" class="flex items-center bg-primary/20 hover:bg-primary/30 rounded-lg px-4 py-3 transition w-full max-w-[220px]">
+                                <div class="bg-accent-light rounded-md p-2 flex-shrink-0">
+                                    <i class="fab fa-google-play text-primary text-xl"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-xs text-accent/70">Available on</p>
+                                    <p class="text-sm font-medium">Google Play</p>
+                                </div>
+                            </a>
+                            <a href="#" class="flex items-center bg-primary/20 hover:bg-primary/30 rounded-lg px-4 py-3 transition w-full max-w-[220px]">
+                                <div class="bg-accent-light rounded-md p-2 flex-shrink-0">
+                                    <i class="fab fa-apple text-primary text-xl"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-xs text-accent/70">Download on</p>
+                                    <p class="text-sm font-medium">App Store</p>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-accent font-medium uppercase tracking-wider mb-6">Huduma</h3>
+                    <ul class="space-y-4">
+                        <li><a href="#bundles" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-wifi text-primary mt-0.5 mr-3 text-xs"></i>
+                            Vifurushi vya Data
+                        </a></li>
+                        <li><a href="#pata-data" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-ad text-primary mt-0.5 mr-3 text-xs"></i>
+                            Pata Data Bure
+                        </a></li>
+                        <li><a href="#biashara" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-briefcase text-primary mt-0.5 mr-3 text-xs"></i>
+                            Mipango ya Biashara
+                        </a></li>
+                        <li><a href="/hotspot/login" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-user-circle text-primary mt-0.5 mr-3 text-xs"></i>
+                            Akaunti Yangu
+                        </a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-accent font-medium uppercase tracking-wider mb-6">Kampuni</h3>
+                    <ul class="space-y-4">
+                        <li><a href="#kuhusu" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-info-circle text-primary mt-0.5 mr-3 text-xs"></i>
+                            Kuhusu Sisi
+                        </a></li>
+                        <li><a href="#" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-users text-primary mt-0.5 mr-3 text-xs"></i>
+                            Timu Yetu
+                        </a></li>
+                        <li><a href="#" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-bullhorn text-primary mt-0.5 mr-3 text-xs"></i>
+                            Mawasiliano
+                        </a></li>
+                        <li><a href="#" class="text-accent/70 hover:text-primary text-sm flex items-start">
+                            <i class="fas fa-newspaper text-primary mt-0.5 mr-3 text-xs"></i>
+                            Blog
+                        </a></li>
+                    </ul>
+                </div>
+                <div class="space-y-8">
+                    <div>
+                        <h3 class="text-accent font-medium uppercase tracking-wider mb-6">Wasiliana Nasi</h3>
+                        <ul class="space-y-4">
+                            <li class="flex items-start">
+                                <i class="fas fa-map-marker-alt text-primary mt-0.5 mr-3 text-xs"></i>
+                                <span class="text-accent/70 text-sm">Sokoine Drive, Dar es Salaam</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-phone-alt text-primary mt-0.5 mr-3 text-xs"></i>
+                                <span class="text-accent/70 text-sm">+255 123 456 789</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-envelope text-primary mt-0.5 mr-3 text-xs"></i>
+                                <span class="text-accent/70 text-sm">info@hotbando.co.tz</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-accent font-medium uppercase tracking-wider mb-6">Tufuate</h3>
+                        <div class="flex space-x-6">
+                            <a href="#" class="w-10 h-10 rounded-full bg-primary/20 hover:bg-primary flex items-center justify-center transition">
+                                <i class="fab fa-facebook-f text-accent hover:text-secondary text-sm"></i>
+                            </a>
+                            <a href="#" class="w-10 h-10 rounded-full bg-primary/20 hover:bg-primary flex items-center justify-center transition">
+                                <i class="fab fa-twitter text-accent hover:text-secondary text-sm"></i>
+                            </a>
+                            <a href="#" class="w-10 h-10 rounded-full bg-primary/20 hover:bg-primary flex items-center justify-center transition">
+                                <i class="fab fa-instagram text-accent hover:text-secondary text-sm"></i>
+                            </a>
+                            <a href="#" class="w-10 h-10 rounded-full bg-primary/20 hover:bg-primary flex items-center justify-center transition">
+                                <i class="fab fa-linkedin-in text-accent hover:text-secondary text-sm"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-accent font-medium uppercase tracking-wider mb-6">Jiandikishe</h3>
+                        <div class="flex rounded-xl shadow-sm">
+                            <input type="email" placeholder="Barua pepe yako" class="flex-1 min-w-0 block w-full px-4 py-3 rounded-l-xl text-sm bg-secondary/20 text-accent focus:ring-primary focus:border-primary">
+                            <button class="inline-flex items-center px-5 py-3 border border-transparent text-sm font-medium rounded-r-xl text-secondary bg-primary hover:bg-primary-dark transition">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-16 pt-10 border-t border-primary/20 flex flex-col md:flex-row justify-between items-center">
+                <p class="text-accent/70 text-sm text-center md:text-left">
+                    &copy; <%= new Date().getFullYear() %> HotBando. Haki Zote Zimehifadhiwa.
+                </p>
+                <div class="mt-4 md:mt-0 flex flex-wrap justify-center gap-x-8 gap-y-3">
+                    <a href="#" class="text-accent/70 hover:text-primary text-sm">Sera ya Faragha</a>
+                    <a href="#" class="text-accent/70 hover:text-primary text-sm">Masharti ya Matumizi</a>
+                    <a href="#" class="text-accent/70 hover:text-primary text-sm">Msaada</a>
+                    <a href="#" class="text-accent/70 hover:text-primary text-sm">FAQ</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+    <script>
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const themeToggle = document.getElementById('theme-toggle');
+        const body = document.body;
+
+        // Check for saved theme preference or respect OS preference
+        if (localStorage.getItem('theme') === 'light' ||
+            (window.matchMedia('(prefers-color-scheme: light)').matches && !localStorage.getItem('theme'))) {
+            enableLightMode();
+        }
+
+        mobileMenuButton.addEventListener('click', () => {
+            mobileMenu.classList.toggle('open');
+        });
+
+        themeToggle.addEventListener('click', () => {
+            if (body.classList.contains('light-mode')) {
+                enableDarkMode();
+            } else {
+                enableLightMode();
+            }
+        });
+
+        function enableLightMode() {
+            body.classList.add('light-mode');
+            themeToggle.classList.remove('theme-toggle-dark');
+            themeToggle.classList.add('theme-toggle-light');
+            themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            localStorage.setItem('theme', 'light');
+        }
+
+        function enableDarkMode() {
+            body.classList.remove('light-mode');
+            themeToggle.classList.remove('theme-toggle-light');
+            themeToggle.classList.add('theme-toggle-dark');
+            themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            localStorage.setItem('theme', 'dark');
+        }
+
+        const sections = document.querySelectorAll('section');
+        const navItems = document.querySelectorAll('nav a');
+        const mobileNavItems = document.querySelectorAll('#mobile-menu a');
+
+        function setActiveNavItem() {
+            let index = sections.length;
+            while(--index && window.scrollY + 50 < sections[index].offsetTop) {}
+            navItems.forEach(item => {
+                item.classList.remove('active-nav-item');
+                item.classList.remove('text-accent');
+                item.classList.add('text-accent/70');
+            });
+            mobileNavItems.forEach(item => {
+                item.classList.remove('active-nav-item');
+                item.classList.remove('text-accent');
+                item.classList.add('text-accent/70');
+            });
+            navItems[index].classList.add('active-nav-item');
+            navItems[index].classList.remove('text-accent/70');
+            navItems[index].classList.add('text-accent');
+            mobileNavItems[index].classList.add('active-nav-item');
+            mobileNavItems[index].classList.remove('text-accent/70');
+            mobileNavItems[index].classList.add('text-accent');
+        }
+
+        window.addEventListener('scroll', setActiveNavItem);
+        document.addEventListener('DOMContentLoaded', setActiveNavItem);
+
+        mobileNavItems.forEach(item => {
+            item.addEventListener('click', () => {
+                mobileMenu.classList.remove('open');
+            });
+        });
+    </script>
+</body>
+</html>

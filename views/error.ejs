@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= typeof title !== 'undefined' ? title : 'Hitilafu - HotBando' %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            light: '#FF9D5C',
+                            DEFAULT: '#FF7A30',
+                            dark: '#E43636',
+                        },
+                        secondary: {
+                            DEFAULT: '#121212',
+                            dark: '#0A0A0A',
+                        },
+                        accent: {
+                            DEFAULT: '#E5E5E5',
+                            light: '#F8F8F8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="font-inter bg-accent text-secondary min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md text-center">
+        <div class="bg-accent-light rounded-2xl shadow-lg p-8">
+            <!-- Error Icon -->
+            <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-exclamation-triangle text-red-500 text-3xl"></i>
+            </div>
+            
+            <!-- Error Title -->
+            <h1 class="text-2xl font-bold text-secondary mb-2">
+                <%= typeof title !== 'undefined' ? title : 'Hitilafu Imetokea' %>
+            </h1>
+            
+            <!-- Error Message -->
+            <p class="text-secondary mb-6">
+                <%= typeof message !== 'undefined' ? message : 'Kumetokea hitilafu kwenye mfumo. Tafadhali jaribu tena baadaye.' %>
+            </p>
+            
+            <!-- Action Buttons -->
+            <div class="space-y-3">
+                <a href="/" class="w-full bg-primary hover:bg-primary-dark text-white font-medium py-3 px-4 rounded-xl transition duration-200 block">
+                    <i class="fas fa-home mr-2"></i> Rudi Nyumbani
+                </a>
+                
+                <a href="/hotspot" class="w-full bg-gray-200 hover:bg-gray-300 text-secondary font-medium py-3 px-4 rounded-xl transition duration-200 block">
+                    <i class="fas fa-wifi mr-2"></i> Kituo cha Wateja
+                </a>
+                
+                <% if (typeof showAdminLogin !== 'undefined' && showAdminLogin) { %>
+                <a href="/admin/login" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition duration-200 block">
+                    <i class="fas fa-shield-alt mr-2"></i> Ingia kama Admin
+                </a>
+                <% } %>
+                
+                <button onclick="window.history.back()" class="w-full bg-transparent border border-gray-300 hover:border-primary text-secondary font-medium py-3 px-4 rounded-xl transition duration-200">
+                    <i class="fas fa-arrow-left mr-2"></i> Rudi Nyuma
+                </button>
+            </div>
+            
+            <!-- Support Info -->
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <p class="text-sm text-gray-600">
+                    Ikiwa hitilafu inaendelea, tafadhali wasiliana na msaada wa kiufundi.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

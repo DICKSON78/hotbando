@@ -1,0 +1,124 @@
+<%- include('layout', {
+    title: 'Idhini ya Maudhui',
+    activePage: 'approve-content',
+    body: `
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+            <i class="fas fa-check-circle text-primary mr-2"></i> Video Zinazosubiri Idhini
+        </h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr class="bg-secondary-light">
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina la Tangazo</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Iliyotolewa Na</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe</th>
+                        <th scope="col" class="relative px-6 py-3">
+                            <span class="sr-only">Vitendo</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200" id="pending-ads">
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">Inapakia...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="error-message" class="hidden mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg flex items-center">
+            <i class="fas fa-exclamation-circle mr-2"></i> <span id="error-text"></span>
+        </div>
+    </div>
+    <script>
+      function sanitizeHTML(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const tableBody = document.getElementById('pending-ads');
+        const errorDiv = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        fetch('/api/ads-approve')
+          .then(response => response.json())
+          .then(data => {
+            tableBody.innerHTML = '';
+            if (!data.success) {
+              errorText.textContent = data.error || 'Imeshindwa kupakia video zinazosubiri idhini';
+              errorDiv.classList.remove('hidden');
+              tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Hakuna video zinazosubiri idhini</td></tr>';
+              return;
+            }
+            if (data.data.length === 0) {
+              tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Hakuna video zinazosubiri idhini</td></tr>';
+              return;
+            }
+            data.data.forEach(ad => {
+              const row = document.createElement('tr');
+              row.innerHTML = \`
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\${sanitizeHTML(ad.title)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sanitizeHTML(ad.sponsor_name)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${new Date(ad.created_at).toLocaleDateString('sw-TZ')}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <a href="\${sanitizeHTML(ad.video_path)}" target="_blank" class="text-primary hover:text-primary-dark mr-4">Angalia</a>
+                  <button onclick="approveAd(\${ad.id})" class="text-green-600 hover:text-green-900 mr-4">Idhinisha</button>
+                  <button onclick="declineAd(\${ad.id})" class="text-red-600 hover:text-red-900">Kataa</button>
+                </td>
+              \`;
+              tableBody.appendChild(row);
+            });
+          })
+          .catch(error => {
+            console.error('Pending ads fetch error:', error);
+            errorText.textContent = 'Hitilafu: ' + error.message;
+            errorDiv.classList.remove('hidden');
+            tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Hakuna video zinazosubiri idhini</td></tr>';
+          });
+
+        window.approveAd = function(id) {
+          fetch(\`/api/approve-ad/\${id}\`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '${typeof csrfToken !== 'undefined' ? csrfToken : ''}' }
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                location.reload();
+              } else {
+                errorText.textContent = data.error || 'Imeshindwa kuidhinisha tangazo';
+                errorDiv.classList.remove('hidden');
+              }
+            })
+            .catch(error => {
+              errorText.textContent = 'Hitilafu: ' + error.message;
+              errorDiv.classList.remove('hidden');
+            });
+        };
+
+        window.declineAd = function(id) {
+          if (confirm('Unauhakika unataka kukataa tangazo hili?')) {
+            fetch(\`/api/decline-ad/\${id}\`, {
+              method: 'POST',
+              headers: { 'X-CSRF-Token': '${typeof csrfToken !== 'undefined' ? csrfToken : ''}' }
+            })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  location.reload();
+                } else {
+                  errorText.textContent = data.error || 'Imeshindwa kukataa tangazo';
+                  errorDiv.classList.remove('hidden');
+                }
+              })
+              .catch(error => {
+                errorText.textContent = 'Hitilafu: ' + error.message;
+                errorDiv.classList.remove('hidden');
+              });
+            }
+        };
+      });
+    </script>
+    `
+}) %>

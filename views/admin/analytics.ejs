@@ -1,0 +1,118 @@
+<%- include('layout', {
+    title: 'Takwimu za Matangazo',
+    activePage: 'analytics',
+    body: `
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6">Takwimu za Matangazo</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-secondary-light p-4 rounded-lg">
+                <h3 class="text-sm font-medium text-gray-500">Jumla ya Maonyesho</h3>
+                <p class="text-2xl font-bold text-gray-800" id="total-views">0</p>
+            </div>
+            <div class="bg-secondary-light p-4 rounded-lg">
+                <h3 class="text-sm font-medium text-gray-500">Jumla ya Vichapuzi</h3>
+                <p class="text-2xl font-bold text-gray-800" id="total-clicks">0</p>
+            </div>
+            <div class="bg-secondary-light p-4 rounded-lg">
+                <h3 class="text-sm font-medium text-gray-500">Kiwango cha Kukamilika</h3>
+                <p class="text-2xl font-bold text-gray-800" id="completion-rate">0%</p>
+            </div>
+        </div>
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Maonyesho ya Siku 7</h3>
+            <canvas id="views-chart" class="w-full h-64"></canvas>
+        </div>
+        <div class="overflow-x-auto">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Maonyesho kwa Tangazo</h3>
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr class="bg-secondary-light">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tangazo</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maonyesho</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vichapuzi</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Muda wa Kuangalia</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200" id="ad-views-table">
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">Inapakia...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Fetch ad analytics
+            fetch('/api/ad_views')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) return;
+                    const tableBody = document.getElementById('ad-views-table');
+                    tableBody.innerHTML = '';
+                    if (data.data.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Hakuna maonyesho</td></tr>';
+                        return;
+                    }
+                    let totalViews = 0, totalClicks = 0, totalDuration = 0;
+                    data.data.forEach(view => {
+                        totalViews += 1;
+                        totalClicks += view.clicks_count || 0;
+                        totalDuration += view.watched_duration || 0;
+                        const row = document.createElement('tr');
+                        row.innerHTML = [
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + view.title + '</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">1</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (view.clicks_count || 0) + '</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + view.watched_duration + ' sekunde</td>'
+                        ].join('');
+                        tableBody.appendChild(row);
+                    });
+                    document.getElementById('total-views').textContent = totalViews;
+                    document.getElementById('total-clicks').textContent = totalClicks;
+                    document.getElementById('completion-rate').textContent = totalDuration > 0 ? ((totalDuration / (totalViews * 30)) * 100).toFixed(1) + '%' : '0%';
+                })
+                .catch(error => console.error('Ad views fetch error:', error));
+
+            // Fetch 7-day trend
+            fetch('/api/ad_views?startDate=' + new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + '&endDate=' + new Date().toISOString().split('T')[0])
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) return;
+                    const dates = [];
+                    const views = [];
+                    const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date(start);
+                        date.setDate(start.getDate() + i);
+                        dates.push(date.toLocaleDateString('sw-TZ'));
+                        views.push(data.data.filter(view => new Date(view.created_at).toLocaleDateString('sw-TZ') === dates[i]).length);
+                    }
+                    new Chart(document.getElementById('views-chart'), {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: [{
+                                label: 'Maonyesho ya Siku',
+                                data: views,
+                                borderColor: '#FF6B35',
+                                backgroundColor: 'rgba(255, 107, 53, 0.2)',
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('Views trend fetch error:', error));
+        });
+    </script>
+    `
+}) %>

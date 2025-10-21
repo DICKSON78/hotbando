@@ -1,0 +1,242 @@
+<% 
+  const safeTotalViews = typeof totalViews !== 'undefined' ? totalViews : 0;
+  const safeActiveAds = typeof activeAds !== 'undefined' ? activeAds : 0;
+  const safeDataDistributed = typeof dataDistributed !== 'undefined' ? dataDistributed : 0;
+  const safeCompletionRate = typeof completionRate !== 'undefined' ? completionRate : 0;
+  const safeRecentActivity = typeof recentActivity !== 'undefined' ? recentActivity : [];
+  const safeActiveAdsList = typeof activeAdsList !== 'undefined' ? activeAdsList : [];
+  const safePendingApprovals = typeof pendingApprovals !== 'undefined' ? pendingApprovals : [];
+  const safeViewsTrend = typeof viewsTrend !== 'undefined' ? viewsTrend : [];
+
+  const dashboardContent = `
+    <div class="container mx-auto px-4 py-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-500">Jumla ya Maonyesho</p>
+            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-views">${safeTotalViews.toLocaleString()}</h2>
+          </div>
+          <div class="p-3 bg-primary/10 rounded-full">
+            <i class="fas fa-eye text-primary text-2xl"></i>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-500">Matangazo Yanayofanya Kazi</p>
+            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="active-ads">${safeActiveAds}</h2>
+          </div>
+          <div class="p-3 bg-primary/10 rounded-full">
+            <i class="fas fa-ad text-primary text-2xl"></i>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-500">Data Iliyosambazwa</p>
+            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="data-distributed">${safeDataDistributed} GB</h2>
+          </div>
+          <div class="p-3 bg-primary/10 rounded-full">
+            <i class="fas fa-database text-primary text-2xl"></i>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-500">Kiwango cha Kukamilika</p>
+            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="completion-rate">${safeCompletionRate}%</h2>
+          </div>
+          <div class="p-3 bg-primary/10 rounded-full">
+            <i class="fas fa-check-circle text-primary text-2xl"></i>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">Muhtasari wa Maonyesho</h3>
+          <div class="w-full" style="height: 256px;">
+            <canvas id="viewsChart"></canvas>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">Shughuli za Hivi Karibuni</h3>
+          <ul class="space-y-4" id="recent-activity">
+            ${safeRecentActivity.length > 0 ?
+              safeRecentActivity.map(activity => `
+                <li class="flex items-center">
+                  <div class="flex-shrink-0 w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                    <i class="fas fa-${activity.icon} text-primary"></i>
+                  </div>
+                  <div class="ml-4 flex-grow">
+                    <p class="font-medium text-gray-800">${activity.description}</p>
+                    <p class="text-sm text-gray-500">${activity.time}</p>
+                  </div>
+                </li>
+              `).join('') :
+              '<li class="text-center text-gray-500">Hakuna shughuli za hivi karibuni</li>'
+            }
+          </ul>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">Matangazo ya Hivi Karibuni</h3>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr class="bg-secondary-light text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th class="py-3 px-2">Jina</th>
+                  <th class="py-3 px-2">Hali</th>
+                  <th class="py-3 px-2">Maonyesho</th>
+                  <th class="py-3 px-2">Tarehe</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200" id="recent-ads">
+                ${safeActiveAdsList.length > 0 ?
+                  safeActiveAdsList.map(ad => `
+                    <tr>
+                      <td class="py-4 px-2 text-sm text-gray-800">${ad.title}</td>
+                      <td class="py-4 px-2">
+                        <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Active</span>
+                      </td>
+                      <td class="py-4 px-2 text-sm text-gray-800">${ad.views ? ad.views.toLocaleString() : '0'}</td>
+                      <td class="py-4 px-2 text-sm text-gray-500">${new Date(ad.created_at).toLocaleDateString('sw-TZ')}</td>
+                    </tr>
+                  `).join('') :
+                  '<tr><td colspan="4" class="py-4 px-2 text-center text-gray-500">Hakuna matangazo ya hivi karibuni</td></tr>'
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">Idhini Inayosubiri (Admin)</h3>
+          <ul class="space-y-4" id="pending-approvals">
+            ${safePendingApprovals.length > 0 ?
+              safePendingApprovals.map(ad => `
+                <li class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    <i class="fas fa-video text-gray-400 text-2xl"></i>
+                    <div class="ml-4">
+                      <p class="font-medium text-gray-800">${ad.title}</p>
+                      <p class="text-sm text-gray-500">Na ${ad.sponsor_name || 'Mtoa Huduma'}</p>
+                    </div>
+                  </div>
+                  <a href="${ad.video_url || '#'}" target="_blank" class="text-sm text-primary hover:text-primary-dark">Angalia</a>
+                </li>
+              `).join('') :
+              '<li class="text-center text-gray-500">Hakuna idhini inayosubiri</li>'
+            }
+          </ul>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        let viewsChart = null;
+        const viewsCanvas = document.getElementById('viewsChart');
+        if (viewsCanvas) {
+          const viewsTrend = ${JSON.stringify(safeViewsTrend)};
+          const chartLabels = viewsTrend.length > 0 ? viewsTrend.map(v => {
+            const date = new Date(v.date);
+            return date.toLocaleDateString('sw-TZ', { day: 'numeric', month: 'short' });
+          }) : [];
+          const chartData = viewsTrend.length > 0 ? viewsTrend.map(v => v.total) : [];
+          const viewsCtx = viewsCanvas.getContext('2d');
+          viewsChart = new Chart(viewsCtx, {
+            type: 'line',
+            data: {
+              labels: chartLabels,
+              datasets: [{
+                label: 'Maonyesho ya Kila Siku',
+                data: chartData,
+                borderColor: '#FF7A30',
+                backgroundColor: 'rgba(255, 122, 48, 0.2)',
+                fill: true,
+                tension: 0.4
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  title: { display: true, text: 'Maonyesho' }
+                },
+                x: {
+                  title: { display: true, text: 'Tarehe' }
+                }
+              }
+            }
+          });
+        }
+
+        fetch('/api/dashboard-stats')
+          .then(response => response.json())
+          .then(data => {
+            if (!data.success || !viewsChart) return;
+            document.getElementById('total-views').textContent = data.totalViews.toLocaleString();
+            document.getElementById('active-ads').textContent = data.activeAds;
+            document.getElementById('data-distributed').textContent = data.dataDistributed + ' GB';
+            document.getElementById('completion-rate').textContent = data.completionRate + '%';
+            const newLabels = data.viewsTrend && data.viewsTrend.length > 0 ? data.viewsTrend.map(v => {
+              const date = new Date(v.date);
+              return date.toLocaleDateString('sw-TZ', { day: 'numeric', month: 'short' });
+            }) : [];
+            const newData = data.viewsTrend && data.viewsTrend.length > 0 ? data.viewsTrend.map(v => v.total) : [];
+            viewsChart.data.labels = newLabels;
+            viewsChart.data.datasets[0].data = newData;
+            viewsChart.update();
+            const activityList = document.getElementById('recent-activity');
+            if (data.recentActivity && data.recentActivity.length > 0) {
+              activityList.innerHTML = data.recentActivity.map(activity => \`
+                <li class="flex items-center">
+                  <div class="flex-shrink-0 w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                    <i class="fas fa-\${activity.icon} text-primary"></i>
+                  </div>
+                  <div class="ml-4 flex-grow">
+                    <p class="font-medium text-gray-800">\${activity.description}</p>
+                    <p class="text-sm text-gray-500">\${activity.time}</p>
+                  </div>
+                </li>
+              \`).join('');
+            }
+            const adsTable = document.getElementById('recent-ads');
+            if (data.activeAdsList && data.activeAdsList.length > 0) {
+              adsTable.innerHTML = data.activeAdsList.map(ad => \`
+                <tr>
+                  <td class="py-4 px-2 text-sm text-gray-800">\${ad.title}</td>
+                  <td class="py-4 px-2">
+                    <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Active</span>
+                  </td>
+                  <td class="py-4 px-2 text-sm text-gray-800">\${ad.views ? ad.views.toLocaleString() : '0'}</td>
+                  <td class="py-4 px-2 text-sm text-gray-500">\${new Date(ad.created_at).toLocaleDateString('sw-TZ')}</td>
+                </tr>
+              \`).join('');
+            }
+            const pendingList = document.getElementById('pending-approvals');
+            if (data.pendingApprovals && data.pendingApprovals.length > 0) {
+              pendingList.innerHTML = data.pendingApprovals.map(ad => \`
+                <li class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    <i class="fas fa-video text-gray-400 text-2xl"></i>
+                    <div class="ml-4">
+                      <p class="font-medium text-gray-800">\${ad.title}</p>
+                      <p class="text-sm text-gray-500">Na \${ad.sponsor_name || 'Mtoa Huduma'}</p>
+                    </div>
+                  </div>
+                  <a href="\${ad.video_url || '#'}" target="_blank" class="text-sm text-primary hover:text-primary-dark">Angalia</a>
+                </li>
+              \`).join('');
+            }
+          })
+          .catch(error => console.error('Dashboard stats fetch error:', error));
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Dashibodi',
+    activePage: 'dashboard',
+    body: dashboardContent
+}) %>

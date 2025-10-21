@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HotBando - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            light: '#FF9D5C',
+                            DEFAULT: '#FF7A30',
+                            dark: '#E43636',
+                        },
+                        secondary: {
+                            DEFAULT: '#121212',
+                            dark: '#0A0A0A',
+                        },
+                        accent: {
+                            DEFAULT: '#E5E5E5',
+                            light: '#F8F8F8',
+                        }
+                    },
+                    boxShadow: {
+                        'card': '0 8px 24px rgba(0, 0, 0, 0.15)',
+                        'card-hover': '0 12px 32px rgba(0, 0, 0, 0.2)',
+                    },
+                    borderRadius: {
+                        'xl': '1rem',
+                        '2xl': '1.5rem',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .premium-gradient {
+            background: linear-gradient(135deg, #FF7A30 0%, #E43636 100%);
+        }
+        .loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: #FF7A30;
+            transform: scaleX(0);
+            transform-origin: left;
+            animation: loading 2s ease-in-out forwards;
+            z-index: 1000;
+        }
+        @keyframes loading {
+            0% { transform: scaleX(0); }
+            50% { transform: scaleX(0.8); }
+            100% { transform: scaleX(1); opacity: 0; }
+        }
+        .button-glow {
+            position: relative;
+            overflow: hidden;
+        }
+        .button-glow::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+        .button-glow:hover::before {
+            left: 100%;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        .notification.show {
+            transform: translateX(0);
+        }
+        .notification.success {
+            background: #10B981;
+        }
+        .notification.error {
+            background: #EF4444;
+        }
+        .notification.warning {
+            background: #F59E0B;
+        }
+    </style>
+</head>
+<body class="font-inter bg-accent text-secondary min-h-screen">
+    <!-- Loading Bar -->
+    <div id="loading-bar" class="loading-bar"></div>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-card text-center">
+            <i class="fas fa-spinner fa-spin text-4xl text-primary mb-4"></i>
+            <p class="text-lg font-medium">Inaunganisha kwenye mtandao...</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-4 py-8">
+        <%- body %>
+    </div>
+
+    <!-- CSRF Token -->
+    <meta name="csrf-token" content="hotbando-csrf-token-2025">
+
+    <script>
+        // Notification system
+        function showNotification(message, type = 'success') {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-exclamation-triangle'} mr-3"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            container.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    container.removeChild(notification);
+                }, 300);
+            }, 4000);
+        }
+
+        // Loading bar on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const loadingBar = document.getElementById('loading-bar');
+            loadingBar.style.display = 'block';
+            setTimeout(() => {
+                loadingBar.style.display = 'none';
+            }, 2000);
+        });
+
+        // Confirm logout
+        function confirmLogout(event) {
+            if (!confirm("Unaondoka kwenye mfumo?")) {
+                event.preventDefault();
+                return false;
+            }
+            return true;
+        }
+    </script>
+
+    <%- scripts || '' %>
+</body>
+</html>

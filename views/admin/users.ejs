@@ -1,0 +1,113 @@
+<%- include('layout', {
+    title: 'Watumiaji',
+    activePage: 'users',
+    body: `
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6">Orodha ya Watumiaji</h2>
+        <div class="mb-4">
+            <input type="text" id="search" placeholder="Tafuta watumiaji..." class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800">
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr class="bg-secondary-light">
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barua Pepe</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jukumu</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe ya Usajili</th>
+                        <th scope="col" class="relative px-6 py-3">
+                            <span class="sr-only">Vitendo</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200" id="users-table">
+                    <tr>
+                        <td colspan="5" class="px-6 py-4 text-center text-gray-500">Inapakia...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/users')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) return;
+                    const tableBody = document.getElementById('users-table');
+                    tableBody.innerHTML = '';
+                    if (data.data.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Hakuna watumiaji</td></tr>';
+                        return;
+                    }
+                    data.data.forEach(user => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = [
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + user.name + '</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + user.email + '</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + user.role + '</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + new Date(user.created_at).toLocaleDateString('sw-TZ') + '</td>',
+                            '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">',
+                            '<a href="/admin/users/edit/' + user.id + '" class="text-primary hover:text-primary-dark">Hariri</a>',
+                            '<button onclick="deleteUser(' + user.id + ')" class="text-red-600 hover:text-red-900 ml-4">Futa</button>',
+                            '</td>'
+                        ].join('');
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(error => console.error('Users fetch error:', error));
+
+            // Search functionality
+            const searchInput = document.getElementById('search');
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.toLowerCase();
+                fetch('/api/users?search=' + encodeURIComponent(query))
+                    .then(response => response.json())
+                    .then(data => {
+                        const tableBody = document.getElementById('users-table');
+                        tableBody.innerHTML = '';
+                        if (data.data.length === 0) {
+                            tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Hakuna watumiaji</td></tr>';
+                            return;
+                        }
+                        data.data.forEach(user => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = [
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + user.name + '</td>',
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + user.email + '</td>',
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + user.role + '</td>',
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + new Date(user.created_at).toLocaleDateString('sw-TZ') + '</td>',
+                                '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">',
+                                '<a href="/admin/users/edit/' + user.id + '" class="text-primary hover:text-primary-dark">Hariri</a>',
+                                '<button onclick="deleteUser(' + user.id + ')" class="text-red-600 hover:text-red-900 ml-4">Futa</button>',
+                                '</td>'
+                            ].join('');
+                            tableBody.appendChild(row);
+                        });
+                    })
+                    .catch(error => console.error('Search users error:', error));
+            });
+        });
+
+        function deleteUser(id) {
+            if (confirm('Unauhakika unataka kumuduaji huyu?')) {
+                fetch('/api/users/delete/' + id, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-Token': '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>'
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            alert('Hitilafu: ' + (data.message || 'Imeshindwa kufuta mtumiaji'));
+                        }
+                    })
+                    .catch(error => console.error('Delete user error:', error));
+            }
+        }
+    </script>
+    `
+}) %>
