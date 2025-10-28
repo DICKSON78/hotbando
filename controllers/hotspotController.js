@@ -1,4 +1,4 @@
-// controllers/hotspotController.js
+// controllers/hotspotController.js - SASHA URIASISHI KAMILI
 const db = require('../config/database');
 const mikrotikService = require('../utils/mikrotik');
 const bcrypt = require('bcryptjs');
@@ -438,6 +438,9 @@ const hotspotController = {
         const adsWatchedToday = todayViews[0].count;
         const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
         
+        // ADD THIS LINE - Provide mac address
+        const mac = req.session.mac || user.mac_address || '00:00:00:00:00:00';
+        
         res.render('hotspot/dashboard', {
             user,
             location: req.session.location,
@@ -448,6 +451,7 @@ const hotspotController = {
             freeMB: freeMB.toFixed(2),
             clientIP: req.session.clientIP || req.ip,
             clientMAC: req.session.mac,
+            mac: mac,
             adsWatchedToday,
             adsRemaining,
             dailyAdLimit,
@@ -542,7 +546,7 @@ const hotspotController = {
         }
     },
     
-    // Get random ad
+    // Get random ad - SASHA URIASISHI KWA VIDEO ADS
     async getAd(req, res) {
         try {
             const user = req.session.hotbando_user;
@@ -570,9 +574,20 @@ const hotspotController = {
                 });
             }
             
-            const [ads] = await db.execute(
-                'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 ORDER BY RAND() LIMIT 1'
+            // PREFER VIDEO ADS FIRST
+            const [videoAds] = await db.execute(
+                'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 AND video_url IS NOT NULL AND video_url != "" ORDER BY RAND() LIMIT 1'
             );
+            
+            let ads = videoAds;
+            
+            // If no video ads, get any ad
+            if (ads.length === 0) {
+                const [allAds] = await db.execute(
+                    'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 ORDER BY RAND() LIMIT 1'
+                );
+                ads = allAds;
+            }
             
             if (ads.length === 0) {
                 return res.json({ 
@@ -594,7 +609,8 @@ const hotspotController = {
                     video_url: ad.video_url,
                     duration: ad.duration,
                     reward_mb: rewardMB,
-                    reward_bytes: ad.reward_bytes
+                    reward_bytes: ad.reward_bytes,
+                    is_video: !!ad.video_url
                 }
             });
             
@@ -607,7 +623,7 @@ const hotspotController = {
         }
     },
     
-    // Complete ad watch
+    // Complete ad watch - SASHA URIASISHI
     async completeAd(req, res) {
         try {
             const { ad_id, watched_duration } = req.body;
@@ -651,21 +667,25 @@ const hotspotController = {
             
             const ad = ads[0];
             
+            // Record ad view
             await db.execute(
                 'INSERT INTO ad_views (user_id, ad_id, watched_duration, data_earned, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
                 [user.id, ad_id, watched_duration || ad.duration, ad.reward_bytes, req.ip, req.headers['user-agent']]
             );
             
+            // Add reward data to user
             await db.execute(
                 'UPDATE users SET free_bytes = free_bytes + ? WHERE id = ?',
                 [ad.reward_bytes, user.id]
             );
             
+            // Update ad views count
             await db.execute(
                 'UPDATE ads SET views_count = views_count + 1 WHERE id = ?',
                 [ad.id]
             );
             
+            // Update session data
             req.session.hotbando_user.free_bytes += ad.reward_bytes;
             
             const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
@@ -679,7 +699,7 @@ const hotspotController = {
                 totalMB: newTotalMB,
                 adsWatchedToday: views[0].count + 1,
                 adsRemaining: Math.max(0, dailyAdLimit - (views[0].count + 1)),
-                message: `Umepata ${rewardMB}MB ya data bure!`
+                message: `Umepata ${rewardMB}MB ya data bure kutoka kwa ${ad.title}!`
             });
             
         } catch (error) {
@@ -703,6 +723,9 @@ const hotspotController = {
         const isExpired = now > usageUntil;
         const remainingSeconds = isExpired ? 0 : Math.max(0, (usageUntil - now) / 1000);
         
+        // Calculate freeMB
+        const freeMB = Math.round(user.free_bytes / (1024 * 1024));
+        
         const [packages] = await db.execute('SELECT * FROM packages WHERE is_active = 1');
         
         const [vouchers] = await db.execute(`
@@ -720,6 +743,7 @@ const hotspotController = {
             ssidshow: req.session.ssidshow,
             isExpired,
             remainingTime: formatRemainingTime(remainingSeconds),
+            freeMB: freeMB,
             packages,
             vouchers,
             clientIP: req.session.clientIP || req.ip,
@@ -727,12 +751,51 @@ const hotspotController = {
         });
     },
     
-    // Advertise page
-    advertise(req, res) {
+    // Advertise page - SASHA URIASISHI KWA VIDEO UPLOAD
+    async advertise(req, res) {
+        if (!req.session.hotbando_user) {
+            return res.redirect('/hotspot/login');
+        }
+        
+        const user = req.session.hotbando_user;
+        
+        // Get available video ads
+        const [videoAds] = await db.execute(`
+            SELECT a.*, u.name as sponsor_name,
+                   COUNT(av.id) as views_count
+            FROM ads a
+            LEFT JOIN users u ON a.sponsor_id = u.id
+            LEFT JOIN ad_views av ON a.id = av.ad_id
+            WHERE a.approved = 1 AND a.is_active = 1 
+            AND a.video_url IS NOT NULL AND a.video_url != ''
+            GROUP BY a.id
+            ORDER BY a.created_at DESC
+            LIMIT 10
+        `);
+        
+        const [todayViews] = await db.execute(
+            'SELECT COUNT(*) as count FROM ad_views WHERE user_id = ? AND DATE(created_at) = CURDATE()',
+            [user.id]
+        );
+        
+        const [adLimitSetting] = await db.execute(
+            'SELECT setting_value FROM system_settings WHERE setting_key = "daily_ad_limit"'
+        );
+        const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
+        
+        const adsWatchedToday = todayViews[0].count;
+        const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
+        
         res.render('hotspot/advertise', {
             mac: req.session.mac,
             location: req.session.location,
-            ssidshow: req.session.ssidshow
+            ssidshow: req.session.ssidshow,
+            user: user,
+            videoAds: videoAds || [],
+            adsWatchedToday: adsWatchedToday,
+            adsRemaining: adsRemaining,
+            dailyAdLimit: dailyAdLimit,
+            canWatchAds: adsRemaining > 0
         });
     },
     

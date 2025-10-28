@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="sw" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pata Data Bure - HotBando</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#FF7A30',
+                        'primary-dark': '#E43636',
+                        'secondary-light': '#f8fafc'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .nav-orange {
+            background: #FF7A30;
+        }
+        .dark .nav-orange {
+            background: #c2410c;
+        }
+
+        /* Bottom Navigation - Mobile Tabs Style */
+        .bottom-nav {
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }
+        .dark .bottom-nav {
+            background: #1f2937;
+            border-top: 1px solid #374151;
+        }
+        .mobile-tab {
+            flex: 1;
+            min-width: 0;
+            padding: 12px 8px;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            color: #6b7280;
+        }
+        .dark .mobile-tab {
+            color: #9ca3af;
+        }
+        .mobile-tab.active {
+            color: #FF7A30;
+        }
+        .dark .mobile-tab.active {
+            color: #fb923c;
+        }
+        .mobile-tab i {
+            margin-bottom: 4px;
+            font-size: 20px;
+        }
+        .mobile-tab:hover {
+            color: #FF7A30;
+        }
+        .dark .mobile-tab:hover {
+            color: #fb923c;
+        }
+
+        /* Dashboard Styles */
+        .stat-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Ad Container */
+        .ad-container {
+            aspect-ratio: 16/9;
+            background: #000;
+        }
+
+        /* Video Player */
+        .video-player {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Progress Bar */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.5s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Premium Gradient */
+        .premium-gradient {
+            background: linear-gradient(135deg, #FF7A30 0%, #E43636 100%);
+        }
+
+        /* Button Glow Effect */
+        .button-glow {
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .button-glow:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 122, 48, 0.4);
+        }
+        .button-glow:active {
+            transform: translateY(0);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 400px;
+            animation: slideUp 0.3s ease-out;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        .dark .modal-content {
+            background: #1f2937;
+            color: #e5e7eb;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Notification Styles */
+        .notification {
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100%);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            color: white;
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            max-width: 90%;
+        }
+        .notification.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        .notification.success {
+            background: linear-gradient(135deg, #10B981, #059669);
+        }
+        .notification.error {
+            background: linear-gradient(135deg, #EF4444, #DC2626);
+        }
+        .notification.warning {
+            background: linear-gradient(135deg, #F59E0B, #D97706);
+        }
+        .notification.info {
+            background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+        }
+
+        /* Brand Colors */
+        .brand-gradient-1 { background: linear-gradient(135deg, #F40009, #D70008); }
+        .brand-gradient-2 { background: linear-gradient(135deg, #E3002A, #C40024); }
+        .brand-gradient-3 { background: linear-gradient(135deg, #FF0000, #CC0000); }
+        .brand-gradient-4 { background: linear-gradient(135deg, #E60000, #CC0000); }
+        .brand-gradient-5 { background: linear-gradient(135deg, #FFCC00, #E6B800); }
+        .brand-gradient-6 { background: linear-gradient(135deg, #FF0000, #E60000); }
+        .brand-gradient-7 { background: linear-gradient(135deg, #00A651, #008C44); }
+        .brand-gradient-8 { background: linear-gradient(135deg, #0055A4, #004488); }
+
+        /* Loading Animation */
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #FF7A30;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Video Thumbnail Styles */
+        .video-thumbnail {
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .video-thumbnail:hover {
+            transform: scale(1.05);
+        }
+        .video-thumbnail-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .video-thumbnail:hover .video-thumbnail-overlay {
+            opacity: 1;
+        }
+        .play-button {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #FF7A30;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+    <!-- Top Navigation Bar -->
+    <nav class="fixed top-0 w-full nav-orange shadow-sm z-50">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo -->
+                <div class="flex items-center">
+                    <div class="hidden sm:flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center">
+                            <i class="fas fa-bolt text-orange-600 dark:text-orange-400 text-lg"></i>
+                        </div>
+                        <span class="text-white font-bold text-xl">HotBando</span>
+                    </div>
+                    <div class="sm:hidden w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center">
+                        <i class="fas fa-bolt text-orange-600 dark:text-orange-400 text-lg"></i>
+                    </div>
+                </div>
+
+                <!-- User Info -->
+                <div class="flex items-center space-x-3">
+                    <!-- Dark Mode Toggle -->
+                    <button id="themeToggle" class="text-white hover:text-yellow-300 transition-colors" title="Toggle Dark Mode">
+                        <i class="fas fa-moon text-lg"></i>
+                    </button>
+
+                    <!-- Notifications -->
+                    <button class="text-white hover:text-yellow-300 transition-colors relative">
+                        <i class="fas fa-bell text-lg"></i>
+                        <span class="absolute -top-2 -right-2 bg-yellow-500 text-gray-900 dark:text-gray-100 text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold" id="notification-count">0</span>
+                    </button>
+
+                    <!-- User -->
+                    <div class="flex items-center space-x-2 text-white">
+                        <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                            <span class="text-orange-600 font-bold text-sm">
+                                <% if (typeof user !== 'undefined' && user && user.name) { %>
+                                    <%= user.name.charAt(0).toUpperCase() %>
+                                <% } else { %>
+                                    U
+                                <% } %>
+                            </span>
+                        </div>
+                        <span class="hidden sm:block text-sm font-medium">
+                            <% if (typeof user !== 'undefined' && user && user.name) { %>
+                                <%= user.name %>
+                            <% } else { %>
+                                User
+                            <% } %>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-2 sm:px-4 pt-20 pb-24">
+        <!-- Page Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100">Pata Data Bure</h1>
+            <p class="text-gray-600 dark:text-gray-400">Tazama matangazo ya kampuni maarufu kupata data bure</p>
+        </div>
+
+        <!-- Data Earnings Section -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Current Ad Info -->
+            <div class="stat-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Tangazo la Sasa</h3>
+                <div id="current-ad-info" class="flex items-center space-x-3 mb-4">
+                    <div class="loading-spinner mx-auto"></div>
+                </div>
+                <div class="space-y-2 text-sm" id="ad-details">
+                    <!-- Ad details will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="stat-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Takwimu Zako</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Jumla ya Data:</span>
+                        <span class="font-bold text-orange-600" id="total-data"><%= typeof freeMB !== 'undefined' ? freeMB : 0 %>MB</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Matangazo Leo:</span>
+                        <span class="font-bold text-orange-600" id="ads-today">
+                            <%= typeof adsWatchedToday !== 'undefined' ? adsWatchedToday : 0 %>/<%= typeof dailyAdLimit !== 'undefined' ? dailyAdLimit : 8 %>
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Yaliyobaki Leo:</span>
+                        <span class="font-bold text-green-600" id="ads-remaining">
+                            <%= typeof dailyAdLimit !== 'undefined' && typeof adsWatchedToday !== 'undefined' ? (dailyAdLimit - adsWatchedToday) : 8 %>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Status -->
+            <div class="stat-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Hali ya Mtandao</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Hali:</span>
+                        <span class="font-bold text-green-600" id="connection-status">Imesimama</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Watumiaji:</span>
+                        <span class="font-bold text-orange-600" id="connected-users">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Muda:</span>
+                        <span class="font-medium" id="connection-time">0:00</span>
+                    </div>
+                </div>
+                <button id="connect-btn" class="w-full mt-4 premium-gradient text-white font-semibold py-2 px-4 rounded-lg button-glow">
+                    Unganisha Mtandao
+                </button>
+            </div>
+        </div>
+
+        <!-- Ad Container -->
+        <div class="stat-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-8">
+            <div class="ad-container relative" id="ad-container">
+                <!-- Video Player -->
+                <video id="video-player" class="video-player hidden" controls>
+                    Your browser does not support the video tag.
+                </video>
+
+                <!-- Ad Placeholder -->
+                <div class="absolute inset-0 flex items-center justify-center text-white brand-gradient-1" id="ad-placeholder">
+                    <div class="text-center">
+                        <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-video text-red-600 text-3xl"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold mb-2" id="ad-title">Subiri...</h2>
+                        <p class="text-lg opacity-90" id="ad-description">Inapakia tangazo...</p>
+                        <p class="text-sm opacity-75 mt-2" id="ad-reward">Tazama tangazo kupata data bure</p>
+                    </div>
+                </div>
+
+                <!-- Ad Controls -->
+                <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4 hidden" id="ad-controls">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <button id="play-btn" class="w-12 h-12 rounded-full bg-white text-red-600 flex items-center justify-center hover:bg-gray-100 transition-colors shadow-lg">
+                                <i class="fas fa-play text-lg" id="play-icon"></i>
+                            </button>
+                            <div class="text-white text-sm">
+                                <span id="current-time">0:00</span> / <span id="duration">0:00</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 mx-4">
+                            <div class="h-2 bg-white/30 rounded-full overflow-hidden">
+                                <div class="h-full bg-white" id="progress-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="text-white text-sm font-medium" id="reward-amount">
+                            +0MB
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ad Details -->
+            <div class="p-6">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100" id="current-ad-title">Hakuna Tangazo</h2>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1" id="current-ad-description">Bonyeza "Pata Tangazo" kuanza kutazama</p>
+                    </div>
+                    <div class="mt-3 sm:mt-0">
+                        <div class="flex items-center space-x-4 text-sm">
+                            <div class="flex items-center space-x-1">
+                                <i class="fas fa-clock text-orange-500"></i>
+                                <span id="ad-duration">0s</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <i class="fas fa-database text-green-500"></i>
+                                <span class="font-medium" id="ad-reward-mb">0MB</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <i class="fas fa-eye text-blue-500"></i>
+                                <span id="ad-views">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button id="get-ad-btn" class="premium-gradient text-white font-semibold py-2 px-6 rounded-lg button-glow flex items-center">
+                        <i class="fas fa-sync-alt mr-2"></i> Pata Tangazo Jipya
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- More Ads Section - SASHA URIASISHI KWA VIDEO ZOTE -->
+        <div class="stat-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Matangazo Yanayopatikana</h2>
+                <button id="refresh-ads-btn" class="text-primary hover:text-primary-dark transition-colors flex items-center">
+                    <i class="fas fa-redo-alt mr-2"></i> Sasisha
+                </button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="available-ads">
+                <div class="col-span-full text-center py-8">
+                    <div class="loading-spinner mx-auto mb-4"></div>
+                    <p class="text-gray-600 dark:text-gray-400">Inapakia matangazo...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 text-center">
+            <div class="loading-spinner mx-auto mb-3"></div>
+            <p class="text-base font-medium" id="loading-message">Inasasisha data...</p>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="success-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fas fa-check text-green-600 dark:text-green-400 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">Hongera!</h3>
+                <p class="text-gray-600 dark:text-gray-400 mb-4" id="success-message"></p>
+                <button type="button" id="success-ok" class="w-full premium-gradient text-white font-semibold py-3 px-4 rounded-lg button-glow">
+                    Endelea Kutazama
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="error-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">Hitilafu Imetokea</h3>
+                <p class="text-gray-600 dark:text-gray-400 mb-4" id="error-message"></p>
+                <button type="button" id="error-ok" class="w-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold py-3 px-4 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors">
+                    Sawa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <!-- Bottom Navigation - Mobile Tabs Style -->
+    <nav class="fixed bottom-0 left-0 right-0 bottom-nav shadow-lg z-40 py-2">
+        <div class="max-w-7xl mx-auto px-2">
+            <div class="flex justify-around items-center">
+                <a href="/hotspot/dashboard" class="mobile-tab">
+                    <i class="fas fa-house"></i>
+                    <span>Nyumbani</span>
+                </a>
+                
+                <a href="/hotspot/subscription" class="mobile-tab">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>Kifurushi</span>
+                </a>
+                
+                <a href="/hotspot/advertise" class="mobile-tab active">
+                    <i class="fas fa-video"></i>
+                    <span>Ona Tangazo</span>
+                </a>
+                
+                <form action="/hotspot/logout" method="POST" class="mobile-tab">
+                    <button type="submit" class="flex flex-col items-center">
+                        <i class="fas fa-right-from-bracket"></i>
+                        <span>Toka</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <script>
+        // === GLOBAL VARIABLES ===
+        let currentAd = null;
+        let isPlaying = false;
+        let currentTime = 0;
+        let duration = 0;
+        let interval = null;
+        let videoPlayer = null;
+        let allVideoAds = [];
+
+        // === DARK MODE TOGGLE ===
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+
+        if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            html.classList.add('dark');
+            themeToggle.innerHTML = '<i class="fas fa-sun text-lg"></i>';
+        } else {
+            themeToggle.innerHTML = '<i class="fas fa-moon text-lg"></i>';
+        }
+
+        themeToggle.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            if (html.classList.contains('dark')) {
+                localStorage.setItem('theme', 'dark');
+                themeToggle.innerHTML = '<i class="fas fa-sun text-lg"></i>';
+            } else {
+                localStorage.setItem('theme', 'light');
+                themeToggle.innerHTML = '<i class="fas fa-moon text-lg"></i>';
+            }
+        });
+
+        // === MODAL MANAGEMENT ===
+        function showSuccessModal(message) {
+            const modal = document.getElementById('success-modal');
+            const successMessage = document.getElementById('success-message');
+            
+            successMessage.textContent = message;
+            modal.classList.remove('hidden');
+        }
+
+        function hideSuccessModal() {
+            const modal = document.getElementById('success-modal');
+            modal.classList.add('hidden');
+        }
+
+        function showErrorModal(message) {
+            const modal = document.getElementById('error-modal');
+            const errorMessage = document.getElementById('error-message');
+            
+            errorMessage.textContent = message;
+            modal.classList.remove('hidden');
+        }
+
+        function hideErrorModal() {
+            const modal = document.getElementById('error-modal');
+            modal.classList.add('hidden');
+        }
+
+        // === NOTIFICATION SYSTEM ===
+        function showNotification(message, type = 'success') {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle'}"></i>
+                <span>${message}</span>
+            `;
+            container.appendChild(notification);
+            
+            // Show notification
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            // Auto remove after 4 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 4000);
+        }
+
+        // === LOADING MANAGEMENT ===
+        function showLoading(message = 'Inasasisha data...') {
+            const overlay = document.getElementById('loading-overlay');
+            const messageEl = document.getElementById('loading-message');
+            messageEl.textContent = message;
+            overlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.add('hidden');
+        }
+
+        // === TIME FORMATTING ===
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        // === AD MANAGEMENT FUNCTIONS ===
+        async function fetchRandomAd() {
+            try {
+                showLoading('Inapakia tangazo...');
+                
+                const response = await fetch('/hotspot/ads/get-random', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentAd = result.ad;
+                    displayAd(currentAd);
+                    showNotification('Tangazo jipya limepakuliwa!', 'success');
+                } else {
+                    showErrorModal(result.message || 'Hakuna matangazo yanayopatikana kwa sasa.');
+                }
+            } catch (error) {
+                console.error('Error fetching ad:', error);
+                showErrorModal('Hitilafu ya mtandao. Tafadhali jaribu tena.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayAd(ad) {
+            // Update ad info
+            document.getElementById('ad-title').textContent = ad.title;
+            document.getElementById('ad-description').textContent = ad.description;
+            document.getElementById('ad-reward').textContent = `Tazama tangazo kupata ${ad.reward_mb}MB ya data bure`;
+            
+            document.getElementById('current-ad-title').textContent = ad.title;
+            document.getElementById('current-ad-description').textContent = ad.description;
+            document.getElementById('ad-duration').textContent = `${ad.duration}s`;
+            document.getElementById('ad-reward-mb').textContent = `${ad.reward_mb}MB`;
+            document.getElementById('reward-amount').textContent = `+${ad.reward_mb}MB`;
+
+            // Update current ad info section
+            const adInfo = document.getElementById('current-ad-info');
+            const adDetails = document.getElementById('ad-details');
+            
+            adInfo.innerHTML = `
+                <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
+                    <i class="fas fa-video text-white text-lg"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-800 dark:text-gray-100">${ad.title}</h4>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">${ad.description.substring(0, 50)}...</p>
+                </div>
+            `;
+
+            adDetails.innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600 dark:text-gray-400">Muda:</span>
+                    <span class="font-medium">${formatTime(ad.duration)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600 dark:text-gray-400">Data Utakayopata:</span>
+                    <span class="font-medium text-green-600">${ad.reward_mb}MB</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600 dark:text-gray-400">Aina:</span>
+                    <span class="font-medium">${ad.video_url ? 'Video' : 'Picha'}</span>
+                </div>
+            `;
+
+            // Setup video player if it's a video ad
+            if (ad.video_url) {
+                setupVideoAd(ad);
+            } else {
+                setupImageAd(ad);
+            }
+
+            duration = ad.duration;
+            document.getElementById('duration').textContent = formatTime(duration);
+        }
+
+        function setupVideoAd(ad) {
+            videoPlayer = document.getElementById('video-player');
+            videoPlayer.src = ad.video_url;
+            videoPlayer.classList.remove('hidden');
+            
+            // Show video controls
+            document.getElementById('ad-controls').classList.remove('hidden');
+            document.getElementById('ad-placeholder').classList.add('hidden');
+
+            // Setup video event listeners
+            videoPlayer.addEventListener('loadedmetadata', () => {
+                duration = Math.floor(videoPlayer.duration);
+                document.getElementById('duration').textContent = formatTime(duration);
+            });
+
+            videoPlayer.addEventListener('timeupdate', () => {
+                currentTime = Math.floor(videoPlayer.currentTime);
+                updateProgress();
+            });
+
+            videoPlayer.addEventListener('ended', completeAd);
+        }
+
+        function setupImageAd(ad) {
+            // Hide video player
+            document.getElementById('video-player').classList.add('hidden');
+            document.getElementById('ad-controls').classList.remove('hidden');
+            document.getElementById('ad-placeholder').classList.remove('hidden');
+
+            // Update placeholder with ad info
+            document.getElementById('ad-title').textContent = ad.title;
+            document.getElementById('ad-description').textContent = 'Bonyeza play kuanza kutazama';
+            document.getElementById('ad-reward').textContent = `Pata ${ad.reward_mb}MB ya data bure`;
+        }
+
+        function updateProgress() {
+            const progress = (currentTime / duration) * 100;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+            document.getElementById('current-time').textContent = formatTime(currentTime);
+        }
+
+        function startAd() {
+            if (!currentAd) return;
+
+            if (currentAd.video_url) {
+                // Video ad
+                videoPlayer.play();
+                isPlaying = true;
+                document.getElementById('play-icon').className = 'fas fa-pause';
+            } else {
+                // Image ad - simulate playback
+                isPlaying = true;
+                document.getElementById('play-icon').className = 'fas fa-pause';
+                
+                interval = setInterval(() => {
+                    currentTime++;
+                    updateProgress();
+
+                    if (currentTime >= duration) {
+                        completeAd();
+                    }
+                }, 1000);
+            }
+        }
+
+        function pauseAd() {
+            if (currentAd.video_url) {
+                videoPlayer.pause();
+            } else {
+                clearInterval(interval);
+            }
+            
+            isPlaying = false;
+            document.getElementById('play-icon').className = 'fas fa-play';
+        }
+
+        async function completeAd() {
+            if (currentAd.video_url) {
+                videoPlayer.pause();
+            } else {
+                clearInterval(interval);
+            }
+
+            isPlaying = false;
+            document.getElementById('play-icon').className = 'fas fa-check';
+
+            try {
+                showLoading('Inakamilisha tangazo...');
+
+                const response = await fetch('/hotspot/ads/complete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
+                    body: JSON.stringify({
+                        ad_id: currentAd.id,
+                        watched_duration: currentTime
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Update stats
+                    updateUserStats(result);
+                    
+                    showSuccessModal(`Umepata ${result.addedMB}MB ya data bure kutoka ${currentAd.title}! Jumla yako sasa: ${result.totalMB}MB`);
+                    showNotification(`+${result.addedMB}MB imeongezwa kikamilifu!`, 'success');
+                    
+                    // Reset for next ad
+                    setTimeout(() => {
+                        resetAdPlayer();
+                        fetchRandomAd();
+                    }, 3000);
+                } else {
+                    showErrorModal(result.message || 'Hitilafu imetokea wakati wa kukamilisha tangazo.');
+                }
+            } catch (error) {
+                console.error('Ad completion error:', error);
+                showErrorModal('Hitilafu ya mtandao. Tafadhali jaribu tena.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function resetAdPlayer() {
+            currentTime = 0;
+            updateProgress();
+            document.getElementById('play-icon').className = 'fas fa-play';
+            
+            if (currentAd && currentAd.video_url) {
+                videoPlayer.currentTime = 0;
+            }
+        }
+
+        function updateUserStats(result) {
+            document.getElementById('total-data').textContent = `${result.totalMB}MB`;
+            document.getElementById('ads-today').textContent = `${result.adsWatchedToday}/${<%= typeof dailyAdLimit !== 'undefined' ? dailyAdLimit : 8 %>}`;
+            document.getElementById('ads-remaining').textContent = result.adsRemaining;
+        }
+
+        // === NETWORK CONNECTION ===
+        async function connectToInternet() {
+            try {
+                showLoading('Inaunganisha kwenye mtandao...');
+                
+                const response = await fetch('/hotspot/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('connection-status').textContent = 'Imeunganishwa';
+                    document.getElementById('connection-status').className = 'font-bold text-green-600';
+                    showNotification('Umefanikiwa kuunganishwa kwenye mtandao!', 'success');
+                } else {
+                    showErrorModal(result.message || 'Imeshindikana kuunganishwa kwenye mtandao.');
+                }
+            } catch (error) {
+                console.error('Connection error:', error);
+                showErrorModal('Hitilafu ya mtandao. Tafadhali jaribu tena.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // === AVAILABLE ADS FETCH - SASHA URIASISHI ===
+        async function fetchAvailableAds() {
+            try {
+                const response = await fetch('/api/video-ads');
+                const result = await response.json();
+
+                if (result.success) {
+                    allVideoAds = result.data;
+                    displayAvailableAds(allVideoAds);
+                    showNotification(`Matangazo ${allVideoAds.length} yamepakuliwa`, 'success');
+                } else {
+                    console.error('Failed to fetch video ads:', result.message);
+                    displayAvailableAds([]);
+                }
+            } catch (error) {
+                console.error('Error fetching available ads:', error);
+                displayAvailableAds([]);
+            }
+        }
+
+        function displayAvailableAds(ads) {
+            const container = document.getElementById('available-ads');
+            
+            if (ads.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <i class="fas fa-video-slash text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-gray-600 dark:text-gray-400">Hakuna matangazo ya video yanayopatikana kwa sasa</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = ads.map((ad, index) => {
+                const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
+                const brandGradient = `brand-gradient-${(index % 8) + 1}`;
+                const viewsCount = ad.views_count || 0;
+                const sponsorName = ad.sponsor_name || 'Mdhamini';
+                
+                return `
+                    <div class="video-thumbnail bg-gradient-to-br ${brandGradient} rounded-lg overflow-hidden hover:shadow-lg transition cursor-pointer text-white" data-ad-id="${ad.id}">
+                        <div class="relative pb-[56.25%]">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                ${ad.video_url ? `
+                                    <div class="text-center p-4">
+                                        <i class="fas fa-video text-4xl opacity-80 mb-2"></i>
+                                        <p class="text-sm opacity-90">${ad.title}</p>
+                                    </div>
+                                ` : `
+                                    <div class="text-center p-4">
+                                        <i class="fas fa-image text-4xl opacity-80 mb-2"></i>
+                                        <p class="text-sm opacity-90">${ad.title}</p>
+                                    </div>
+                                `}
+                            </div>
+                            <div class="video-thumbnail-overlay">
+                                <div class="play-button">
+                                    <i class="fas fa-play"></i>
+                                </div>
+                            </div>
+                            <div class="absolute top-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
+                                ${formatTime(ad.duration)}
+                            </div>
+                            <div class="absolute top-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
+                                +${rewardMB}MB
+                            </div>
+                            <div class="absolute bottom-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
+                                ${viewsCount} mtazamo
+                            </div>
+                        </div>
+                        <div class="p-3">
+                            <h3 class="font-bold line-clamp-2 text-sm mb-1">${ad.title}</h3>
+                            <p class="text-xs opacity-80 line-clamp-2 mb-2">${ad.description}</p>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="bg-white/20 px-2 py-1 rounded">${ad.video_url ? 'Video' : 'Picha'}</span>
+                                <span class="opacity-80">${sponsorName}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add click event listeners to video thumbnails
+            container.querySelectorAll('.video-thumbnail').forEach(thumbnail => {
+                thumbnail.addEventListener('click', function() {
+                    const adId = this.getAttribute('data-ad-id');
+                    const selectedAd = allVideoAds.find(ad => ad.id == adId);
+                    if (selectedAd) {
+                        selectAd(selectedAd);
+                    }
+                });
+            });
+        }
+
+        function selectAd(ad) {
+            currentAd = ad;
+            displayAd(ad);
+            showNotification(`Tangazo "${ad.title}" limechaguliwa`, 'info');
+            
+            // Scroll to top of ad container
+            document.getElementById('ad-container').scrollIntoView({ 
+                behavior: 'smooth',
+                block: 'center'
+            });
+        }
+
+        // === INITIALIZATION ===
+        document.addEventListener("DOMContentLoaded", function() {
+            // Modal event listeners
+            document.getElementById('success-ok').addEventListener('click', hideSuccessModal);
+            document.getElementById('error-ok').addEventListener('click', hideErrorModal);
+
+            // Close modals when clicking outside
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.add('hidden');
+                    }
+                });
+            });
+
+            // Ad control event listeners
+            document.getElementById('play-btn').addEventListener('click', () => {
+                if (isPlaying) {
+                    pauseAd();
+                } else {
+                    startAd();
+                }
+            });
+
+            document.getElementById('get-ad-btn').addEventListener('click', fetchRandomAd);
+            document.getElementById('connect-btn').addEventListener('click', connectToInternet);
+            document.getElementById('refresh-ads-btn').addEventListener('click', fetchAvailableAds);
+
+            // Set active navigation item
+            const navItems = document.querySelectorAll('.mobile-tab');
+            const currentPath = window.location.pathname;
+
+            navItems.forEach(item => {
+                const href = item.tagName === 'A' ? item.getAttribute('href') : item.querySelector('button').formAction;
+                if (href === currentPath) {
+                    item.classList.add('active');
+                }
+            });
+
+            // Initialize page data
+            fetchRandomAd();
+            fetchAvailableAds();
+        });
+    </script>
+</body>
+</html>

@@ -1,64 +1,178 @@
 <% 
   const dashboardContent = `
     <div class="container mx-auto px-4 py-8">
-      <div class="bg-white rounded-lg shadow-sm p-8">
-        <h2 class="text-2xl font-semibold text-gray-800 mb-8 flex items-center">
-          <i class="fas fa-upload text-primary mr-2"></i> Pakia Tangazo Jipya la Video
-        </h2>
-        <form id="upload-video-form" enctype="multipart/form-data" action="/api/upload-video" method="POST" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="col-span-1">
-            <label for="title" class="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <i class="fas fa-heading text-primary mr-2"></i> Jina la Tangazo
-            </label>
-            <input type="text" name="title" id="title" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800 shadow-sm" required>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="mb-8">
+          <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+            <i class="fas fa-upload text-orange-600 mr-3"></i> Pakia Tangazo Jipya la Video
+          </h2>
+          <p class="text-gray-600 mt-2">Ongeza tangazo jipya la video kwa ajili ya watumiaji wapate data bure</p>
+        </div>
+
+        <form id="upload-video-form" enctype="multipart/form-data" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Left Column -->
+          <div class="col-span-1 space-y-6">
+            <!-- Video Title -->
+            <div>
+              <label for="title" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-heading text-orange-600 mr-2"></i> 
+                Jina la Tangazo
+              </label>
+              <input type="text" name="title" id="title" 
+                     class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition bg-white text-gray-800 shadow-sm" 
+                     placeholder="Ingiza jina la tangazo" required>
+            </div>
+
+            <!-- Sponsor -->
+            <div>
+              <label for="sponsor_id" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-user text-orange-600 mr-2"></i> 
+                Mdhamini
+              </label>
+              <select name="sponsor_id" id="sponsor_id" 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition bg-white text-gray-800 shadow-sm" required>
+                <option value="">Chagua Mdhamini</option>
+                ${typeof sponsors !== 'undefined' && sponsors.length > 0 ? 
+                  sponsors.map(sponsor => `
+                    <option value="${sponsor.id}">${sponsor.name}</option>
+                  `).join('') : ''}
+              </select>
+            </div>
+
+            <!-- Duration -->
+            <div>
+              <label for="duration" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-clock text-orange-600 mr-2"></i> 
+                Muda wa Tangazo (sekunde)
+              </label>
+              <input type="number" name="duration" id="duration" min="5" max="300" value="30"
+                     class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition bg-white text-gray-800 shadow-sm">
+              <p class="text-xs text-gray-500 mt-1">Muda wa tangazo kwa sekunde (5 hadi 300)</p>
+            </div>
+
+            <!-- Reward Data -->
+            <div>
+              <label for="reward_bytes" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-database text-orange-600 mr-2"></i> 
+                Data ya Zawadi (MB)
+              </label>
+              <input type="number" name="reward_bytes" id="reward_bytes" min="1" max="100" value="10"
+                     class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition bg-white text-gray-800 shadow-sm">
+              <p class="text-xs text-gray-500 mt-1">Kiasi cha data watumiaji watakachopata baada ya kutazama tangazo</p>
+            </div>
           </div>
-          <div class="col-span-1">
-            <label for="sponsor_id" class="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <i class="fas fa-user text-primary mr-2"></i> Muduaji
-            </label>
-            <select name="sponsor_id" id="sponsor_id" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800 shadow-sm" required>
-              <option value="">Chagua Mdhamini</option>
-              ${typeof sponsors !== 'undefined' && sponsors.length > 0 ? 
-                sponsors.map(sponsor => `
-                  <option value="${sponsor.id}">${sponsor.name}</option>
-                `).join('') : ''}
-            </select>
+
+          <!-- Right Column -->
+          <div class="col-span-1 space-y-6">
+            <!-- Description -->
+            <div>
+              <label for="description" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-file-alt text-orange-600 mr-2"></i> 
+                Maelezo ya Tangazo
+              </label>
+              <textarea name="description" id="description" rows="4" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition bg-white text-gray-800 shadow-sm" 
+                        placeholder="Eleza kuhusu tangazo hili..." required></textarea>
+            </div>
+
+            <!-- Video File -->
+            <div>
+              <label for="video" class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-video text-orange-600 mr-2"></i> 
+                Chagua Faili ya Video
+              </label>
+              <input type="file" name="video" id="video" accept="video/*" 
+                     class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-600 file:text-white hover:file:bg-orange-700 transition shadow-sm" required>
+              <p class="text-xs text-gray-500 mt-1">
+                Aina zinazokubalika: MP4, MKV, AVI, MOV, WMV (Max: 100MB)
+              </p>
+            </div>
+
+            <!-- File Preview -->
+            <div id="file-preview" class="hidden">
+              <label class="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <i class="fas fa-eye text-orange-600 mr-2"></i> 
+                Hakiki Faili
+              </label>
+              <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                <div id="preview-content" class="text-sm text-gray-600">
+                  <!-- Preview content will be shown here -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Active Status -->
+            <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+              <input type="checkbox" name="is_active" id="is_active" checked
+                     class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded">
+              <label for="is_active" class="ml-2 flex items-center text-sm text-gray-700">
+                <i class="fas fa-toggle-on text-orange-600 mr-2"></i> 
+                Tangazo Linatumika
+              </label>
+            </div>
           </div>
-          <div class="col-span-1 lg:col-span-2">
-            <label for="description" class="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <i class="fas fa-file-alt text-primary mr-2"></i> Maelezo
-            </label>
-            <textarea name="description" id="description" rows="5" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800 shadow-sm" required></textarea>
-          </div>
-          <div class="col-span-1 lg:col-span-2">
-            <label for="video" class="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <i class="fas fa-video text-primary mr-2"></i> Chagua Video
-            </label>
-            <input type="file" name="video" id="video" accept="video/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary-dark transition shadow-sm" required>
-          </div>
-          <div class="col-span-1 lg:col-span-2 flex items-center">
-            <input type="checkbox" name="is_active" id="is_active" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded">
-            <label for="is_active" class="ml-2 flex items-center text-sm text-gray-700">
-              <i class="fas fa-toggle-on text-primary mr-2"></i> Tangazo Linatumika
-            </label>
-          </div>
-          <input type="hidden" name="_token" value="${typeof csrfToken !== 'undefined' ? csrfToken : ''}">
-          <div class="col-span-1 lg:col-span-2 flex justify-end space-x-4 mt-6">
-            <button type="button" onclick="window.history.back()" class="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition shadow-sm flex items-center">
+
+          <!-- Form Actions -->
+          <div class="col-span-1 lg:col-span-2 flex justify-end space-x-4 mt-6 pt-6 border-t border-gray-200">
+            <button type="button" onclick="window.history.back()" 
+                    class="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition shadow-sm flex items-center">
               <i class="fas fa-times mr-2"></i> Ghairi
             </button>
-            <button type="submit" class="px-6 py-3 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm flex items-center">
+            <button type="submit" id="submit-btn"
+                    class="px-6 py-3 text-sm font-medium text-white bg-gradient-to-r from-orange-600 to-red-600 rounded-lg hover:from-orange-700 hover:to-red-700 transition shadow-sm flex items-center">
               <i class="fas fa-upload mr-2"></i> Pakia Tangazo
             </button>
           </div>
-          <div id="upload-error" class="col-span-1 lg:col-span-2 hidden mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg flex items-center">
-            <i class="fas fa-exclamation-circle mr-2"></i> <span id="error-message"></span>
+
+          <!-- Progress Bar -->
+          <div id="upload-progress" class="col-span-1 lg:col-span-2 hidden mt-4">
+            <div class="bg-gray-50 rounded-lg p-4">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-medium text-gray-700">Inapakia...</span>
+                <span id="progress-percentage" class="text-sm text-gray-600">0%</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2">
+                <div id="progress-bar" class="bg-orange-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error Display -->
+          <div id="upload-error" class="col-span-1 lg:col-span-2 hidden mt-4 text-sm text-red-600 bg-red-50 p-4 rounded-lg flex items-start">
+            <i class="fas fa-exclamation-circle mt-0.5 mr-3"></i> 
+            <div>
+              <span class="font-medium">Hitilafu:</span>
+              <span id="error-message" class="ml-1"></span>
+            </div>
+          </div>
+
+          <!-- Success Display -->
+          <div id="upload-success" class="col-span-1 lg:col-span-2 hidden mt-4 text-sm text-green-600 bg-green-50 p-4 rounded-lg flex items-start">
+            <i class="fas fa-check-circle mt-0.5 mr-3"></i> 
+            <div>
+              <span class="font-medium">Imefanikiwa:</span>
+              <span id="success-message" class="ml-1"></span>
+            </div>
           </div>
         </form>
       </div>
     </div>
+
     <script>
       document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('upload-video-form');
+        const errorDiv = document.getElementById('upload-error');
+        const successDiv = document.getElementById('upload-success');
+        const errorMessage = document.getElementById('error-message');
+        const successMessage = document.getElementById('success-message');
+        const progressContainer = document.getElementById('upload-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const submitBtn = document.getElementById('submit-btn');
+        const filePreview = document.getElementById('file-preview');
+        const previewContent = document.getElementById('preview-content');
+        const videoInput = document.getElementById('video');
+
         // Fetch sponsors if not provided server-side
         if (!${JSON.stringify(typeof sponsors !== 'undefined' && sponsors.length > 0)}) {
           fetch('/api/sponsors')
@@ -78,30 +192,168 @@
             .catch(error => console.error('Sponsors fetch error:', error));
         }
 
-        // Handle form submission
-        const form = document.getElementById('upload-video-form');
-        const errorDiv = document.getElementById('upload-error');
-        const errorMessage = document.getElementById('error-message');
+        // File selection handler
+        videoInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            // Validate file size
+            const maxSize = 100 * 1024 * 1024; // 100MB
+            if (file.size > maxSize) {
+              showError('Faili ni kubwa sana. Ukubwa upewa ni 100MB pekee');
+              videoInput.value = '';
+              filePreview.classList.add('hidden');
+              return;
+            }
+
+            // Validate file type
+            const allowedTypes = ['video/mp4', 'video/mkv', 'video/avi', 'video/mov', 'video/wmv'];
+            if (!allowedTypes.includes(file.type)) {
+              showError('Aina ya faili haikubaliki. Tafadhali chagua faili ya video');
+              videoInput.value = '';
+              filePreview.classList.add('hidden');
+              return;
+            }
+
+            // Show file preview
+            showFilePreview(file);
+            hideError();
+          } else {
+            filePreview.classList.add('hidden');
+          }
+        });
+
+        function showFilePreview(file) {
+          const fileSize = (file.size / (1024 * 1024)).toFixed(2);
+          const fileName = file.name;
+          const fileType = file.type;
+          
+          previewContent.innerHTML = \`
+            <div class="flex items-center justify-center space-x-3">
+              <i class="fas fa-video text-orange-600 text-2xl"></i>
+              <div class="text-left">
+                <p class="font-medium text-gray-800">\${fileName}</p>
+                <p class="text-xs text-gray-600">
+                  \${fileType} • \${fileSize} MB
+                </p>
+              </div>
+            </div>
+          \`;
+          
+          filePreview.classList.remove('hidden');
+        }
+
+        function showError(message) {
+          errorMessage.textContent = message;
+          errorDiv.classList.remove('hidden');
+          successDiv.classList.add('hidden');
+        }
+
+        function hideError() {
+          errorDiv.classList.add('hidden');
+        }
+
+        function showSuccess(message) {
+          successMessage.textContent = message;
+          successDiv.classList.remove('hidden');
+          errorDiv.classList.add('hidden');
+        }
+
+        function updateProgress(percent) {
+          progressBar.style.width = \`\${percent}%\`;
+          progressPercentage.textContent = \`\${percent}%\`;
+        }
+
+        // Handle form submission - FIXED VERSION
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
-          errorDiv.classList.add('hidden');
+          
+          // Hide previous messages
+          hideError();
+          successDiv.classList.add('hidden');
+          
+          // Validate form
+          const title = document.getElementById('title').value.trim();
+          const sponsorId = document.getElementById('sponsor_id').value;
+          const description = document.getElementById('description').value.trim();
+          const videoFile = document.getElementById('video').files[0];
+
+          if (!title || !sponsorId || !description || !videoFile) {
+            showError('Tafadhali jaza sehemu zote zinazohitajika');
+            return;
+          }
+
+          // Show progress and disable submit button
+          progressContainer.classList.remove('hidden');
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Inapakia...';
+
           const formData = new FormData(form);
+
           try {
+            // Simulate progress for better UX
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+              progress += 5;
+              if (progress <= 90) {
+                updateProgress(progress);
+              }
+            }, 200);
+
+            // DEBUG: Add response text logging
             const response = await fetch('/api/upload-video', {
               method: 'POST',
               body: formData
             });
-            const result = await response.json();
-            if (result.success) {
-              window.location.href = '/admin/my-ads';
-            } else {
-              errorMessage.textContent = result.error || 'Imeshindwa kupakia tangazo';
-              errorDiv.classList.remove('hidden');
+
+            // DEBUG: Check response before parsing
+            const responseText = await response.text();
+            console.log('📨 Server Response:', responseText);
+
+            clearInterval(progressInterval);
+            updateProgress(100);
+
+            let result;
+            try {
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('❌ JSON Parse Error:', parseError);
+              throw new Error('Server returned invalid JSON. Response: ' + responseText.substring(0, 100));
             }
+
+            if (result.success) {
+              showSuccess('Video imepakiwa kikamilifu na imeongezwa kwenye matangazo!');
+              
+              // Redirect after 2 seconds
+              setTimeout(() => {
+                window.location.href = '/admin/my-ads';
+              }, 2000);
+            } else {
+              showError(result.message || 'Imeshindikana kupakia video');
+            }
+
           } catch (error) {
-            errorMessage.textContent = 'Hitilafu: ' + error.message;
-            errorDiv.classList.remove('hidden');
+            console.error('Upload error:', error);
+            if (error.message.includes('invalid JSON')) {
+              showError('Hitilafu ya mfumo. Tafadhali jaribu tena baadaye.');
+            } else {
+              showError('Hitilafu ya mtandao: ' + error.message);
+            }
+          } finally {
+            // Reset progress and enable button
+            setTimeout(() => {
+              progressContainer.classList.add('hidden');
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = '<i class="fas fa-upload mr-2"></i> Pakia Tangazo';
+              updateProgress(0);
+            }, 1000);
           }
+        });
+
+        // Auto-calculate reward bytes from MB input
+        const rewardInput = document.getElementById('reward_bytes');
+        rewardInput.addEventListener('input', (e) => {
+          const mb = parseInt(e.target.value) || 0;
+          console.log(\`Data ya zawadi: \${mb}MB\`);
         });
       });
     </script>

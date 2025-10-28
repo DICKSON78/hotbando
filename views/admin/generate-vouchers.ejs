@@ -1,0 +1,845 @@
+<%
+const vouchersContent = `
+<div class="bg-white rounded-lg shadow-sm p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-semibold text-gray-800">Uundaji wa Vouchers</h2>
+        <button onclick="showBatchHistory()" class="px-4 py-2 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-lg hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-md flex items-center">
+            <i class="fas fa-history mr-2"></i>
+            Historia ya Batches
+        </button>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200 shadow-sm">
+            <div class="text-blue-600 font-semibold text-lg" id="today-sales">TSH 0</div>
+            <div class="text-blue-800 text-sm">Mauzo ya Leo</div>
+        </div>
+        <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200 shadow-sm">
+            <div class="text-green-600 font-semibold text-lg" id="total-users">0</div>
+            <div class="text-green-800 text-sm">Watumiaji Wote</div>
+        </div>
+        <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200 shadow-sm">
+            <div class="text-purple-600 font-semibold text-lg" id="active-subs">0</div>
+            <div class="text-purple-800 text-sm">Wanaotumia Sasa</div>
+        </div>
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
+            <div class="text-orange-600 font-semibold text-lg" id="total-revenue">TSH 0</div>
+            <div class="text-orange-800 text-sm">Jumla ya Mapato</div>
+        </div>
+    </div>
+
+    <!-- Voucher Generation Form -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Left Column - Form -->
+        <div class="bg-gradient-to-br from-gray-50 to-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Undaa Vouchers Mpya</h3>
+            
+            <form id="voucher-form">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Imetolewa Kwa:</label>
+                    <input type="text" id="issuedto" name="issuedto" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-300"
+                           placeholder="Mf: Dar es Salaam Agents, Online Sales, nk"
+                           required>
+                </div>
+
+                <!-- Quick Generation Options -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Uundaji wa Haraka:</label>
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <button type="button" onclick="quickGenerate(500, 10000, 'MASAA 6')" class="p-3 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl hover:from-blue-100 hover:to-blue-200 transition-all duration-300 shadow-sm group">
+                            <div class="font-semibold text-blue-800 group-hover:text-blue-900">10,000 Vocha</div>
+                            <div class="text-sm text-blue-600 group-hover:text-blue-700">MASAA 6 @ TSH 500</div>
+                        </button>
+                        <button type="button" onclick="quickGenerate(1000, 5000, 'MASAA 24')" class="p-3 bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl hover:from-green-100 hover:to-green-200 transition-all duration-300 shadow-sm group">
+                            <div class="font-semibold text-green-800 group-hover:text-green-900">5,000 Vocha</div>
+                            <div class="text-sm text-green-600 group-hover:text-green-700">MASAA 24 @ TSH 1,000</div>
+                        </button>
+                        <button type="button" onclick="quickGenerate(6000, 2000, 'WIKI 1')" class="p-3 bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl hover:from-purple-100 hover:to-purple-200 transition-all duration-300 shadow-sm group">
+                            <div class="font-semibold text-purple-800 group-hover:text-purple-900">2,000 Vocha</div>
+                            <div class="text-sm text-purple-600 group-hover:text-purple-700">WIKI 1 @ TSH 6,000</div>
+                        </button>
+                        <button type="button" onclick="quickGenerate(20000, 1000, 'MWEEZI 1')" class="p-3 bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl hover:from-orange-100 hover:to-orange-200 transition-all duration-300 shadow-sm group">
+                            <div class="font-semibold text-orange-800 group-hover:text-orange-900">1,000 Vocha</div>
+                            <div class="text-sm text-orange-600 group-hover:text-orange-700">MWEEZI 1 @ TSH 20,000</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Chagua Vifurushi na Idadi:</label>
+                    
+                    <div class="space-y-3" id="packages-container">
+                        <div class="text-center py-4 text-gray-500">Inapakia vifurushi...</div>
+                    </div>
+                </div>
+
+                <!-- Custom Bulk Generation -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Uundaji wa Wingi Maalum:</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">Aina ya Voucher:</label>
+                            <select id="bulk-package" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-300">
+                                <option value="MASAA 6">MASAA 6 (TSH 500)</option>
+                                <option value="MASAA 24">MASAA 24 (TSH 1,000)</option>
+                                <option value="WIKI 1">WIKI 1 (TSH 6,000)</option>
+                                <option value="MWEEZI 1">MWEEZI 1 (TSH 20,000)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">Idadi ya Vocha:</label>
+                            <input type="number" id="bulk-quantity" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-300"
+                                   min="1" max="50000" value="100" placeholder="Idadi">
+                        </div>
+                    </div>
+                    <button type="button" onclick="generateBulk()" class="w-full mt-3 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 shadow-md">
+                        <i class="fas fa-bolt mr-2"></i>
+                        Undaa Vocha za Wingi
+                    </button>
+                </div>
+
+                <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200 rounded-xl p-4 mb-4 shadow-sm">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center mr-3">
+                            <i class="fas fa-info-circle text-yellow-600"></i>
+                        </div>
+                        <span class="text-yellow-800 font-medium">Muhtasari wa Voucher</span>
+                    </div>
+                    <div class="mt-3 space-y-2 text-sm text-yellow-700">
+                        <div class="flex justify-between">
+                            <span>Jumla ya Vouchers:</span>
+                            <span id="total-vouchers" class="font-semibold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Thamani ya Jumla:</span>
+                            <span id="total-value" class="font-semibold">TSH 0</span>
+                        </div>
+                        <div>
+                            <span class="block mb-1">Vocha kwa Kifurushi:</span>
+                            <span id="package-breakdown" class="font-semibold text-yellow-800 bg-yellow-200 px-2 py-1 rounded text-xs">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" 
+                        class="w-full bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white py-3 px-4 rounded-lg font-semibold transition-all duration-300 shadow-md flex items-center justify-center group">
+                    <i class="fas fa-plus-circle mr-2 group-hover:scale-110 transition-transform"></i>
+                    Undaa Vouchers
+                </button>
+            </form>
+        </div>
+
+        <!-- Right Column - Preview & Recent Batches -->
+        <div class="space-y-6">
+            <!-- Recent Batches -->
+            <div class="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fas fa-clock text-primary mr-2"></i>
+                    Batches Za Hivi Karibuni
+                </h3>
+                <div id="recent-batches" class="space-y-3">
+                    <div class="text-center py-4 text-gray-500">Inapakia batches...</div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-bar mr-2"></i>
+                    Takwimu za Vouchers
+                </h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="bg-white/20 rounded-lg p-3 backdrop-blur-sm">
+                        <div class="text-blue-100">Vouchers Zilizotumika Leo</div>
+                        <div class="font-semibold text-lg text-white" id="used-today">0</div>
+                    </div>
+                    <div class="bg-white/20 rounded-lg p-3 backdrop-blur-sm">
+                        <div class="text-blue-100">Vouchers Zilizobaki</div>
+                        <div class="font-semibold text-lg text-white" id="available-vouchers">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generation Tips -->
+            <div class="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-4 shadow-sm">
+                <h4 class="text-green-800 font-semibold mb-3 flex items-center">
+                    <i class="fas fa-lightbulb text-green-600 mr-2"></i>
+                    Maelekezo ya Uundaji:
+                </h4>
+                <ul class="text-sm text-green-700 space-y-2">
+                    <li class="flex items-start">
+                        <i class="fas fa-clock text-green-500 mt-1 mr-2 text-xs"></i>
+                        <span><strong>MASAA 6:</strong> Vocha za haraka kwa watumiaji wapya</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-calendar-day text-green-500 mt-1 mr-2 text-xs"></i>
+                        <span><strong>MASAA 24:</strong> Vocha za kawaida kwa matumizi ya kila siku</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-calendar-week text-green-500 mt-1 mr-2 text-xs"></i>
+                        <span><strong>WIKI 1:</strong> Vocha za muda mrefu kwa watumiaji wa kudumu</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-calendar-alt text-green-500 mt-1 mr-2 text-xs"></i>
+                        <span><strong>MWEEZI 1:</strong> Vocha za premium kwa watumiaji wa hali ya juu</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Modal -->
+<div id="alert-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-circle text-red-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2" id="alert-title">Hitilafu</h3>
+            <p class="text-gray-600 mb-6" id="alert-message">Tafadhali chagua angalau kifurushi kimoja</p>
+            <button onclick="closeAlertModal()" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Warning Modal -->
+<div id="warning-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-yellow-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2" id="warning-title">Taarifa Muhimu</h3>
+            <p class="text-gray-600 mb-6" id="warning-message"></p>
+            <button onclick="closeWarningModal()" class="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Batch History Modal -->
+<div id="batch-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden transform transition-all duration-300">
+        <div class="flex justify-between items-center p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center mr-3">
+                    <i class="fas fa-history text-white"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-800">Historia ya Voucher Batches</h3>
+                    <p class="text-sm text-gray-600">Orodha ya batches zote zilizoundwa</p>
+                </div>
+            </div>
+            <button onclick="closeBatchModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300 group">
+                <i class="fas fa-times text-gray-500 group-hover:text-gray-700"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[70vh]">
+            <div id="batch-history-content">
+                <div class="text-center py-12">
+                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-clock text-gray-400 text-2xl"></i>
+                    </div>
+                    <p class="text-gray-500">Inapakia historia ya batches...</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50">
+            <span class="text-sm text-gray-600" id="batch-count">Jumla: 0 batches</span>
+            <button onclick="closeBatchModal()" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all duration-300">
+                Funga
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Batch Details Modal -->
+<div id="batch-details-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden transform transition-all duration-300">
+        <div class="flex justify-between items-center p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                    <i class="fas fa-list-alt text-white"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-800" id="batch-details-title">Maelezo ya Batch</h3>
+                    <p class="text-sm text-gray-600" id="batch-details-subtitle">Maelezo ya kina ya batch</p>
+                </div>
+            </div>
+            <button onclick="closeBatchDetailsModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300 group">
+                <i class="fas fa-times text-gray-500 group-hover:text-gray-700"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[60vh]">
+            <div id="batch-details-content">
+                <div class="text-center py-8">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-spinner fa-spin text-blue-500"></i>
+                    </div>
+                    <p class="text-gray-500">Inapakia maelezo...</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex justify-end p-4 border-t border-gray-200 bg-gray-50">
+            <button onclick="closeBatchDetailsModal()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-300 shadow-md">
+                Funga
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-yellow-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2" id="confirmation-title">Thibitisha Uundaji</h3>
+            <p class="text-gray-600 mb-6" id="confirmation-message">Una uhakika unataka kuunda vouchers hizi?</p>
+            <div class="flex space-x-3 justify-center">
+                <button onclick="closeConfirmationModal()" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-300">
+                    Ghairi
+                </button>
+                <button onclick="confirmGeneration()" class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all duration-300 shadow-md">
+                    <i class="fas fa-check mr-2"></i>
+                    Thibitisha
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div id="success-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Imefanikiwa!</h3>
+            <p class="text-gray-600 mb-4" id="success-message">Vouchers zimeundwa kikamilifu</p>
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 text-left">
+                <div class="text-sm text-green-700">
+                    <div class="flex justify-between mb-1">
+                        <span>Vocha Zilizoundwa:</span>
+                        <span id="success-count" class="font-semibold">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Thamani ya Jumla:</span>
+                        <span id="success-value" class="font-semibold">TSH 0</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="closeSuccessModal()" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .backdrop-blur-sm {
+        backdrop-filter: blur(4px);
+    }
+    
+    .shadow-2xl {
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+</style>
+
+<script>
+    let pendingGeneration = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadPackages();
+        loadSalesSummary();
+        loadRecentBatches();
+        loadVoucherStats();
+
+        // Voucher form submission
+        document.getElementById('voucher-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            prepareVoucherGeneration();
+        });
+    });
+
+    // Load available packages
+    function loadPackages() {
+        fetch('/api/admin/packages')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to load packages');
+                    return;
+                }
+
+                const container = document.getElementById('packages-container');
+                container.innerHTML = '';
+
+                data.data.forEach(pkg => {
+                    const packageDiv = document.createElement('div');
+                    packageDiv.className = 'flex justify-between items-center p-3 bg-white border border-gray-200 rounded-lg';
+                    packageDiv.innerHTML = \`
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-800">\${pkg.name}</div>
+                            <div class="text-sm text-gray-600">\${pkg.description || ''}</div>
+                            <div class="text-sm font-semibold text-primary">TSH \${parseFloat(pkg.price).toLocaleString()}</div>
+                            <div class="text-xs text-gray-500 mt-1">\${getPackageDuration(pkg.name)}</div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button type="button" onclick="decrementPackage('\${pkg.name}')" 
+                                    class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                                </svg>
+                            </button>
+                            <input type="number" id="\${pkg.name}-count" 
+                                   class="w-16 text-center border border-gray-300 rounded py-1" 
+                                   value="0" min="0" max="50000" 
+                                   onchange="updateVoucherSummary()"
+                                   placeholder="0">
+                            <button type="button" onclick="incrementPackage('\${pkg.name}')" 
+                                    class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
+                        </div>
+                    \`;
+                    container.appendChild(packageDiv);
+                });
+            })
+            .catch(error => console.error('Packages load error:', error));
+    }
+
+    // Package quantity controls
+    function incrementPackage(packageName) {
+        const input = document.getElementById(\`\${packageName}-count\`);
+        const current = parseInt(input.value) || 0;
+        input.value = current + 1;
+        updateVoucherSummary();
+    }
+
+    function decrementPackage(packageName) {
+        const input = document.getElementById(\`\${packageName}-count\`);
+        const current = parseInt(input.value) || 0;
+        if (current > 0) {
+            input.value = current - 1;
+            updateVoucherSummary();
+        }
+    }
+
+    // Update voucher summary
+    function updateVoucherSummary() {
+        let totalVouchers = 0;
+        let totalValue = 0;
+        const breakdown = {};
+
+        // Get all package inputs
+        const inputs = document.querySelectorAll('input[id$="-count"]');
+        inputs.forEach(input => {
+            const count = parseInt(input.value) || 0;
+            if (count > 0) {
+                const packageName = input.id.replace('-count', '');
+                const price = getPackagePrice(packageName);
+                totalVouchers += count;
+                totalValue += count * price;
+                breakdown[packageName] = count;
+            }
+        });
+
+        document.getElementById('total-vouchers').textContent = totalVouchers.toLocaleString();
+        document.getElementById('total-value').textContent = \`TSH \${totalValue.toLocaleString()}\`;
+        
+        // Update breakdown
+        const breakdownText = Object.entries(breakdown)
+            .map(([pkg, count]) => \`\${pkg}: \${count.toLocaleString()}\`)
+            .join(', ');
+        document.getElementById('package-breakdown').textContent = breakdownText || '-';
+    }
+
+    // Helper function to get package price
+    function getPackagePrice(packageName) {
+        const prices = {
+            'MASAA 6': 500,
+            'MASAA 24': 1000,
+            'WIKI 1': 6000,
+            'MWEEZI 1': 20000
+        };
+        return prices[packageName] || 0;
+    }
+
+    // Helper function to get package duration
+    function getPackageDuration(packageName) {
+        const durations = {
+            'MASAA 6': 'Muda: Masaa 6',
+            'MASAA 24': 'Muda: Siku 1',
+            'WIKI 1': 'Muda: Wiki 1',
+            'MWEEZI 1': 'Muda: Mwezi 1'
+        };
+        return durations[packageName] || '';
+    }
+
+    // Quick generation function
+    function quickGenerate(price, quantity, packageName) {
+        // Set the issued to field if empty
+        const issuedTo = document.getElementById('issuedto');
+        if (!issuedTo.value.trim()) {
+            issuedTo.value = 'Bulk Generation - ' + packageName;
+        }
+
+        // Clear all other packages
+        const inputs = document.querySelectorAll('input[id$="-count"]');
+        inputs.forEach(input => {
+            input.value = '0';
+        });
+
+        // Set the selected package quantity
+        const targetInput = document.getElementById(\`\${packageName}-count\`);
+        if (targetInput) {
+            targetInput.value = quantity;
+        }
+
+        updateVoucherSummary();
+        prepareVoucherGeneration();
+    }
+
+    // Bulk generation function
+    function generateBulk() {
+        const packageName = document.getElementById('bulk-package').value;
+        const quantity = parseInt(document.getElementById('bulk-quantity').value);
+
+        if (!quantity || quantity < 1) {
+            showWarning('Tafadhali ingiza idadi sahihi ya vocha');
+            return;
+        }
+
+        if (quantity > 50000) {
+            showWarning('Idadi ya vocha haizidi 50,000 kwa mara moja');
+            return;
+        }
+
+        quickGenerate(getPackagePrice(packageName), quantity, packageName);
+    }
+
+    function prepareVoucherGeneration() {
+        const issuedto = document.getElementById('issuedto').value;
+        if (!issuedto.trim()) {
+            showAlert('Tafadhali ingiza jina la mtoa huduma');
+            return;
+        }
+
+        // Collect package counts
+        const vouchers = {};
+        const inputs = document.querySelectorAll('input[id$="-count"]');
+        let hasVouchers = false;
+        let totalVouchers = 0;
+
+        inputs.forEach(input => {
+            const count = parseInt(input.value) || 0;
+            if (count > 0) {
+                const packageName = input.id.replace('-count', '');
+                vouchers[packageName] = count;
+                hasVouchers = true;
+                totalVouchers += count;
+            }
+        });
+
+        if (!hasVouchers) {
+            showAlert('Tafadhali chagua angalau kifurushi kimoja');
+            return;
+        }
+
+        if (totalVouchers > 50000) {
+            showWarning('Idadi ya jumla ya vocha haizidi 50,000 kwa mara moja');
+            return;
+        }
+
+        // Calculate total value
+        const totalValue = Object.entries(vouchers).reduce((sum, [pkg, count]) => {
+            return sum + (getPackagePrice(pkg) * count);
+        }, 0);
+
+        // Show confirmation modal
+        pendingGeneration = { issuedto, vouchers, totalVouchers, totalValue };
+        showConfirmationModal(totalVouchers, totalValue);
+    }
+
+    function showConfirmationModal(count, value) {
+        document.getElementById('confirmation-title').textContent = 'Thibitisha Uundaji wa Vouchers';
+        document.getElementById('confirmation-message').innerHTML = \`
+            Una uhakika unataka kuunda <strong>\${count.toLocaleString()}</strong> vouchers?<br>
+            <strong>Thamani ya jumla: TSH \${value.toLocaleString()}</strong>
+        \`;
+        showModal('confirmation-modal');
+    }
+
+    function confirmGeneration() {
+        if (!pendingGeneration) return;
+        
+        closeConfirmationModal();
+        generateVouchers(pendingGeneration);
+    }
+
+    function generateVouchers(generationData) {
+        const submitBtn = document.querySelector('#voucher-form button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div> Inaunda...';
+
+        fetch('/api/admin/generate-voucher', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                issuedto: generationData.issuedto,
+                vouchers: generationData.vouchers
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccessModal(generationData.totalVouchers, generationData.totalValue);
+                
+                // Reset form
+                document.getElementById('voucher-form').reset();
+                const inputs = document.querySelectorAll('input[id$="-count"]');
+                inputs.forEach(input => input.value = 0);
+                updateVoucherSummary();
+                
+                // Reload data
+                loadRecentBatches();
+                loadVoucherStats();
+            } else {
+                showAlert('❌ Hitilafu: ' + (data.message || 'Imeshindikana kuunda vouchers'));
+            }
+        })
+        .catch(error => {
+            console.error('Voucher generation error:', error);
+            showAlert('❌ Hitilafu imetokea wakati wa kuunda vouchers');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = \`
+                <i class="fas fa-plus-circle mr-2"></i>
+                Undaa Vouchers
+            \`;
+            pendingGeneration = null;
+        });
+    }
+
+    function showSuccessModal(count, value) {
+        document.getElementById('success-count').textContent = count.toLocaleString();
+        document.getElementById('success-value').textContent = \`TSH \${value.toLocaleString()}\`;
+        document.getElementById('success-message').textContent = \`Vouchers \${count.toLocaleString()} zimeundwa kikamilifu!\`;
+        showModal('success-modal');
+    }
+
+    // New Alert Modal Functions
+    function showAlert(message) {
+        document.getElementById('alert-title').textContent = 'Hitilafu';
+        document.getElementById('alert-message').textContent = message;
+        showModal('alert-modal');
+    }
+
+    function showWarning(message) {
+        document.getElementById('warning-title').textContent = 'Taarifa Muhimu';
+        document.getElementById('warning-message').textContent = message;
+        showModal('warning-modal');
+    }
+
+    function closeAlertModal() {
+        closeModal('alert-modal');
+    }
+
+    function closeWarningModal() {
+        closeModal('warning-modal');
+    }
+
+    // Modal management functions
+    function showModal(modalId) {
+        const modal = document.getElementById(modalId);
+        modal.classList.remove('hidden');
+    }
+
+    function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        modal.classList.add('hidden');
+    }
+
+    function closeConfirmationModal() {
+        closeModal('confirmation-modal');
+        pendingGeneration = null;
+    }
+
+    function closeSuccessModal() {
+        closeModal('success-modal');
+    }
+
+    function closeBatchModal() {
+        closeModal('batch-modal');
+    }
+
+    function closeBatchDetailsModal() {
+        closeModal('batch-details-modal');
+    }
+
+    function showBatchHistory() {
+        showModal('batch-modal');
+        loadBatchHistory();
+    }
+
+    // Load sales summary
+    function loadSalesSummary() {
+        fetch('/api/admin/sales-summary')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('today-sales').textContent = \`TSH \${parseInt(data.todaySales).toLocaleString()}\`;
+                    document.getElementById('total-users').textContent = data.totalUsers?.toLocaleString() || '0';
+                    document.getElementById('active-subs').textContent = data.activeSubscriptions?.toLocaleString() || '0';
+                    document.getElementById('total-revenue').textContent = \`TSH \${parseInt(data.totalRevenue).toLocaleString()}\`;
+                }
+            })
+            .catch(error => console.error('Sales summary error:', error));
+    }
+
+    // Load recent batches
+    function loadRecentBatches() {
+        fetch('/api/admin/batches')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to load batches');
+                    return;
+                }
+
+                const container = document.getElementById('recent-batches');
+                container.innerHTML = '';
+
+                if (data.data.length === 0) {
+                    container.innerHTML = '<div class="text-center py-4 text-gray-500">Hakuna batches bado</div>';
+                    return;
+                }
+
+                data.data.slice(0, 5).forEach(batch => {
+                    const batchDiv = document.createElement('div');
+                    batchDiv.className = 'border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition cursor-pointer';
+                    batchDiv.onclick = () => showBatchDetails(batch.id);
+                    batchDiv.innerHTML = \`
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="font-medium text-gray-800">\${batch.batch_name}</div>
+                            <div class="text-sm text-gray-500">\${new Date(batch.created_at).toLocaleDateString('sw-TZ')}</div>
+                        </div>
+                        <div class="text-sm text-gray-600">
+                            <div class="mb-1">Imetolewa kwa: \${batch.issued_to || 'N/A'}</div>
+                            <div class="flex justify-between items-center">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">\${batch.total_vouchers} vouchers</span>
+                                <span class="font-semibold text-green-600">TSH \${parseFloat(batch.total_value || 0).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    \`;
+                    container.appendChild(batchDiv);
+                });
+            })
+            .catch(error => console.error('Batches load error:', error));
+    }
+
+    // Load voucher statistics
+    function loadVoucherStats() {
+        fetch('/api/admin/voucher-report?limit=1000')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const today = new Date().toISOString().split('T')[0];
+                    const usedToday = data.data.filter(v => v.used_at && v.used_at.startsWith(today)).length;
+                    const available = data.data.filter(v => !v.is_used).length;
+
+                    document.getElementById('used-today').textContent = usedToday.toLocaleString();
+                    document.getElementById('available-vouchers').textContent = available.toLocaleString();
+                }
+            })
+            .catch(error => console.error('Voucher stats error:', error));
+    }
+
+    function loadBatchHistory() {
+        fetch('/api/admin/batches')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    document.getElementById('batch-history-content').innerHTML = '<div class="text-center py-8 text-red-500">Hitilafu katika kupakia historia</div>';
+                    return;
+                }
+
+                const container = document.getElementById('batch-history-content');
+                
+                if (data.data.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-gray-500">Hakuna batches zilizopo</div>';
+                    return;
+                }
+
+                let html = \`
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Imetolewa Kwa</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vouchers</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thamani</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarehe</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Menza</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                \`;
+
+                data.data.forEach(batch => {
+                    html += \`
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">\${batch.batch_name}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">\${batch.issued_to || 'N/A'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">\${batch.total_vouchers?.toLocaleString() || '0'}</td>
+                            <td class="px-4 py-3 text-sm font-semibold text-green-600">TSH \${parseFloat(batch.total_value || 0).toLocaleString()}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">\${new Date(batch.created_at).toLocaleDateString('sw-TZ')}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">\${batch.created_by_name || 'Admin'}</td>
+                        </tr>
+                    \`;
+                });
+
+                html += \`
+                            </tbody>
+                        </table>
+                    </div>
+                \`;
+
+                container.innerHTML = html;
+                document.getElementById('batch-count').textContent = \`Jumla: \${data.data.length} batches\`;
+            })
+            .catch(error => {
+                console.error('Batch history error:', error);
+                document.getElementById('batch-history-content').innerHTML = '<div class="text-center py-8 text-red-500">Hitilafu katika kupakia historia</div>';
+            });
+    }
+
+    function showBatchDetails(batchId) {
+        showModal('batch-details-modal');
+        // You can implement batch details view here
+    }
+</script>
+`;
+%>
+
+<%- include('layout', {
+    title: 'Undaa Vouchers - Admin',
+    activePage: 'generate-vouchers',
+    body: vouchersContent
+}) %>

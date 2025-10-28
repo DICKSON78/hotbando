@@ -1,92 +1,469 @@
 <% 
-  const safeMyAdsList = typeof myAdsList !== 'undefined' ? myAdsList : [];
+  // Safely handle data with proper fallbacks
+  const safeMyAdsList = typeof myAdsList !== 'undefined' && Array.isArray(myAdsList) ? myAdsList : [];
+  
   const dashboardContent = `
     <div class="container mx-auto px-4 py-8">
-      <div class="bg-white rounded-lg shadow-sm p-8">
-        <div class="flex justify-between items-center mb-8">
-          <h2 class="text-2xl font-semibold text-gray-800">Kampeni Zangu za Matangazo</h2>
-          <a href="/admin/upload-video" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-800">Kampeni Zangu za Matangazo</h2>
+            <p class="text-gray-600 mt-1">Dhibiti na uangalie matangazo yako yote</p>
+          </div>
+          <a href="/admin/upload-video" class="bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-3 rounded-lg hover:from-orange-700 hover:to-red-700 transition-colors shadow-sm flex items-center">
             <i class="fas fa-plus mr-2"></i>Tangazo Jipya
           </a>
         </div>
+        
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <div class="flex items-center">
+              <div class="bg-blue-100 p-2 rounded-lg mr-3">
+                <i class="fas fa-ad text-blue-600"></i>
+              </div>
+              <div>
+                <p class="text-sm text-blue-600 font-medium">Jumla ya Matangazo</p>
+                <p class="text-2xl font-bold text-blue-700" id="total-ads-count">${safeMyAdsList.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+            <div class="flex items-center">
+              <div class="bg-green-100 p-2 rounded-lg mr-3">
+                <i class="fas fa-play-circle text-green-600"></i>
+              </div>
+              <div>
+                <p class="text-sm text-green-600 font-medium">Yanayofanya Kazi</p>
+                <p class="text-2xl font-bold text-green-700" id="active-ads-count">${
+                  safeMyAdsList.filter(ad => ad.is_active === 1 && ad.approved === 1).length
+                }</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+            <div class="flex items-center">
+              <div class="bg-purple-100 p-2 rounded-lg mr-3">
+                <i class="fas fa-eye text-purple-600"></i>
+              </div>
+              <div>
+                <p class="text-sm text-purple-600 font-medium">Jumla ya Maonyesho</p>
+                <p class="text-2xl font-bold text-purple-700" id="total-views-count">${
+                  safeMyAdsList.reduce((total, ad) => total + (ad.views_count || 0), 0).toLocaleString()
+                }</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
+            <div class="flex items-center">
+              <div class="bg-orange-100 p-2 rounded-lg mr-3">
+                <i class="fas fa-database text-orange-600"></i>
+              </div>
+              <div>
+                <p class="text-sm text-orange-600 font-medium">Data Iliyotumika</p>
+                <p class="text-2xl font-bold text-orange-700" id="total-data-count">${
+                  Math.round(safeMyAdsList.reduce((total, ad) => total + (ad.total_data_earned || 0), 0) / (1024 * 1024 * 1024) * 100) / 100
+                } GB</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead>
-              <tr class="bg-secondary-light">
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina la Tangazo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maonyesho</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Ilietumika</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe Iliyoundwa</th>
-                <th class="relative px-6 py-3">
-                  <span class="sr-only">Vitendo</span>
-                </th>
+              <tr class="bg-gray-50">
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jina la Tangazo</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Hali</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Maonyesho</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data Iliyosambazwa</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tarehe</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vitendo</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200" id="my-ads-table">
+            <tbody class="divide-y divide-gray-200 bg-white" id="my-ads-table">
               ${safeMyAdsList.length > 0 ?
-                safeMyAdsList.map(ad => `
-                  <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${ad.title}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <span class="${ad.status === 'active' ? 'bg-green-100 text-green-800' : ad.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                        ${ad.status === 'active' ? 'Inayofanya Kazi' : ad.status === 'pending' ? 'Inasubiri' : 'Isiyofanya Kazi'}
-                      </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ad.views ? ad.views.toLocaleString() : '0'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${ad.dataUsed ? ad.dataUsed + ' GB' : '0 GB'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(ad.created_at).toLocaleDateString('sw-TZ')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <a href="/admin/edit-ad/${ad.id}" class="text-primary hover:text-primary-dark">Hariri</a>
-                      <a href="/admin/delete-ad/${ad.id}" class="text-red-600 hover:text-red-800 ml-4" onclick="return confirm('Je, una uhakika unataka kufuta tangazo hili?')">Futa</a>
-                    </td>
-                  </tr>
-                `).join('') :
-                '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Hakuna matangazo yaliyopatikana</td></tr>'
+                safeMyAdsList.map(ad => {
+                  // Safely handle ad properties
+                  const adTitle = ad.title || 'Tangazo Bila Jina';
+                  const adDescription = ad.description || '';
+                  const adViews = ad.views_count || 0;
+                  const adDataUsed = ad.total_data_earned || 0;
+                  const adCreatedAt = ad.created_at || new Date();
+                  const adId = ad.id || '';
+                  const adVideoUrl = ad.video_url || '';
+                  const adIsActive = ad.is_active === 1;
+                  const adApproved = ad.approved === 1;
+                  
+                  // Determine status class and text
+                  let statusClass = '';
+                  let statusText = '';
+                  
+                  if (adIsActive && adApproved) {
+                    statusClass = 'bg-green-100 text-green-800';
+                    statusText = 'Inayofanya Kazi';
+                  } else if (!adApproved) {
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                    statusText = 'Inasubiri';
+                  } else {
+                    statusClass = 'bg-red-100 text-red-800';
+                    statusText = 'Imesimamishwa';
+                  }
+                  
+                  // Calculate data in GB
+                  const dataUsedGB = Math.round((adDataUsed / (1024 * 1024 * 1024)) * 100) / 100;
+                  
+                  return `
+                    <tr class="hover:bg-gray-50 transition">
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                          <div class="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                            <i class="fas fa-video text-orange-600 text-sm"></i>
+                          </div>
+                          <div>
+                            <div class="text-sm font-medium text-gray-900">${adTitle}</div>
+                            ${adDescription ? `<div class="text-xs text-gray-500 truncate max-w-xs">${adDescription}</div>` : ''}
+                          </div>
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                          <i class="fas fa-circle mr-1 text-xs"></i>
+                          ${statusText}
+                        </span>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div class="flex items-center">
+                          <i class="fas fa-eye mr-2 text-gray-400"></i>
+                          ${adViews.toLocaleString()}
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div class="flex items-center">
+                          <i class="fas fa-database mr-2 text-gray-400"></i>
+                          ${dataUsedGB} GB
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${new Date(adCreatedAt).toLocaleDateString('sw-TZ', { 
+                          day: 'numeric', 
+                          month: 'short', 
+                          year: 'numeric' 
+                        })}
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div class="flex space-x-3">
+                          ${adVideoUrl ? `
+                            <a href="${adVideoUrl}" target="_blank" 
+                               class="text-blue-600 hover:text-blue-700 transition"
+                               title="Angalia Video">
+                              <i class="fas fa-play"></i>
+                            </a>
+                          ` : ''}
+                          <a href="/admin/edit-ad/${adId}" 
+                             class="text-orange-600 hover:text-orange-700 transition"
+                             title="Hariri Tangazo">
+                            <i class="fas fa-edit"></i>
+                          </a>
+                          <button onclick="confirmDelete(${adId})" 
+                                  class="text-red-600 hover:text-red-700 transition"
+                                  title="Futa Tangazo">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('') :
+                `
+                <tr>
+                  <td colspan="6" class="px-6 py-12 text-center">
+                    <div class="flex flex-col items-center justify-center text-gray-500">
+                      <i class="fas fa-ad text-4xl mb-3 text-gray-300"></i>
+                      <p class="text-lg font-medium mb-2">Hakuna Matangazo</p>
+                      <p class="text-sm mb-4">Huna matangazo yoyote bado. Anza kwa kuongeza tangazo jipya.</p>
+                      <a href="/admin/upload-video" class="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition flex items-center">
+                        <i class="fas fa-plus mr-2"></i>Anza Kampeni Mpya
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+                `
               }
             </tbody>
           </table>
         </div>
+        
+        <!-- Loading State -->
+        <div id="loading-state" class="hidden py-12 text-center">
+          <div class="flex flex-col items-center justify-center">
+            <i class="fas fa-spinner fa-spin text-3xl text-orange-600 mb-3"></i>
+            <p class="text-gray-600">Inapakia matangazo...</p>
+          </div>
+        </div>
       </div>
     </div>
+
     <script>
+      // Sanitize HTML to prevent XSS
       function sanitizeHTML(str) {
+        if (!str) return '';
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
       }
+      
+      // Confirm delete function
+      function confirmDelete(adId) {
+        if (confirm('Je, una uhakika unataka kufuta tangazo hili? Kitendo hiki hakiwezi kutenduliwa.')) {
+          window.location.href = '/admin/delete-ad/' + adId;
+        }
+      }
+      
+      // Format bytes to GB
+      function formatBytesToGB(bytes) {
+        if (!bytes) return '0';
+        const gb = bytes / (1024 * 1024 * 1024);
+        return Math.round(gb * 100) / 100;
+      }
+      
+      // Update stats counters
+      function updateStats(ads) {
+        if (!ads || !Array.isArray(ads)) return;
+        
+        const totalAds = ads.length;
+        const activeAds = ads.filter(ad => ad.is_active === 1 && ad.approved === 1).length;
+        const totalViews = ads.reduce((total, ad) => total + (ad.views_count || 0), 0);
+        const totalData = ads.reduce((total, ad) => total + (ad.total_data_earned || 0), 0);
+        
+        const totalAdsElement = document.getElementById('total-ads-count');
+        const activeAdsElement = document.getElementById('active-ads-count');
+        const totalViewsElement = document.getElementById('total-views-count');
+        const totalDataElement = document.getElementById('total-data-count');
+        
+        if (totalAdsElement) totalAdsElement.textContent = totalAds;
+        if (activeAdsElement) activeAdsElement.textContent = activeAds;
+        if (totalViewsElement) totalViewsElement.textContent = totalViews.toLocaleString();
+        if (totalDataElement) totalDataElement.textContent = formatBytesToGB(totalData) + ' GB';
+      }
+
+      // Show empty state
+      function showEmptyState() {
+        const tableBody = document.getElementById('my-ads-table');
+        tableBody.innerHTML = \`
+          <tr>
+            <td colspan="6" class="px-6 py-12 text-center">
+              <div class="flex flex-col items-center justify-center text-gray-500">
+                <i class="fas fa-ad text-4xl mb-3 text-gray-300"></i>
+                <p class="text-lg font-medium mb-2">Hakuna Matangazo</p>
+                <p class="text-sm mb-4">Huna matangazo yoyote bado. Anza kwa kuongeza tangazo jipya.</p>
+                <a href="/admin/upload-video" class="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition flex items-center">
+                  <i class="fas fa-plus mr-2"></i>Anza Kampeni Mpya
+                </a>
+              </div>
+            </td>
+          </tr>
+        \`;
+      }
+
+      // Show error state
+      function showErrorState() {
+        const tableBody = document.getElementById('my-ads-table');
+        tableBody.innerHTML = \`
+          <tr>
+            <td colspan="6" class="px-6 py-12 text-center">
+              <div class="flex flex-col items-center justify-center text-red-600">
+                <i class="fas fa-exclamation-triangle text-3xl mb-3"></i>
+                <p class="text-lg font-medium mb-2">Hitilafu ya Mfumo</p>
+                <p class="text-sm mb-4">Imeshindikana kupakia matangazo. Tafadhali jaribu tena.</p>
+                <button onclick="location.reload()" class="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition flex items-center">
+                  <i class="fas fa-redo mr-2"></i>Jaribu Tena
+                </button>
+              </div>
+            </td>
+          </tr>
+        \`;
+      }
+      
       document.addEventListener('DOMContentLoaded', () => {
+        const tableBody = document.getElementById('my-ads-table');
+        const loadingState = document.getElementById('loading-state');
+        
+        // Only try to fetch if we have ads from server (for real-time updates)
+        // If no ads from server, don't try to fetch to avoid unnecessary errors
+        const hasAdsFromServer = ${safeMyAdsList.length} > 0;
+        
+        if (!hasAdsFromServer) {
+          // No ads from server, no need to fetch API
+          console.log('No ads from server, skipping API call');
+          return;
+        }
+
+        // Show loading state only if we're fetching
+        if (loadingState) {
+          loadingState.classList.remove('hidden');
+        }
+        
+        // Fetch latest ads data
         fetch('/api/my-ads')
-          .then(response => response.json())
+          .then(response => {
+            if (!response.ok) {
+              // If 404 or empty, it means no ads - show empty state
+              if (response.status === 404) {
+                showEmptyState();
+                return null;
+              }
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
           .then(data => {
-            if (!data.success) return;
-            const tableBody = document.getElementById('my-ads-table');
-            tableBody.innerHTML = '';
-            if (!data.data || data.data.length === 0) {
-              tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Hakuna matangazo</td></tr>';
+            // Hide loading state
+            if (loadingState) {
+              loadingState.classList.add('hidden');
+            }
+            
+            // If no data (404 case) or empty response
+            if (!data) {
+              showEmptyState();
               return;
             }
-            data.data.forEach(ad => {
-              const statusClass = ad.status === 'active' ? 'bg-green-100 text-green-800' : ad.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
-              const statusText = ad.status === 'active' ? 'Inayofanya Kazi' : ad.status === 'pending' ? 'Inasubiri' : 'Isiyofanya Kazi';
+            
+            if (!data.success) {
+              // If API returns success:false but it's a "no data" situation
+              if (data.message && data.message.includes('Hakuna')) {
+                showEmptyState();
+              } else {
+                showErrorState();
+              }
+              return;
+            }
+            
+            // Check if we have data
+            if (!data.data || data.data.length === 0) {
+              showEmptyState();
+              return;
+            }
+            
+            const ads = data.data;
+            
+            // Update stats counters
+            updateStats(ads);
+            
+            tableBody.innerHTML = '';
+            
+            // Populate table with ads data
+            ads.forEach(ad => {
+              // Safely handle ad properties
+              const adTitle = sanitizeHTML(ad.title || 'Tangazo Bila Jina');
+              const adDescription = sanitizeHTML(ad.description || '');
+              const adViews = ad.views_count || 0;
+              const adDataUsed = ad.total_data_earned || 0;
+              const adCreatedAt = ad.created_at || new Date();
+              const adId = ad.id || '';
+              const adVideoUrl = ad.video_url || '';
+              const adIsActive = ad.is_active === 1;
+              const adApproved = ad.approved === 1;
+              
+              // Determine status
+              let statusClass = '';
+              let statusText = '';
+              
+              if (adIsActive && adApproved) {
+                statusClass = 'bg-green-100 text-green-800';
+                statusText = 'Inayofanya Kazi';
+              } else if (!adApproved) {
+                statusClass = 'bg-yellow-100 text-yellow-800';
+                statusText = 'Inasubiri';
+              } else {
+                statusClass = 'bg-red-100 text-red-800';
+                statusText = 'Imesimamishwa';
+              }
+              
+              const dataUsedGB = formatBytesToGB(adDataUsed);
+              
               const row = document.createElement('tr');
-              row.innerHTML = [
-                '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + sanitizeHTML(ad.title) + '</td>',
-                '<td class="px-6 py-4 whitespace-nowrap">',
-                '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ' + statusClass + '">' + statusText + '</span>',
-                '</td>',
-                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (ad.views ? ad.views.toLocaleString() : '0') + '</td>',
-                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (ad.dataUsed ? ad.dataUsed + ' GB' : '0 GB') + '</td>',
-                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + new Date(ad.created_at).toLocaleDateString('sw-TZ') + '</td>',
-                '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">',
-                '<a href="/admin/edit-ad/' + ad.id + '" class="text-primary hover:text-primary-dark">Hariri</a>',
-                '<a href="/admin/delete-ad/' + ad.id + '" class="text-red-600 hover:text-red-800 ml-4" onclick="return confirm(\\'Je, una uhakika unataka kufuta tangazo hili?\\')">Futa</a>',
-                '</td>'
-              ].join('');
+              row.className = 'hover:bg-gray-50 transition';
+              row.innerHTML = \`
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                      <i class="fas fa-video text-orange-600 text-sm"></i>
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">\${adTitle}</div>
+                      \${adDescription ? \`<div class="text-xs text-gray-500 truncate max-w-xs">\${adDescription}</div>\` : ''}
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium \${statusClass}">
+                    <i class="fas fa-circle mr-1 text-xs"></i>
+                    \${statusText}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <div class="flex items-center">
+                    <i class="fas fa-eye mr-2 text-gray-400"></i>
+                    \${adViews.toLocaleString()}
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <div class="flex items-center">
+                    <i class="fas fa-database mr-2 text-gray-400"></i>
+                    \${dataUsedGB} GB
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  \${new Date(adCreatedAt).toLocaleDateString('sw-TZ', { 
+                    day: 'numeric', 
+                    month: 'short', 
+                    year: 'numeric' 
+                  })}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <div class="flex space-x-3">
+                    \${adVideoUrl ? \`
+                      <a href="\${adVideoUrl}" target="_blank" 
+                         class="text-blue-600 hover:text-blue-700 transition"
+                         title="Angalia Video">
+                        <i class="fas fa-play"></i>
+                      </a>
+                    \` : ''}
+                    <a href="/admin/edit-ad/\${adId}" 
+                       class="text-orange-600 hover:text-orange-700 transition"
+                       title="Hariri Tangazo">
+                      <i class="fas fa-edit"></i>
+                    </a>
+                    <button onclick="confirmDelete(\${adId})" 
+                            class="text-red-600 hover:text-red-700 transition"
+                            title="Futa Tangazo">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </td>
+              \`;
               tableBody.appendChild(row);
             });
           })
-          .catch(error => console.error('My ads fetch error:', error));
+          .catch(error => {
+            console.error('My ads fetch error:', error);
+            // Hide loading state
+            if (loadingState) {
+              loadingState.classList.add('hidden');
+            }
+            
+            // If it's a network error or 500, show error
+            // If it's likely a "no data" situation, show empty state
+            if (error.message.includes('404') || error.message.includes('Hakuna')) {
+              showEmptyState();
+            } else {
+              showErrorState();
+            }
+          });
       });
     </script>
   `;

@@ -1,44 +1,64 @@
-// controllers/adminController.js - SASHA URIASISHI KAMILI
+// controllers/adminController.js - KAMILI 100% - IMEBORESHEWA - KILA KITU KIPO
 const db = require('../config/database');
 const mikrotikService = require('../utils/mikrotik');
+const path = require('path');
+const fs = require('fs');
+
 class AdminController {
-  // ==================== DASHBOARD METHODS - SASHA URIASISHI ====================
-  async getDashboardData(req) {
+  // ==================== UTILITY: STATIC METHODS ====================
+  static formatTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Sasa hivi';
+    if (diffMins < 60) return `Dakika ${diffMins} zilizopita`;
+    if (diffHours < 24) return `Saa ${diffHours} zilizopita`;
+    if (diffDays === 1) return 'Jana';
+    return `Siku ${diffDays} zilizopita`;
+  }
+
+  static async getDashboardData(req) {
     try {
-      console.log('📊 Inapakia takwimu za dashboard...');
-      // 1. TOTAL VIEWS - Hakikisha inarudi 0 kama hakuna data
+      console.log('Inapakia takwimu za dashboard...');
+
+      // 1. TOTAL VIEWS - Last 30 days
       const [totalViewsResult] = await db.execute(`
-        SELECT COUNT(*) as count FROM ad_views
+        SELECT COUNT(*) as count FROM ad_views 
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
       `);
       const totalViews = totalViewsResult[0]?.count || 0;
 
-      // 2. ACTIVE ADS - Hakikisha inarudi 0 kama hakuna data
+      // 2. ACTIVE ADS
       const [activeAdsResult] = await db.execute(
         'SELECT COUNT(*) as count FROM ads WHERE approved = 1 AND is_active = 1'
       );
       const activeAds = activeAdsResult[0]?.count || 0;
 
-      // 3. DATA DISTRIBUTED - Hakikisha inarudi 0 kama hakuna data
-      const [dataDistributedResult] = await db.execute(
-        'SELECT COALESCE(SUM(free_bytes), 0) / (1024 * 1024 * 1024) as total FROM users'
-      );
-      const dataDistributed = Math.round(dataDistributedResult[0]?.total || 0);
+      // 3. DATA DISTRIBUTED (in GB)
+      const [dataDistributedResult] = await db.execute(`
+        SELECT COALESCE(SUM(free_bytes), 0) / (1024 * 1024 * 1024) as total_gb 
+        FROM users WHERE role = "customer"
+      `);
+      const dataDistributed = parseFloat(dataDistributedResult[0]?.total_gb || 0).toFixed(2);
 
-      // 4. COMPLETION RATE - Hakikisha inarudi 0 kama hakuna data
+      // 4. COMPLETION RATE
       const [completionResult] = await db.execute(`
         SELECT
           CASE
             WHEN COUNT(*) = 0 THEN 0
-            ELSE AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100
+            ELSE ROUND(AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100, 2)
           END as rate
         FROM ad_views av
         JOIN ads a ON av.ad_id = a.id
         WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
       `);
-      const completionRate = Math.round(completionResult[0]?.rate || 0);
+      const completionRate = completionResult[0]?.rate || 0;
 
-      // 5. VIEWS TREND - Hakikisha kila siku ina data
+      // 5. VIEWS TREND - Last 7 days
       const viewsTrend = [];
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
@@ -54,7 +74,7 @@ class AdminController {
         });
       }
 
-      // 6. ACTIVE ADS LIST - Hakikisha inarudi array tupu kama hakuna data
+      // 6. ACTIVE ADS LIST
       const [activeAdsListResult] = await db.execute(`
         SELECT a.id, a.title, a.approved, COUNT(av.id) as views, a.created_at
         FROM ads a
@@ -66,7 +86,7 @@ class AdminController {
       `);
       const activeAdsList = activeAdsListResult || [];
 
-      // 7. PENDING APPROVALS - Hakikisha inarudi array tupu kama hakuna data
+      // 7. PENDING APPROVALS
       const [pendingApprovalsResult] = await db.execute(`
         SELECT a.id, a.title, u.name as sponsor_name, a.video_url, a.created_at
         FROM ads a
@@ -77,26 +97,43 @@ class AdminController {
       `);
       const pendingApprovals = pendingApprovalsResult || [];
 
-      // 8. RECENT ACTIVITY - Data maalum kwa ajili ya demo
-      const recentActivity = [
-        {
-          icon: 'user-plus',
-          description: 'Mtumiaji mpya amesajiliwa',
-          time: '2 dakika zilizopita'
-        },
-        {
-          icon: 'ad',
-          description: 'Tangazo jipya limepakiwa',
-          time: '5 dakika zilizopita'
-        },
-        {
-          icon: 'money-bill-wave',
-          description: 'Voucher imetumika',
-          time: '10 dakika zilizopita'
-        }
-      ];
+      // 8. RECENT ACTIVITY
+      const recentActivity = [];
+      
+      const [recentViews] = await db.execute(`
+        SELECT av.created_at, a.title, u.name as user_name
+        FROM ad_views av
+        JOIN ads a ON av.ad_id = a.id
+        JOIN users u ON av.user_id = u.id
+        ORDER BY av.created_at DESC
+        LIMIT 3
+      `);
+      recentViews.forEach(view => {
+        recentActivity.push({
+          icon: 'eye',
+          description: `${view.user_name} ametazama "${view.title}"`,
+          time: AdminController.formatTimeAgo(view.created_at)
+        });
+      });
 
-      // 9. ADDITIONAL STATS FOR CHART - Hakikisha chart ina data
+      const [recentVouchers] = await db.execute(`
+        SELECT v.used_at, p.name as package_name, u.name as user_name
+        FROM vouchers v
+        JOIN packages p ON v.package_id = p.id
+        JOIN users u ON v.used_by = u.id
+        WHERE v.is_used = 1
+        ORDER BY v.used_at DESC
+        LIMIT 2
+      `);
+      recentVouchers.forEach(voucher => {
+        recentActivity.push({
+          icon: 'money-bill-wave',
+          description: `${voucher.user_name} ametumia voucher ya ${voucher.package_name}`,
+          time: AdminController.formatTimeAgo(voucher.used_at)
+        });
+      });
+
+      // 9. CHART DATA
       const chartData = {
         labels: viewsTrend.map(item => {
           const date = new Date(item.date);
@@ -105,44 +142,29 @@ class AdminController {
         data: viewsTrend.map(item => item.total)
       };
 
-      console.log('✅ Takwimu zimepakuliwa kikamilifu:', {
+      console.log('Takwimu zimepakuliwa kikamilifu');
+      return {
         totalViews,
         activeAds,
         dataDistributed,
         completionRate,
-        viewsTrendLength: viewsTrend.length,
-        activeAdsCount: activeAdsList.length,
-        pendingCount: pendingApprovals.length
-      });
-
-      return {
-        totalViews: totalViews,
-        activeAds: activeAds,
-        dataDistributed: dataDistributed,
-        completionRate: completionRate,
-        viewsTrend: viewsTrend,
-        activeAdsList: activeAdsList,
-        pendingApprovals: pendingApprovals,
-        recentActivity: recentActivity,
-        chartData: chartData
+        viewsTrend,
+        activeAdsList,
+        pendingApprovals,
+        recentActivity,
+        chartData
       };
     } catch (error) {
-      console.error('❌ Hitilafu katika dashboard stats:', error);
-      // RUDI DATA ZA FALLBACK WAKATI WA HITILAFU
+      console.error('Hitilafu katika dashboard stats:', error);
       return {
         totalViews: 0,
         activeAds: 0,
         dataDistributed: 0,
         completionRate: 0,
-        viewsTrend: [
-          { date: new Date().toISOString().split('T')[0], total: 0 },
-          { date: new Date(Date.now() - 86400000).toISOString().split('T')[0], total: 0 },
-          { date: new Date(Date.now() - 172800000).toISOString().split('T')[0], total: 0 },
-          { date: new Date(Date.now() - 259200000).toISOString().split('T')[0], total: 0 },
-          { date: new Date(Date.now() - 345600000).toISOString().split('T')[0], total: 0 },
-          { date: new Date(Date.now() - 432000000).toISOString().split('T')[0], total: 0 },
-          { date: new Date(Date.now() - 518400000).toISOString().split('T')[0], total: 0 }
-        ],
+        viewsTrend: Array.from({ length: 7 }, (_, i) => ({
+          date: new Date(Date.now() - (6 - i) * 86400000).toISOString().split('T')[0],
+          total: 0
+        })),
         activeAdsList: [],
         pendingApprovals: [],
         recentActivity: [
@@ -156,33 +178,216 @@ class AdminController {
     }
   }
 
+  // ==================== DASHBOARD METHODS ====================
   async dashboardStats(req, res) {
-    const data = await this.getDashboardData(req);
-    res.json({ success: true, ...data });
+    try {
+      const data = await AdminController.getDashboardData(req);
+      return res.json({ success: true, ...data });
+    } catch (error) {
+      console.error('Hitilafu katika dashboard stats API:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Hitilafu katika kupakua takwimu',
+        error: error.message
+      });
+    }
   }
 
   async renderDashboardPage(req, res) {
-    const data = await this.getDashboardData(req);
-    res.render('admin/dashboard', {
-      title: 'Dashibodi',
-      activePage: 'dashboard',
-      userName: req.session.admin_user?.name || 'Admin',
-      ...data
-    });
+    try {
+      const data = await AdminController.getDashboardData(req);
+      return res.render('admin/dashboard', {
+        title: 'Dashibodi',
+        activePage: 'dashboard',
+        userName: req.session.admin_user?.name || 'Admin',
+        ...data
+      });
+    } catch (error) {
+      console.error('Hitilafu katika render dashboard:', error);
+      return res.render('admin/dashboard', {
+        title: 'Dashibodi',
+        activePage: 'dashboard',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Imeshindikana kupakia data ya dashboard'
+      });
+    }
   }
 
-  // ==================== VOUCHER & SALES METHODS ====================
+  // ==================== VIDEO UPLOAD METHODS ====================
+  async renderUploadVideoPage(req, res) {
+    try {
+      const [sponsors] = await db.execute('SELECT id, name FROM users WHERE role = "sponsor"');
+      return res.render('admin/upload-video', {
+        title: 'Pakia Video',
+        activePage: 'upload-video',
+        userName: req.session.admin_user?.name || 'Admin',
+        sponsors: sponsors || []
+      });
+    } catch (error) {
+      console.error('Hitilafu wakati wa kupakia ukurasa wa upload:', error);
+      return res.render('admin/upload-video', {
+        title: 'Pakia Video',
+        activePage: 'upload-video',
+        userName: req.session.admin_user?.name || 'Admin',
+        sponsors: [],
+        error: 'Imeshindikana kupakia ukurasa'
+      });
+    }
+  }
+
+  async uploadVideo(req, res) {
+    try {
+      console.log('Kupakia video mpya...');
+      
+      if (!req.files || !req.files.video) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tafadhali chagua faili ya video'
+        });
+      }
+
+      const videoFile = req.files.video;
+      const { title, description, sponsor_id, duration, reward_bytes, is_active } = req.body;
+
+      if (!title || !description || !sponsor_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Jina, maelezo na mdhamini vinahitajika'
+        });
+      }
+
+      const allowedMimeTypes = ['video/mp4', 'video/mkv', 'video/avi', 'video/mov', 'video/wmv'];
+      if (!allowedMimeTypes.includes(videoFile.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tafadhali chagua faili ya video sahihi (MP4, MKV, AVI, MOV, WMV)'
+        });
+      }
+
+      const maxSize = 100 * 1024 * 1024;
+      if (videoFile.size > maxSize) {
+        return res.status(400).json({
+          success: false,
+          message: 'Faili ni kubwa sana. Ukubwa upewa ni 100MB pekee'
+        });
+      }
+
+      const fileExtension = path.extname(videoFile.name);
+      const fileName = `ad_${Date.now()}${fileExtension}`;
+      const uploadPath = path.join(__dirname, '../public/uploads/videos', fileName);
+      const uploadDir = path.dirname(uploadPath);
+
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      await videoFile.mv(uploadPath);
+      const videoUrl = `/uploads/videos/${fileName}`;
+      const rewardBytes = parseInt(reward_bytes) * 1024 * 1024;
+
+      const [result] = await db.execute(
+        `INSERT INTO ads
+        (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, approved, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          title,
+          description,
+          '/images/default-ad-thumbnail.jpg',
+          videoUrl,
+          duration || 30,
+          rewardBytes || 10485760,
+          sponsor_id,
+          1,
+          is_active ? 1 : 1
+        ]
+      );
+
+      console.log('Video imepakiwa kikamilifu:', { title, videoUrl, adId: result.insertId });
+      return res.json({
+        success: true,
+        message: 'Video imepakiwa kikamilifu na imeongezwa kwenye matangazo',
+        data: { id: result.insertId, title, video_url: videoUrl }
+      });
+    } catch (error) {
+      console.error('Hitilafu wakati wa kupakia video:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindikana kupakia video',
+        error: error.message
+      });
+    }
+  }
+
+  // ==================== VIDEO ADS METHODS ====================
+  async getVideoAds(req, res) {
+    try {
+      const [ads] = await db.execute(`
+        SELECT a.*, u.name as sponsor_name,
+               COUNT(av.id) as views_count,
+               COALESCE(SUM(av.data_earned), 0) as total_data_distributed
+        FROM ads a
+        LEFT JOIN users u ON a.sponsor_id = u.id
+        LEFT JOIN ad_views av ON a.id = av.ad_id
+        WHERE a.video_url IS NOT NULL AND a.video_url != ''
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
+      `);
+      return res.json({ success: true, data: ads, count: ads.length });
+    } catch (error) {
+      console.error('Hitilafu wakati wa kupata matangazo ya video:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata matangazo', error: error.message });
+    }
+  }
+
+  // ==================== PACKAGES METHODS ====================
+  async getPackages(req, res) {
+    try {
+      console.log('Inapakia vifurushi kutoka database...');
+      const [packages] = await db.execute(`
+        SELECT id, name, description, duration_hours, price, is_active
+        FROM packages
+        WHERE is_active = 1
+        ORDER BY price ASC
+      `);
+      console.log('Vifurushi vilivyopatikana:', packages.length);
+      return res.json({ success: true, data: packages, count: packages.length });
+    } catch (error) {
+      console.error('Hitilafu katika kupata vifurushi:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata vifurushi', error: error.message });
+    }
+  }
+
+  // ==================== VOUCHER METHODS ====================
   async generateVoucher(req, res) {
     try {
       const { issuedto, vouchers } = req.body;
+      console.log('Voucher generation request:', { issuedto, vouchers });
+
+      if (!issuedto || !issuedto.trim()) {
+        return res.status(400).json({ success: false, message: 'Tafadhali ingiza jina la mtoa huduma' });
+      }
+      if (!vouchers || Object.keys(vouchers).length === 0) {
+        return res.status(400).json({ success: false, message: 'Tafadhali chagua angalau kifurushi kimoja' });
+      }
+
+      let totalVouchersRequested = 0;
+      for (const [pkg, count] of Object.entries(vouchers)) {
+        const quantity = parseInt(count);
+        if (isNaN(quantity) || quantity < 0) {
+          return res.status(400).json({ success: false, message: `Idadi ya ${pkg} si sahihi` });
+        }
+        totalVouchersRequested += quantity;
+      }
+      if (totalVouchersRequested === 0) {
+        return res.status(400).json({ success: false, message: 'Tafadhali ingiza idadi ya vouchers' });
+      }
+      if (totalVouchersRequested > 50000) {
+        return res.status(400).json({ success: false, message: 'Idadi ya jumla ya vouchers haizidi 50,000 kwa mara moja' });
+      }
+
       const [batches] = await db.execute('SELECT MAX(id) as maxId FROM voucher_batches');
       const nextBatchNumber = (batches[0].maxId || 0) + 1;
-      const batchName = `BATCH-OCT-${nextBatchNumber.toString().padStart(3, '0')}`;
-
-      const [batchResult] = await db.execute(
-        'INSERT INTO voucher_batches (batch_name, issued_to, total_vouchers, total_value, created_by) VALUES (?, ?, ?, ?, ?)',
-        [batchName, issuedto, 0, 0, req.session.admin_user.id]
-      );
+      const batchName = `BATCH-${new Date().toLocaleString('en-US', { month: 'short' }).toUpperCase()}-${nextBatchNumber.toString().padStart(3, '0')}`;
 
       const packageValues = {
         'MASAA 6': { id: 1, price: 500 },
@@ -191,26 +396,34 @@ class AdminController {
         'MWEEZI 1': { id: 4, price: 20000 },
       };
 
+      const [batchResult] = await db.execute(
+        'INSERT INTO voucher_batches (batch_name, issued_to, total_vouchers, total_value, created_by) VALUES (?, ?, ?, ?, ?)',
+        [batchName, issuedto.trim(), 0, 0, req.session.admin_user?.id || 3]
+      );
+      const batchId = batchResult.insertId;
+
       const allVouchers = [];
-      let totalVouchers = 0;
+      let totalVouchersGenerated = 0;
       let totalValue = 0;
 
       for (const [pkg, count] of Object.entries(vouchers)) {
-        if (!packageValues[pkg]) continue;
-        for (let i = 0; i < count; i++) {
+        const quantity = parseInt(count);
+        if (quantity === 0 || !packageValues[pkg]) continue;
+        console.log(`Generating ${quantity} vouchers for ${pkg}`);
+        for (let i = 0; i < quantity; i++) {
           const code = await this.generateUniqueVoucher();
+          const packageInfo = packageValues[pkg];
+          const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
           allVouchers.push([
             code,
-            packageValues[pkg].id,
-            packageValues[pkg].price,
-            0,
-            null,
-            null,
-            batchResult.insertId,
-            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+            packageInfo.id,
+            packageInfo.price,
+            0, null, null,
+            batchId,
+            expiresAt
           ]);
-          totalVouchers++;
-          totalValue += packageValues[pkg].price;
+          totalVouchersGenerated++;
+          totalValue += packageInfo.price;
         }
       }
 
@@ -223,96 +436,81 @@ class AdminController {
         );
         await db.execute(
           'UPDATE voucher_batches SET total_vouchers = ?, total_value = ? WHERE id = ?',
-          [totalVouchers, totalValue, batchResult.insertId]
+          [totalVouchersGenerated, totalValue, batchId]
         );
       }
 
-      res.json({
+      console.log(`Vouchers zimeundwa kikamilifu: ${totalVouchersGenerated} vouchers, Jumla: TSH ${totalValue.toLocaleString()}`);
+      return res.json({
         success: true,
-        message: 'Vouchers generated successfully',
-        batchId: batchResult.insertId,
-        count: allVouchers.length,
-        totalValue: totalValue
+        message: `Vouchers ${totalVouchersGenerated.toLocaleString()} zimeundwa kikamilifu!`,
+        batchId, count: totalVouchersGenerated, totalValue, batchName
       });
     } catch (error) {
-      console.error('Voucher generation error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to generate vouchers',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuunda vouchers:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuunda vouchers', error: error.message });
     }
   }
 
   async generateUniqueVoucher() {
     let code;
     let exists = true;
-    while (exists) {
+    let attempts = 0;
+    while (exists && attempts < 10) {
       code = 'HOT' + Math.floor(100000 + Math.random() * 900000).toString();
-      const [vouchers] = await db.execute(
-        'SELECT SELECT id FROM vouchers WHERE voucher_code = ?',
-        [code]
-      );
+      const [vouchers] = await db.execute('SELECT id FROM vouchers WHERE voucher_code = ?', [code]);
       exists = vouchers.length > 0;
+      attempts++;
+    }
+    if (exists) {
+      code = 'HOT' + Date.now().toString().slice(-8);
     }
     return code;
   }
 
   async getBatches(req, res) {
     try {
+      console.log('Inapakia batches kutoka database...');
       const [batches] = await db.execute(`
-        SELECT vb.*, u.name as created_by_name
+        SELECT vb.*, u.name as created_by_name,
+               DATE_FORMAT(vb.created_at, '%Y-%m-%d %H:%i:%s') as formatted_date
         FROM voucher_batches vb
         LEFT JOIN users u ON vb.created_by = u.id
-        ORDER BY vb.id DESC
+        ORDER BY vb.created_at DESC
+        LIMIT 50
       `);
-      res.json({
-        success: true,
-        data: batches,
-        count: batches.length
-      });
+      console.log('Batches zilizopatikana:', batches.length);
+      return res.json({ success: true, data: batches, count: batches.length });
     } catch (error) {
-      console.error('Get batches error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch batches',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata batches:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata batches', error: error.message });
     }
   }
 
   async getVoucherReport(req, res) {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, limit = 100 } = req.query;
       let query = `
-        SELECT v.voucher_code, p.name as package_name, v.price, v.used_at,
-               u.name as used_by_name, u.phone_number,
-               vb.batch_name, vb.issued_to
+        SELECT v.voucher_code, p.name as package_name, v.price, v.is_used, v.used_at,
+               u.name as used_by_name, u.phone_number, vb.batch_name, vb.issued_to, vb.created_at as batch_date
         FROM vouchers v
         LEFT JOIN packages p ON v.package_id = p.id
         LEFT JOIN users u ON v.used_by = u.id
         LEFT JOIN voucher_batches vb ON v.batch_id = vb.id
-        WHERE v.is_used = 1
+        WHERE 1=1
       `;
       let params = [];
       if (startDate && endDate) {
-        query += ' AND DATE(v.used_at) BETWEEN ? AND ?';
-        params.push(startDate, endDate);
+        query += ' AND DATE(vb.created_at) BETWEEN ? AND ?';
+          params.push(startDate, endDate);
       }
-      query += ' ORDER BY v.used_at DESC LIMIT 100';
+      query += ' ORDER BY v.created_at DESC LIMIT ?';
+      params.push(parseInt(limit));
       const [vouchers] = await db.execute(query, params);
-      res.json({
-        success: true,
-        data: vouchers,
-        count: vouchers.length
-      });
+      return res.json({ success: true, data: vouchers, count: vouchers.length });
     } catch (error) {
-      console.error('Voucher report error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch voucher report',
-        error: error.message
-      });
+      console.error('Hitilafu katika voucher report:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata ripoti ya vouchers', error: error.message });
     }
   }
 
@@ -321,26 +519,26 @@ class AdminController {
       const { batchId } = req.params;
       const [vouchers] = await db.execute(`
         SELECT v.voucher_code, p.name as package_name, v.price, v.is_used, v.used_at,
-               u.name as used_by_name
+               u.name as used_by_name, u.phone_number
         FROM vouchers v
         LEFT JOIN packages p ON v.package_id = p.id
         LEFT JOIN users u ON v.used_by = u.id
         WHERE v.batch_id = ?
         ORDER BY v.id DESC
       `, [batchId]);
-      res.json({
+      const [batchInfo] = await db.execute(`
+        SELECT batch_name, issued_to, total_vouchers, total_value, created_at
+        FROM voucher_batches WHERE id = ?
+      `, [batchId]);
+      return res.json({
         success: true,
         data: vouchers,
         count: vouchers.length,
-        batchId: batchId
+        batchInfo: batchInfo[0] || null
       });
     } catch (error) {
-      console.error('Get vouchers error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch vouchers',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata vouchers za batch:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata vouchers', error: error.message });
     }
   }
 
@@ -352,10 +550,78 @@ class AdminController {
         [today]
       );
       const [totalUsers] = await db.execute('SELECT COUNT(*) as count FROM users WHERE role = "customer"');
-      const [activeSubs] = await db.execute(
-        'SELECT COUNT(*) as count FROM users WHERE usage_until > NOW() AND role = "customer"'
+      const [activeSubs] = await db.execute('SELECT COUNT(*) as count FROM users WHERE usage_until > NOW() AND role = "customer"');
+      const [totalRevenue] = await db.execute('SELECT COALESCE(SUM(price), 0) as total FROM vouchers WHERE is_used = 1');
+
+      const salesTrend = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const [daily] = await db.execute(
+          `SELECT COALESCE(SUM(price), 0) as total FROM vouchers WHERE is_used = 1 AND DATE(used_at) = ?`,
+          [dateStr]
+        );
+        salesTrend.push({ date: dateStr, total: parseFloat(daily[0].total) || 0 });
+      }
+
+      return res.json({
+        success: true,
+        todaySales: parseFloat(todaySales[0].total) || 0,
+        totalUsers: totalUsers[0].count || 0,
+        activeSubscriptions: activeSubs[0].count || 0,
+        totalRevenue: parseFloat(totalRevenue[0].total) || 0,
+        trend: salesTrend
+      });
+    } catch (error) {
+      console.error('Hitilafu katika sales summary:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata muhtasari wa mauzo', error: error.message });
+    }
+  }
+
+  async getVoucherStats(req, res) {
+    try {
+      console.log('Inapakia takwimu za vouchers...');
+      const today = new Date().toISOString().split('T')[0];
+      const [usedTodayResult] = await db.execute(
+        `SELECT COUNT(*) as count FROM vouchers WHERE is_used = 1 AND DATE(used_at) = ?`,
+        [today]
       );
-      const [totalRevenue] = await db.execute('SELECT COALESCE(SUM(moneyspent), 0) as total FROM users WHERE role = "customer"');
+      const [availableResult] = await db.execute('SELECT COUNT(*) as count FROM vouchers WHERE is_used = 0');
+      const usedToday = usedTodayResult[0]?.count || 0;
+      const available = availableResult[0]?.count || 0;
+      console.log('Takwimu za vouchers:', { usedToday, available });
+      return res.json({ success: true, usedToday, availableVouchers: available });
+    } catch (error) {
+      console.error('Hitilafu katika kupata takwimu za vouchers:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata takwimu za vouchers', error: error.message });
+    }
+  }
+
+  // ==================== ANALYTICS METHODS ====================
+  async renderAnalyticsPage(req, res) {
+    try {
+      const [totalViews] = await db.execute(`
+        SELECT COUNT(*) as count FROM ad_views
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+      const [completion] = await db.execute(`
+        SELECT
+          CASE
+            WHEN COUNT(*) = 0 THEN 0
+            ELSE ROUND(AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100, 2)
+          END as rate
+        FROM ad_views av
+        JOIN ads a ON av.ad_id = a.id
+        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+      const [avgWatchTime] = await db.execute(`
+        SELECT COALESCE(AVG(watched_duration), 0) as avgTime
+        FROM ad_views
+        WHERE watched_duration > 0
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+
       const salesTrend = [];
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
@@ -367,46 +633,354 @@ class AdminController {
         );
         salesTrend.push({
           date: dateStr,
-          total: daily[0].total || 0
+          total: parseFloat(daily[0].total) || 0
         });
       }
-      res.json({
-        success: true,
-        todaySales: todaySales[0].total || 0,
-        totalUsers: totalUsers[0].count || 0,
-        activeSubscriptions: activeSubs[0].count || 0,
-        totalRevenue: totalRevenue[0].total || 0,
-        trend: salesTrend
+
+      const [popularPackages] = await db.execute(`
+        SELECT p.name, COUNT(*) as count,
+               ROUND((COUNT(*) / (SELECT COUNT(*) FROM vouchers WHERE is_used = 1) * 100), 2) as percentage
+        FROM vouchers v
+        JOIN packages p ON v.package_id = p.id
+        WHERE v.is_used = 1
+        GROUP BY p.name
+        ORDER BY count DESC
+        LIMIT 5
+      `);
+
+      const [viewsByLocation] = await db.execute(`
+        SELECT u.location, COUNT(av.id) as count,
+               ROUND((COUNT(av.id) / (SELECT COUNT(*) FROM ad_views) * 100), 2) as percentage
+        FROM ad_views av
+        JOIN users u ON av.user_id = u.id
+        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY u.location
+        ORDER BY count DESC
+        LIMIT 5
+      `);
+
+      return res.render('admin/analytics', {
+        title: 'Takwimu za Matangazo',
+        activePage: 'analytics',
+        userName: req.session.admin_user?.name,
+        totalViews: totalViews[0].count || 0,
+        completionRate: completion[0].rate || 0,
+        avgWatchTime: Math.round(avgWatchTime[0].avgTime || 0),
+        salesTrend,
+        popularPackages: popularPackages || [],
+        viewsByLocation: viewsByLocation || []
       });
     } catch (error) {
-      console.error('Sales summary error:', error);
-      res.status(500).json({
+      console.error('Hitilafu katika analytics page:', error);
+      return res.render('admin/analytics', {
+        title: 'Takwimu za Matangazo',
+        activePage: 'analytics',
+        userName: req.session.admin_user?.name,
+        error: 'Imeshindikana kupakia data ya takwimu'
+      });
+    }
+  }
+  async getAnalyticsStats(req, res) {
+    try {
+        const [totalViews] = await db.execute(`
+            SELECT COUNT(*) as count FROM ad_views 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        
+        const [completion] = await db.execute(`
+            SELECT
+                CASE
+                    WHEN COUNT(*) = 0 THEN 0
+                    ELSE ROUND(AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100, 2)
+                END as rate
+            FROM ad_views av
+            JOIN ads a ON av.ad_id = a.id
+            WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        
+        const [avgWatchTime] = await db.execute(`
+            SELECT COALESCE(AVG(watched_duration), 0) as avgTime
+            FROM ad_views
+            WHERE watched_duration > 0
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+
+        const [totalClicks] = await db.execute(`
+            SELECT COUNT(*) as count FROM ad_views 
+            WHERE watched_duration >= 10
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+
+        const [uniqueViewers] = await db.execute(`
+            SELECT COUNT(DISTINCT user_id) as count FROM ad_views 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+
+        return res.json({
+            success: true,
+            totalViews: totalViews[0].count || 0,
+            completionRate: completion[0].rate || 0,
+            avgWatchTime: Math.round(avgWatchTime[0].avgTime || 0),
+            totalClicks: totalClicks[0].count || 0,
+            uniqueViewers: uniqueViewers[0].count || 0
+        });
+    } catch (error) {
+        console.error('Hitilafu katika analytics stats:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Imeshindikana kupata takwimu za analytics',
+            error: error.message
+        });
+    }
+}
+
+  async adminAnalytics(req, res) {
+    try {
+      const [totalViews] = await db.execute(`
+        SELECT COUNT(*) as count FROM ad_views
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+      const [completion] = await db.execute(`
+        SELECT
+          CASE
+            WHEN COUNT(*) = 0 THEN 0
+            ELSE ROUND(AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100, 2)
+          END as rate
+        FROM ad_views av
+        JOIN ads a ON av.ad_id = a.id
+        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+      const [avgWatchTime] = await db.execute(`
+        SELECT COALESCE(AVG(watched_duration), 0) as avgTime
+        FROM ad_views
+        WHERE watched_duration > 0
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+
+      const salesTrend = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const [daily] = await db.execute(
+          `SELECT COALESCE(SUM(price), 0) as total FROM vouchers WHERE is_used = 1 AND DATE(used_at) = ?`,
+          [dateStr]
+        );
+        salesTrend.push({
+          date: dateStr,
+          total: parseFloat(daily[0].total) || 0
+        });
+      }
+
+      const [popularPackages] = await db.execute(`
+        SELECT p.name, COUNT(*) as count,
+               ROUND((COUNT(*) / (SELECT COUNT(*) FROM vouchers WHERE is_used = 1) * 100), 2) as percentage
+        FROM vouchers v
+        JOIN packages p ON v.package_id = p.id
+        WHERE v.is_used = 1
+        GROUP BY p.name
+        ORDER BY count DESC
+        LIMIT 5
+      `);
+
+      const [viewsByLocation] = await db.execute(`
+        SELECT u.location, COUNT(av.id) as count,
+               ROUND((COUNT(av.id) / (SELECT COUNT(*) FROM ad_views) * 100), 2) as percentage
+        FROM ad_views av
+        JOIN users u ON av.user_id = u.id
+        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY u.location
+        ORDER BY count DESC
+        LIMIT 5
+      `);
+
+      return res.json({
+        success: true,
+        totalViews: totalViews[0].count || 0,
+        completionRate: completion[0].rate || 0,
+        avgWatchTime: Math.round(avgWatchTime[0].avgTime || 0),
+        salesTrend,
+        popularPackages: popularPackages || [],
+        viewsByLocation: viewsByLocation || []
+      });
+    } catch (error) {
+      console.error('Hitilafu katika analytics:', error);
+      return res.status(500).json({
         success: false,
-        message: 'Failed to generate sales summary',
+        message: 'Imeshindikana kupata takwimu',
         error: error.message
       });
     }
   }
 
-  // ==================== RENDER ANALYTICS PAGE ====================
-  async renderAnalyticsPage(req, res) {
+
+
+
+  async reportsData(req, res) {
     try {
-      const analytics = await this.adminAnalytics(req, res);
-      res.render('admin/analytics', {
-        title: 'Takwimu za Matangazo',
-        activePage: 'analytics',
-        userName: req.session.admin_user?.name,
-        ...analytics
+      const [totalAdViews] = await db.execute(`
+        SELECT COUNT(*) as count FROM ad_views
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+      const [newUsers] = await db.execute(`
+        SELECT COUNT(*) as count FROM users
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND role = "customer"
+      `);
+      const [pendingApprovals] = await db.execute(
+        'SELECT COUNT(*) as count FROM ads WHERE approved = 0'
+      );
+      return res.json({
+        success: true,
+        totalAdViews: totalAdViews[0].count || 0,
+        newUsers: newUsers[0].count || 0,
+        pendingApprovals: pendingApprovals[0].count || 0
       });
     } catch (error) {
-      res.render('admin/analytics', {
-        title: 'Takwimu za Matangazo',
-        activePage: 'analytics',
-        userName: req.session.admin_user?.name,
-        error: 'Failed to load analytics data'
+      console.error('Hitilafu katika reports data:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindikana kupata data ya ripoti',
+        error: error.message
       });
     }
   }
+
+
+  async getAnalyticsData(req, res) {
+    try {
+        console.log('📊 Inapakia data halisi ya analytics...');
+        
+        // 1. TOTAL VIEWS - Last 30 days
+        const [totalViewsResult] = await db.execute(`
+            SELECT COUNT(*) as count FROM ad_views 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        const totalViews = totalViewsResult[0]?.count || 0;
+
+        // 2. COMPLETION RATE
+        const [completionResult] = await db.execute(`
+            SELECT
+                CASE
+                    WHEN COUNT(*) = 0 THEN 0
+                    ELSE ROUND(AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100, 2)
+                END as rate
+            FROM ad_views av
+            JOIN ads a ON av.ad_id = a.id
+            WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        const completionRate = completionResult[0]?.rate || 0;
+
+        // 3. AVERAGE WATCH TIME
+        const [avgWatchTimeResult] = await db.execute(`
+            SELECT COALESCE(AVG(watched_duration), 0) as avgTime
+            FROM ad_views
+            WHERE watched_duration > 0
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        const avgWatchTime = Math.round(avgWatchTimeResult[0]?.avgTime || 0);
+
+        // 4. TOTAL CLICKS (estimated from views with good watch time)
+        const [totalClicksResult] = await db.execute(`
+            SELECT COUNT(*) as count FROM ad_views 
+            WHERE watched_duration >= 10
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        const totalClicks = totalClicksResult[0]?.count || 0;
+
+        // 5. UNIQUE VIEWERS
+        const [uniqueViewersResult] = await db.execute(`
+            SELECT COUNT(DISTINCT user_id) as count FROM ad_views 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        `);
+        const uniqueViewers = uniqueViewersResult[0]?.count || 0;
+
+        // 6. VIEWS TREND - Last 7 days
+        const viewsTrend = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            const [dailyResult] = await db.execute(
+                `SELECT COUNT(*) as total FROM ad_views WHERE DATE(created_at) = ?`,
+                [dateStr]
+            );
+            viewsTrend.push({
+                date: dateStr,
+                total: dailyResult[0]?.total || 0
+            });
+        }
+
+        console.log('✅ Data ya analytics imepakuliwa:', {
+            totalViews,
+            completionRate,
+            avgWatchTime,
+            totalClicks,
+            uniqueViewers
+        });
+
+        return res.json({
+            success: true,
+            data: {
+                totalViews,
+                completionRate,
+                avgWatchTime,
+                totalClicks,
+                uniqueViewers,
+                viewsTrend
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Hitilafu katika kupata data ya analytics:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Imeshindikana kupata data ya analytics',
+            error: error.message
+        });
+    }
+}
+
+async getAdViewsForAnalytics(req, res) {
+    try {
+        console.log('📈 Inapakia data ya maonyesho ya matangazo...');
+        
+        const [adViews] = await db.execute(`
+            SELECT 
+                av.id,
+                av.ad_id,
+                av.user_id,
+                av.watched_duration,
+                av.data_earned,
+                av.created_at,
+                a.title,
+                a.duration as ad_duration,
+                u.name as user_name,
+                u.location
+            FROM ad_views av
+            JOIN ads a ON av.ad_id = a.id
+            JOIN users u ON av.user_id = u.id
+            WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            ORDER BY av.created_at DESC
+            LIMIT 1000
+        `);
+
+        console.log(`✅ ${adViews.length} records za ad views zimepatikana`);
+
+        return res.json({
+            success: true,
+            data: adViews,
+            count: adViews.length
+        });
+
+    } catch (error) {
+        console.error('❌ Hitilafu katika kupata ad views:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Imeshindikana kupata data ya maonyesho',
+            error: error.message
+        });
+    }
+}
 
   // ==================== USER/CUSTOMER METHODS ====================
   async getCustomers(req, res) {
@@ -414,34 +988,34 @@ class AdminController {
       const { search, page = 1, limit = 50 } = req.query;
       const offset = (page - 1) * limit;
       let query = `
-        SELECT id, name, phone_number, package, location,
-               moneyspent, usage_start, usage_until,
-               free_bytes / (1024*1024) as free_mb,
-               mac_address, last_router_id, is_active,
-               created_at, updated_at
+        SELECT
+          id, name, phone_number, package, location,
+          moneyspent, usage_start, usage_until,
+          free_bytes / (1024*1024) as free_mb,
+          mac_address, last_router_id, is_active,
+          created_at, updated_at
         FROM users
         WHERE role = 'customer'
       `;
       let params = [];
       if (search) {
-        query += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ?)';
-        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        query += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ? OR location LIKE ?)';
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
       }
       query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
       params.push(parseInt(limit), offset);
-
       const [customers] = await db.execute(query, params);
 
       let countQuery = 'SELECT COUNT(*) as total FROM users WHERE role = "customer"';
       if (search) {
-        countQuery += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ?)';
+        countQuery += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ? OR location LIKE ?)';
       }
       const [totalResult] = await db.execute(
         countQuery,
-        search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []
+        search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : []
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: customers,
         pagination: {
@@ -452,22 +1026,19 @@ class AdminController {
         }
       });
     } catch (error) {
-      console.error('Get customers error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch customers',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata customers:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata wateja', error: error.message });
     }
   }
 
   async getOnlineCustomers(req, res) {
     try {
       const [onlineCustomers] = await db.execute(`
-        SELECT u.id, u.name, u.phone_number, u.mac_address,
-               u.location, u.last_router_id, u.usage_until,
-               TIMESTAMPDIFF(MINUTE, u.updated_at, NOW()) as minutes_ago,
-               m.router_name, m.status as router_status
+        SELECT
+          u.id, u.name, u.phone_number, u.mac_address,
+          u.location, u.last_router_id, u.usage_until,
+          TIMESTAMPDIFF(MINUTE, u.updated_at, NOW()) as minutes_ago,
+          m.router_name, m.status as router_status
         FROM users u
         LEFT JOIN mikrotiks m ON u.last_router_id = m.router_id
         WHERE u.usage_until > NOW()
@@ -475,18 +1046,14 @@ class AdminController {
         AND u.role = 'customer'
         ORDER BY u.updated_at DESC
       `);
-      res.json({
+      return res.json({
         success: true,
         data: onlineCustomers,
         count: onlineCustomers.length
       });
     } catch (error) {
-      console.error('Get online customers error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch online customers',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata online customers:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata wateja walio online', error: error.message });
     }
   }
 
@@ -494,6 +1061,12 @@ class AdminController {
     try {
       const { id } = req.params;
       const { reason, suspended_until, is_permanent } = req.body;
+
+      const [users] = await db.execute('SELECT id, name FROM users WHERE id = ? AND role = "customer"', [id]);
+      if (users.length === 0) {
+        return res.status(404).json({ success: false, message: 'Mtumiaji hakupatikana' });
+      }
+
       await db.execute(
         'INSERT INTO user_suspensions (user_id, reason, suspended_by, suspended_until, is_permanent) VALUES (?, ?, ?, ?, ?)',
         [id, reason, req.session.admin_user.id, suspended_until, is_permanent || 0]
@@ -502,38 +1075,22 @@ class AdminController {
         'UPDATE users SET usage_until = NOW(), is_active = 0 WHERE id = ?',
         [id]
       );
-      res.json({
-        success: true,
-        message: 'Customer suspended successfully'
-      });
+
+      return res.json({ success: true, message: 'Mtumiaji amesimamishwa kikamilifu' });
     } catch (error) {
-      console.error('Suspend customer error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to suspend customer',
-        error: error.message
-      });
+      console.error('Hitilafu katika kusimamisha mtumiaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kusimamisha mtumiaji', error: error.message });
     }
   }
 
   async unsuspendCustomer(req, res) {
     try {
       const { id } = req.params;
-      await db.execute(
-        'UPDATE users SET is_active = 1 WHERE id = ?',
-        [id]
-      );
-      res.json({
-        success: true,
-        message: 'Customer unsuspended successfully'
-      });
+      await db.execute('UPDATE users SET is_active = 1 WHERE id = ?', [id]);
+      return res.json({ success: true, message: 'Mtumiaji amerejeshwa kikamilifu' });
     } catch (error) {
-      console.error('Unsuspend customer error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to unsuspend customer',
-        error: error.message
-      });
+      console.error('Hitilafu katika kurejesha mtumiaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kurejesha mtumiaji', error: error.message });
     }
   }
 
@@ -543,6 +1100,7 @@ class AdminController {
       const { usage_until, package_name, free_bytes } = req.body;
       const updateFields = [];
       const params = [];
+
       if (usage_until) {
         updateFields.push('usage_until = ?');
         params.push(usage_until);
@@ -557,21 +1115,16 @@ class AdminController {
       }
       updateFields.push('updated_at = NOW()');
       params.push(id);
+
       await db.execute(
         `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
         params
       );
-      res.json({
-        success: true,
-        message: 'Customer subscription adjusted successfully'
-      });
+
+      return res.json({ success: true, message: 'Usajili wa mtumiaji umeongezewa muda kikamilifu' });
     } catch (error) {
-      console.error('Adjust subscription error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to adjust subscription',
-        error: error.message
-      });
+      console.error('Hitilafu katika kurekebisha usajili:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kurekebisha usajili', error: error.message });
     }
   }
 
@@ -580,27 +1133,17 @@ class AdminController {
       const { id } = req.params;
       const [result] = await db.execute('DELETE FROM users WHERE id = ? AND role = "customer"', [id]);
       if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: 'Customer not found'
-        });
+        return res.status(404).json({ success: false, message: 'Mtumiaji hakupatikana' });
       }
-      res.json({
-        success: true,
-        message: 'Customer deleted successfully',
-        deletedId: id
-      });
+      return res.json({ success: true, message: 'Mtumiaji amefutwa kikamilifu', deletedId: id });
     } catch (error) {
-      console.error('Delete customer error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to delete customer',
-        error: error.message
-      });
+      console.error('Hitilafu katika kufuta mtumiaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kufuta mtumiaji', error: error.message });
     }
   }
 
   // ==================== ADVERTISEMENT METHODS ====================
+  
   async getAdsToApprove(req, res) {
     try {
       const [ads] = await db.execute(`
@@ -608,51 +1151,42 @@ class AdminController {
         FROM ads a
         LEFT JOIN users u ON a.sponsor_id = u.id
         WHERE a.approved = 0
+        ORDER BY a.created_at DESC
       `);
-      res.json({ success: true, data: ads });
+      return res.json({ success: true, data: ads, count: ads.length });
     } catch (error) {
-      console.error('Get ads to approve error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch ads for approval',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata matangazo ya kuidhinisha:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata matangazo', error: error.message });
     }
   }
 
   async approveAd(req, res) {
     try {
       const { id } = req.params;
+      const [ads] = await db.execute('SELECT id FROM ads WHERE id = ?', [id]);
+      if (ads.length === 0) {
+        return res.status(404).json({ success: false, message: 'Tangazo hakupatikana' });
+      }
       await db.execute('UPDATE ads SET approved = 1, updated_at = NOW() WHERE id = ?', [id]);
-      res.json({
-        success: true,
-        message: 'Ad approved successfully'
-      });
+      return res.json({ success: true, message: 'Tangazo limeidhinishwa kikamilifu' });
     } catch (error) {
-      console.error('Approve ad error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to approve ad',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuidhinisha tangazo:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuidhinisha tangazo', error: error.message });
     }
   }
 
   async declineAd(req, res) {
     try {
       const { id } = req.params;
+      const [ads] = await db.execute('SELECT id FROM ads WHERE id = ?', [id]);
+      if (ads.length === 0) {
+        return res.status(404).json({ success: false, message: 'Tangazo hakupatikana' });
+      }
       await db.execute('DELETE FROM ads WHERE id = ?', [id]);
-      res.json({
-        success: true,
-        message: 'Ad declined successfully'
-      });
+      return res.json({ success: true, message: 'Tangazo limekataliwa kikamilifu' });
     } catch (error) {
-      console.error('Decline ad error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to decline ad',
-        error: error.message
-      });
+      console.error('Hitilafu katika kukataa tangazo:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kukataa tangazo', error: error.message });
     }
   }
 
@@ -668,35 +1202,76 @@ class AdminController {
         GROUP BY a.id
         ORDER BY a.created_at DESC
       `, [adminId]);
-      res.json({ success: true, data: ads });
+      return res.json({ success: true, data: ads, count: ads.length });
     } catch (error) {
-      console.error('Get my ads error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch ads',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata matangazo yangu:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata matangazo', error: error.message });
     }
   }
+  async getMyAdsAPI(req, res) {
+  try {
+    console.log('🔍 API: Fetching ads for user:', req.session.admin_user?.id);
+    
+    if (!req.session.admin_user || !req.session.admin_user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized - Please login first'
+      });
+    }
+
+    const [ads] = await db.execute(`
+      SELECT 
+        a.id,
+        a.title,
+        a.description,
+        a.video_url,
+        a.duration,
+        a.reward_bytes,
+        a.sponsor_id,
+        a.approved,
+        a.is_active,
+        a.created_at,
+        a.updated_at,
+        COUNT(av.id) as views_count,
+        COALESCE(SUM(av.data_earned), 0) as total_data_earned
+      FROM ads a
+      LEFT JOIN ad_views av ON a.id = av.ad_id
+      WHERE a.sponsor_id = ?
+      GROUP BY a.id
+      ORDER BY a.created_at DESC
+    `, [req.session.admin_user.id]);
+
+    console.log('✅ API: Ads found:', ads.length);
+
+    return res.json({
+      success: true,
+      data: ads || [],
+      count: ads.length
+    });
+  } catch (error) {
+    console.error('❌ Hitilafu katika API my-ads:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Imeshindikana kupakia matangazo',
+      error: error.message
+    });
+  }
+}
 
   async createAd(req, res) {
     try {
       const { title, description, image_url, video_url, duration, reward_bytes, sponsor_id } = req.body;
+      if (!title || !description) {
+        return res.status(400).json({ success: false, message: 'Jina na maelezo yanahitajika' });
+      }
       await db.execute(
-        'INSERT INTO ads (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, approved, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO ads (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, approved, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
         [title, description, image_url, video_url, duration || 30, reward_bytes || 10485760, sponsor_id, 1, 1]
       );
-      res.json({
-        success: true,
-        message: 'Ad created successfully'
-      });
+      return res.json({ success: true, message: 'Tangazo limeundwa kikamilifu' });
     } catch (error) {
-      console.error('Create ad error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to create ad',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuunda tangazo:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuunda tangazo', error: error.message });
     }
   }
 
@@ -704,121 +1279,18 @@ class AdminController {
     try {
       const { id } = req.params;
       const { title, description, image_url, video_url, duration, reward_bytes, is_active } = req.body;
+      const [ads] = await db.execute('SELECT id FROM ads WHERE id = ?', [id]);
+      if (ads.length === 0) {
+        return res.status(404).json({ success: false, message: 'Tangazo hakupatikana' });
+      }
       await db.execute(
         'UPDATE ads SET title = ?, description = ?, image_url = ?, video_url = ?, duration = ?, reward_bytes = ?, is_active = ?, updated_at = NOW() WHERE id = ?',
         [title, description, image_url, video_url, duration, reward_bytes, is_active, id]
       );
-      res.json({
-        success: true,
-        message: 'Ad updated successfully'
-      });
+      return res.json({ success: true, message: 'Tangazo limebadilishwa kikamilifu' });
     } catch (error) {
-      console.error('Update ad error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to update ad',
-        error: error.message
-      });
-    }
-  }
-
-  // ==================== ANALYTICS & DASHBOARD METHODS ====================
-  async adminAnalytics(req, res) {
-    try {
-      const [totalViews] = await db.execute(`
-        SELECT COUNT(*) as count FROM ad_views
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      `);
-      const [completion] = await db.execute(`
-        SELECT
-          CASE
-            WHEN COUNT(*) = 0 THEN 0
-            ELSE AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100
-          END as rate
-        FROM ad_views av
-        JOIN ads a ON av.ad_id = a.id
-      `);
-      const [avgWatchTime] = await db.execute(`
-        SELECT COALESCE(AVG(watched_duration), 0) as avgTime
-        FROM ad_views
-        WHERE watched_duration > 0
-      `);
-      const salesTrend = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        const [daily] = await db.execute(
-          `SELECT COALESCE(SUM(price), 0) as total FROM vouchers WHERE is_used = 1 AND DATE(used_at) = ?`,
-          [dateStr]
-        );
-        salesTrend.push({
-          date: dateStr,
-          total: daily[0].total || 0
-        });
-      }
-      const [popularPackages] = await db.execute(`
-        SELECT p.name, COUNT(*) as count,
-               (COUNT(*) / (SELECT COUNT(*) FROM vouchers WHERE is_used = 1) * 100) as percentage
-        FROM vouchers v
-        JOIN packages p ON v.package_id = p.id
-        WHERE v.is_used = 1
-        GROUP BY p.name
-        ORDER BY count DESC
-        LIMIT 5
-      `);
-      const [viewsByLocation] = await db.execute(`
-        SELECT u.location, COUNT(av.id) as count,
-               (COUNT(av.id) / (SELECT COUNT(*) FROM ad_views) * 100) as percentage
-        FROM ad_views av
-        JOIN users u ON av.user_id = u.id
-        GROUP BY u.location
-        ORDER BY count DESC
-        LIMIT 5
-      `);
-      res.json({
-        success: true,
-        totalViews: totalViews[0].count || 0,
-        completionRate: Math.round(completion[0].rate || 0),
-        avgWatchTime: Math.round(avgWatchTime[0].avgTime || 0),
-        salesTrend,
-        popularPackages: popularPackages || [],
-        viewsByLocation: viewsByLocation || []
-      });
-    } catch (error) {
-      console.error('Analytics error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch analytics',
-        error: error.message
-      });
-    }
-  }
-
-  async reportsData(req, res) {
-    try {
-      const [totalAdViews] = await db.execute(`
-        SELECT COUNT(*) as count FROM ad_views
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      `);
-      const [newUsers] = await db.execute(`
-        SELECT COUNT(*) as count FROM users
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND role = "customer"
-      `);
-      const [pendingApprovals] = await db.execute('SELECT COUNT(*) as count FROM ads WHERE approved = 0');
-      res.json({
-        success: true,
-        totalAdViews: totalAdViews[0].count || 0,
-        newUsers: newUsers[0].count || 0,
-        pendingApprovals: pendingApprovals[0].count || 0
-      });
-    } catch (error) {
-      console.error('Reports data error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch reports data',
-        error: error.message
-      });
+      console.error('Hitilafu katika kubadilisha tangazo:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kubadilisha tangazo', error: error.message });
     }
   }
 
@@ -826,17 +1298,10 @@ class AdminController {
   async getRouters(req, res) {
     try {
       const [routers] = await db.execute('SELECT * FROM mikrotiks ORDER BY id DESC');
-      res.json({
-        success: true,
-        data: routers
-      });
+      return res.json({ success: true, data: routers, count: routers.length });
     } catch (error) {
-      console.error('Get routers error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch routers',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata routers:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata routers', error: error.message });
     }
   }
 
@@ -844,38 +1309,27 @@ class AdminController {
     try {
       const { routerID } = req.query;
       const health = await mikrotikService.getRouterHealth(routerID || 'router-default');
-      res.json({
-        success: true,
-        data: health
-      });
+      return res.json({ success: true, data: health });
     } catch (error) {
-      console.error('Get router health error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch router health',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata hali ya router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata hali ya router', error: error.message });
     }
   }
 
   async addRouter(req, res) {
     try {
       const { router_id, router_name, host, user, password, port, location, ssid } = req.body;
+      if (!router_id || !router_name || !host || !user || !password) {
+        return res.status(400).json({ success: false, message: 'Taarifa zote za msingi zinahitajika' });
+      }
       await db.execute(
-        'INSERT INTO mikrotiks (router_id, router_name, host, user, password, port, location, ssid, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "online")',
+        'INSERT INTO mikrotiks (router_id, router_name, host, user, password, port, location, ssid, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "online", NOW(), NOW())',
         [router_id, router_name, host, user, password, port || 8728, location, ssid]
       );
-      res.json({
-        success: true,
-        message: 'Router added successfully'
-      });
+      return res.json({ success: true, message: 'Router imeongezwa kikamilifu' });
     } catch (error) {
-      console.error('Add router error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to add router',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuongeza router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuongeza router', error: error.message });
     }
   }
 
@@ -883,21 +1337,18 @@ class AdminController {
     try {
       const { id } = req.params;
       const { router_name, host, user, password, port, location, ssid, status } = req.body;
+      const [routers] = await db.execute('SELECT id FROM mikrotiks WHERE id = ?', [id]);
+      if (routers.length === 0) {
+        return res.status(404).json({ success: false, message: 'Router hakupatikana' });
+      }
       await db.execute(
         'UPDATE mikrotiks SET router_name = ?, host = ?, user = ?, password = ?, port = ?, location = ?, ssid = ?, status = ?, updated_at = NOW() WHERE id = ?',
         [router_name, host, user, password, port, location, ssid, status, id]
       );
-      res.json({
-        success: true,
-        message: 'Router updated successfully'
-      });
+      return res.json({ success: true, message: 'Router imebadilishwa kikamilifu' });
     } catch (error) {
-      console.error('Update router error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to update router',
-        error: error.message
-      });
+      console.error('Hitilafu katika kubadilisha router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kubadilisha router', error: error.message });
     }
   }
 
@@ -905,18 +1356,10 @@ class AdminController {
     try {
       const { routerID } = req.params;
       const sessions = await mikrotikService.getHotspotUsers(routerID);
-      res.json({
-        success: true,
-        data: sessions,
-        count: sessions.length
-      });
+      return res.json({ success: true, data: sessions, count: sessions.length });
     } catch (error) {
-      console.error('Get router sessions error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch router sessions',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata sessions za router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata sessions', error: error.message });
     }
   }
 
@@ -924,17 +1367,13 @@ class AdminController {
     try {
       const { routerID } = req.params;
       const success = await mikrotikService.rebootRouter(routerID);
-      res.json({
+      return res.json({
         success: success,
-        message: success ? 'Router reboot initiated' : 'Failed to reboot router'
+        message: success ? 'Router imeanzishwa upya' : 'Imeshindikana kuanzisha upya router'
       });
     } catch (error) {
-      console.error('Reboot router error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to reboot router',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuanzisha upya router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuanzisha upya router', error: error.message });
     }
   }
 
@@ -942,37 +1381,29 @@ class AdminController {
   async getSystemSettings(req, res) {
     try {
       const [settings] = await db.execute('SELECT * FROM system_settings');
-      res.json({ success: true, data: settings });
+      return res.json({ success: true, data: settings, count: settings.length });
     } catch (error) {
-      console.error('Get system settings error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch system settings',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata mipangilio ya mfumo:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata mipangilio', error: error.message });
     }
   }
 
   async updateSystemSettings(req, res) {
     try {
       const { settings } = req.body;
+      if (!settings || Object.keys(settings).length === 0) {
+        return res.status(400).json({ success: false, message: 'Hakuna mipangilio iliyowasilishwa' });
+      }
       for (const [key, value] of Object.entries(settings)) {
         await db.execute(
           'UPDATE system_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?',
           [value, key]
         );
       }
-      res.json({
-        success: true,
-        message: 'System settings updated successfully'
-      });
+      return res.json({ success: true, message: 'Mipangilio ya mfumo imesasishwa kikamilifu' });
     } catch (error) {
-      console.error('Update system settings error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to update system settings',
-        error: error.message
-      });
+      console.error('Hitilafu katika kusasisha mipangilio:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kusasisha mipangilio', error: error.message });
     }
   }
 
@@ -987,42 +1418,36 @@ class AdminController {
         ORDER BY n.created_at DESC
         LIMIT 50
       `);
-      res.json({ success: true, data: notifications });
+      return res.json({ success: true, data: notifications, count: notifications.length });
     } catch (error) {
-      console.error('Get notifications error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch notifications',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata arifa:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata arifa', error: error.message });
     }
   }
 
   async markNotificationRead(req, res) {
     try {
       const { id } = req.params;
+      const [notifications] = await db.execute('SELECT id FROM notifications WHERE id = ?', [id]);
+      if (notifications.length === 0) {
+        return res.status(404).json({ success: false, message: 'Arifa hakupatikana' });
+      }
       await db.execute('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
-      res.json({
-        success: true,
-        message: 'Notification marked as read'
-      });
+      return res.json({ success: true, message: 'Arifa imesomwa' });
     } catch (error) {
-      console.error('Mark notification read error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to mark notification as read',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuweka arifa kama ilivyosomwa:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuweka arifa kama ilivyosomwa', error: error.message });
     }
   }
 
-  // ==================== EJS COMPATIBILITY METHODS ====================
+  // ==================== UTILITY METHODS ====================
   async getAdViewsData(req, res) {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, limit = 100 } = req.query;
       let query = `
-        SELECT a.title, a.duration, av.watched_duration, av.created_at,
-               u.name as user_name, u.location
+        SELECT
+          a.title, a.duration, av.watched_duration, av.created_at,
+          u.name as user_name, u.location, av.data_earned
         FROM ad_views av
         JOIN ads a ON av.ad_id = a.id
         JOIN users u ON av.user_id = u.id
@@ -1033,61 +1458,32 @@ class AdminController {
         query += ' AND DATE(av.created_at) BETWEEN ? AND ?';
         params.push(startDate, endDate);
       }
-      query += ' ORDER BY av.created_at DESC LIMIT 100';
+      query += ' ORDER BY av.created_at DESC LIMIT ?';
+      params.push(parseInt(limit));
       const [views] = await db.execute(query, params);
-      res.json({
-        success: true,
-        data: views,
-        count: views.length
-      });
+      return res.json({ success: true, data: views, count: views.length });
     } catch (error) {
-      console.error('Get ad views error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch ad views',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata data ya maonyesho:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata data ya maonyesho', error: error.message });
     }
   }
 
   async getSponsors(req, res) {
     try {
       const [sponsors] = await db.execute('SELECT id, name, email FROM users WHERE role = "sponsor"');
-      res.json({ success: true, data: sponsors });
+      return res.json({ success: true, data: sponsors, count: sponsors.length });
     } catch (error) {
-      console.error('Get sponsors error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch sponsors',
-        error: error.message
-      });
+      console.error('Hitilafu katika kupata wadhamini:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata wadhamini', error: error.message });
     }
   }
 
-  async getPackages(req, res) {
-    try {
-      const [packages] = await db.execute('SELECT * FROM packages WHERE is_active = 1');
-      res.json({ success: true, data: packages });
-    } catch (error) {
-      console.error('Get packages error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to fetch packages',
-        error: error.message
-      });
-    }
-  }
-
-  // ==================== LEGACY/UTILITY METHODS ====================
   async setUnlimitedStatus(req, res) {
     try {
       const { user_id, is_unlimited } = req.body;
-      const [users] = await db.execute('SELECT id FROM users WHERE id = ?', [user_id]);
+      const [users] = await db.execute('SELECT id, name FROM users WHERE id = ?', [user_id]);
       if (users.length === 0) {
-        return res.json({
-          success: false,
-          message: 'User not found'
-        });
+        return res.status(404).json({ success: false, message: 'Mtumiaji hakupatikana' });
       }
       const now = new Date();
       if (is_unlimited) {
@@ -1096,28 +1492,18 @@ class AdminController {
            usage_until = '2030-12-31 23:59:59', updated_at = ? WHERE id = ?`,
           [now, now, user_id]
         );
-        res.json({
-          success: true,
-          message: 'User granted unlimited access until 2030'
-        });
+        return res.json({ success: true, message: 'Mtumiaji amepewa ufikiaji usio na kikomo hadi 2030' });
       } else {
         await db.execute(
-          `UPDATE users SET package = 'NO PACKAGE', usage_start = ?,
+          `UPDATE users SET package = 'HAKUNA KIFURUSHI', usage_start = ?,
            usage_until = ?, updated_at = ? WHERE id = ?`,
           [now, now, now, user_id]
         );
-        res.json({
-          success: true,
-          message: 'User unlimited access removed'
-        });
+        return res.json({ success: true, message: 'Ufikiaji usio na kikomo umeondolewa kwa mtumiaji' });
       }
     } catch (error) {
-      console.error('Unlimited status error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to update user status',
-        error: error.message
-      });
+      console.error('Hitilafu katika kuweka hali ya ufikiaji usio na kikomo:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kuweka hali ya mtumiaji', error: error.message });
     }
   }
 
@@ -1126,23 +1512,12 @@ class AdminController {
       const { id } = req.params;
       const [result] = await db.execute('DELETE FROM users WHERE id = ?', [id]);
       if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
+        return res.status(404).json({ success: false, message: 'Mtumiaji hakupatikana' });
       }
-      res.json({
-        success: true,
-        message: 'User deleted successfully',
-        deletedId: id
-      });
+      return res.json({ success: true, message: 'Mtumiaji amefutwa kikamilifu', deletedId: id });
     } catch (error) {
-      console.error('Delete user error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to delete user',
-        error: error.message
-      });
+      console.error('Hitilafu katika kufuta mtumiaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kufuta mtumiaji', error: error.message });
     }
   }
 
@@ -1152,24 +1527,171 @@ class AdminController {
       const [activeUsers] = await db.execute('SELECT COUNT(*) as count FROM users WHERE usage_until > NOW() AND role = "customer"');
       const [newUsersToday] = await db.execute('SELECT COUNT(*) as count FROM users WHERE DATE(created_at) = CURDATE() AND role = "customer"');
       const [totalRevenue] = await db.execute('SELECT COALESCE(SUM(moneyspent), 0) as total FROM users WHERE role = "customer"');
-      res.json({
+      return res.json({
         success: true,
         data: {
           totalUsers: totalUsers[0].count || 0,
           activeUsers: activeUsers[0].count || 0,
           newUsersToday: newUsersToday[0].count || 0,
-          totalRevenue: totalRevenue[0].total || 0
+          totalRevenue: parseFloat(totalRevenue[0].total) || 0
         }
       });
     } catch (error) {
-      console.error('User stats error:', error);
-      res.status(500).json({
+      console.error('Hitilafu katika takwimu za watumiaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata takwimu za watumiaji', error: error.message });
+    }
+  }
+
+  // ==================== RENDER PAGE METHODS ====================
+  async renderVideoAdsPage(req, res) {
+    try {
+      return res.render('admin/video-ads', {
+        title: 'Matangazo ya Video',
+        activePage: 'video-ads',
+        userName: req.session.admin_user?.name || 'Admin'
+      });
+    } catch (error) {
+      console.error('Hitilafu katika video ads page:', error);
+      return res.render('admin/video-ads', {
+        title: 'Matangazo ya Video',
+        activePage: 'video-ads',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Imeshindikana kupakia ukurasa'
+      });
+    }
+  }
+
+  async renderVouchersPage(req, res) {
+    try {
+      return res.render('admin/vouchers', {
+        title: 'Usimamizi wa Vouchers',
+        activePage: 'vouchers',
+        userName: req.session.admin_user?.name || 'Admin'
+      });
+    } catch (error) {
+      console.error('Hitilafu katika vouchers page:', error);
+      return res.render('admin/vouchers', {
+        title: 'Usimamizi wa Vouchers',
+        activePage: 'vouchers',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Imeshindikana kupakia ukurasa'
+      });
+    }
+  }
+
+  async renderUsersPage(req, res) {
+    try {
+      return res.render('admin/users', {
+        title: 'Usimamizi wa Watumiaji',
+        activePage: 'users',
+        userName: req.session.admin_user?.name || 'Admin'
+      });
+    } catch (error) {
+      console.error('Hitilafu katika users page:', error);
+      return res.render('admin/users', {
+        title: 'Usimamizi wa Watumiaji',
+        activePage: 'users',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Imeshindikana kupakia ukurasa'
+      });
+    }
+  }
+
+  async renderReportsPage(req, res) {
+    try {
+      return res.render('admin/reports', {
+        title: 'Ripoti za Mfumo',
+        activePage: 'reports',
+        userName: req.session.admin_user?.name || 'Admin'
+      });
+    } catch (error) {
+      console.error('Hitilafu katika reports page:', error);
+      return res.render('admin/reports', {
+        title: 'Ripoti za Mfumo',
+        activePage: 'reports',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Imeshindikana kupakia ukurasa'
+      });
+    }
+  }
+
+  async renderSettingsPage(req, res) {
+    try {
+      return res.render('admin/settings', {
+        title: 'Mipangilio ya Mfumo',
+        activePage: 'settings',
+        userName: req.session.admin_user?.name || 'Admin'
+      });
+    } catch (error) {
+      console.error('Hitilafu katika settings page:', error);
+      return res.render('admin/settings', {
+        title: 'Mipangilio ya Mfumo',
+        activePage: 'settings',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Imeshindikana kupakia ukurasa'
+      });
+    }
+  }
+
+  async renderMyAdsPage(req, res) {
+    try {
+      const [ads] = await db.execute(`
+        SELECT a.*,
+               COUNT(av.id) as views_count,
+               COALESCE(SUM(av.data_earned), 0) as total_data_earned
+        FROM ads a
+        LEFT JOIN ad_views av ON a.id = av.ad_id
+        WHERE a.sponsor_id = ?
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
+      `, [req.session.admin_user.id]);
+
+      return res.render('admin/my-ads', {
+        title: 'Matangazo Yangu',
+        activePage: 'my-ads',
+        userName: req.session.admin_user?.name || 'Admin',
+        myAdsList: ads || []
+      });
+    } catch (error) {
+      console.error('Hitilafu katika render my-ads:', error);
+      return res.render('admin/my-ads', {
+        title: 'Matangazo Yangu',
+        activePage: 'my-ads',
+        userName: req.session.admin_user?.name || 'Admin',
+        myAdsList: [],
+        error: 'Imeshindikana kupakia matangazo yako'
+      });
+    }
+  }
+
+  async getMyAdsAPI(req, res) {
+    try {
+      const [ads] = await db.execute(`
+        SELECT a.*,
+               COUNT(av.id) as views_count,
+               COALESCE(SUM(av.data_earned), 0) as total_data_earned
+        FROM ads a
+        LEFT JOIN ad_views av ON a.id = av.ad_id
+        WHERE a.sponsor_id = ?
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
+      `, [req.session.admin_user.id]);
+
+      return res.json({
+        success: true,
+        data: ads || [],
+        count: ads.length
+      });
+    } catch (error) {
+      console.error('Hitilafu katika API my-ads:', error);
+      return res.status(500).json({
         success: false,
-        message: 'Failed to fetch user statistics',
+        message: 'Imeshindikana kupakia matangazo',
         error: error.message
       });
     }
   }
 }
 
+// ==================== EXPORT INSTANCE ====================
 module.exports = new AdminController();

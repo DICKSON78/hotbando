@@ -27,4 +27,9 @@ router.get('/device-status', hotspotController.getDeviceStatus);
 router.get('/user-info/:phone_number', hotspotController.getUserInfo);
 router.post('/logout', hotspotController.logout);
 
+// Routes za matangazo
+router.get('/ads/get-random', hotspotController.getAd);
+router.post('/ads/complete', hotspotController.completeAd);
+router.get('/advertise', hotspotController.advertise);
+
 module.exports = router;
