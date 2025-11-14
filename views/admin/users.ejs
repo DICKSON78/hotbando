@@ -1,120 +1,406 @@
 <%
 const usersContent = `
-<div class="bg-white rounded-lg shadow-sm p-6">
-    <h2 class="text-xl font-semibold text-gray-800 mb-6">Usimamizi wa Watumiaji na Routers</h2>
+<div class="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6 border border-gray-100">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-semibold text-gray-800">Usimamizi wa Watumiaji na Routers</h2>
+        <div class="flex items-center space-x-3">
+            <button onclick="exportUsersData()" class="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-md flex items-center">
+                <i class="fas fa-download mr-2"></i>
+                Pakua Data
+            </button>
+            <button onclick="refreshAllData()" class="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-md flex items-center">
+                <i class="fas fa-sync-alt mr-2"></i>
+                Onyesha Upya
+            </button>
+        </div>
+    </div>
     
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
+            <div class="text-orange-600 font-semibold text-lg" id="total-users-count">0</div>
+            <div class="text-orange-800 text-sm">Watumiaji Wote</div>
+        </div>
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
+            <div class="text-orange-600 font-semibold text-lg" id="online-users-count">0</div>
+            <div class="text-orange-800 text-sm">Wanaotumia Sasa</div>
+        </div>
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
+            <div class="text-orange-600 font-semibold text-lg" id="active-routers-count">0</div>
+            <div class="text-orange-800 text-sm">Routers Zilizo Online</div>
+        </div>
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
+            <div class="text-orange-600 font-semibold text-lg" id="total-sessions">0</div>
+            <div class="text-orange-800 text-sm">Mikondo ya Leo</div>
+        </div>
+    </div>
+
     <!-- Tabs Navigation -->
     <div class="border-b border-gray-200 mb-6">
         <nav class="-mb-px flex space-x-8">
-            <button id="users-tab" class="tab-button active py-4 px-1 border-b-2 border-primary font-medium text-sm text-primary">
+            <button id="users-tab" class="tab-button active py-4 px-1 border-b-2 border-primary font-medium text-sm text-primary transition-all duration-300">
+                <i class="fas fa-users mr-2"></i>
                 Watumiaji Wote
             </button>
-            <button id="online-tab" class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
+            <button id="online-tab" class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all duration-300">
+                <i class="fas fa-wifi mr-2"></i>
                 Watumiaji Wenye Mtandao
             </button>
-            <button id="routers-tab" class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
+            <button id="routers-tab" class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all duration-300">
+                <i class="fas fa-router mr-2"></i>
                 Routers Zilizo Online
             </button>
         </nav>
     </div>
 
-    <!-- Search Input -->
-    <div class="mb-4">
-        <input type="text" id="search" placeholder="Tafuta..." class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition bg-secondary-light text-gray-800">
+    <!-- Search and Filters -->
+    <div class="mb-6 grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div class="lg:col-span-2">
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-search text-gray-400"></i>
+                </div>
+                <input type="text" id="search" placeholder="Tafuta kwa jina, namba ya simu, eneo..." 
+                       class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-300 bg-white text-gray-800 shadow-sm">
+            </div>
+        </div>
+        <div>
+            <select id="status-filter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-300 bg-white shadow-sm">
+                <option value="">Hali Zote</option>
+                <option value="active">Wanaotumia</option>
+                <option value="inactive">Hawatumii</option>
+                <option value="expired">Muda Umekwisha</option>
+            </select>
+        </div>
+        <div>
+            <select id="location-filter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-300 bg-white shadow-sm">
+                <option value="">Maeneo Yote</option>
+                <option value="dar">Dar es Salaam</option>
+                <option value="mwanza">Mwanza</option>
+                <option value="arusha">Arusha</option>
+                <option value="mbeya">Mbeya</option>
+            </select>
+        </div>
     </div>
 
     <!-- Tab Content - Watumiaji Wote -->
     <div id="users-content" class="tab-content active">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead>
-                    <tr class="bg-secondary-light">
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Namba ya Simu</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Muda Ulobaki</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Bure (MB)</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eneo</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe</th>
-                        <th scope="col" class="relative px-6 py-3">
-                            <span class="sr-only">Vitendo</span>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200" id="users-table">
-                    <tr>
-                        <td colspan="7" class="px-6 py-4 text-center text-gray-500">Inapakia watumiaji...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="mt-4 flex justify-between items-center">
-            <div class="text-sm text-gray-500" id="users-pagination-info">
-                Inapakia...
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Mtumiaji</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Mawasiliano</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Muda Ulobaki</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Data Bure</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Eneo</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Tarehe</th>
+                            <th scope="col" class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Vitendo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 bg-white" id="users-table">
+                        <tr>
+                            <td colspan="7" class="px-6 py-8 text-center">
+                                <div class="flex justify-center items-center">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                    <span class="ml-3 text-gray-600">Inapakia watumiaji...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="flex space-x-2" id="users-pagination">
-                <!-- Pagination buttons will be inserted here -->
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                <div class="text-sm text-gray-600" id="users-pagination-info">
+                    Inapakia...
+                </div>
+                <div class="flex space-x-2" id="users-pagination">
+                    <!-- Pagination buttons will be inserted here -->
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Tab Content - Watumiaji Wenye Mtandao -->
     <div id="online-content" class="tab-content hidden">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead>
-                    <tr class="bg-secondary-light">
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Namba ya Simu</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MAC Address</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Router</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Muda Ulobaki</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eneo</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Muda Ulopita</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200" id="online-table">
-                    <tr>
-                        <td colspan="7" class="px-6 py-4 text-center text-gray-500">Inapakia watumiaji walio online...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="mt-4 text-sm text-gray-500" id="online-count">
-            Inapakia...
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gradient-to-r from-green-50 to-green-100">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Mtumiaji</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Namba ya Simu</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Anwani ya MAC</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Router</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Muda Ulobaki</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Eneo</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Muda Ulopita</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 bg-white" id="online-table">
+                        <tr>
+                            <td colspan="7" class="px-6 py-8 text-center">
+                                <div class="flex justify-center items-center">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                                    <span class="ml-3 text-gray-600">Inapakia watumiaji walio online...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 bg-green-50">
+                <div class="text-sm text-green-700 font-medium" id="online-count">
+                    Inapakia...
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Tab Content - Routers Zilizo Online -->
     <div id="routers-content" class="tab-content hidden">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead>
-                    <tr class="bg-secondary-light">
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina la Router</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eneo</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SSID</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Watumiaji Wanaoongo</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Muda wa Mwisho</th>
-                        <th scope="col" class="relative px-6 py-3">
-                            <span class="sr-only">Vitendo</span>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200" id="routers-table">
-                    <tr>
-                        <td colspan="7" class="px-6 py-4 text-center text-gray-500">Inapakia routers...</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gradient-to-r from-orange-50 to-orange-100">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Jina la Router</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Eneo</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SSID</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Hali</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Watumiaji</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Muda wa Mwisho</th>
+                            <th scope="col" class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Vitendo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 bg-white" id="routers-table">
+                        <tr>
+                            <td colspan="7" class="px-6 py-8 text-center">
+                                <div class="flex justify-center items-center">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+                                    <span class="ml-3 text-gray-600">Inapakia routers...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- User Details Modal -->
+<div id="user-details-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden transform transition-all duration-300">
+        <div class="flex justify-between items-center p-6 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-white">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center mr-3">
+                    <i class="fas fa-user text-white"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-800" id="user-details-title">Maelezo ya Mtumiaji</h3>
+                    <p class="text-sm text-gray-600">Taarifa za kina za mtumiaji</p>
+                </div>
+            </div>
+            <button onclick="closeUserDetailsModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300 group">
+                <i class="fas fa-times text-gray-500 group-hover:text-gray-700"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[60vh]">
+            <div id="user-details-content">
+                <div class="text-center py-8">
+                    <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-spinner fa-spin text-orange-500"></i>
+                    </div>
+                    <p class="text-gray-500">Inapakia maelezo...</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex justify-end p-4 border-t border-gray-200 bg-gray-50 space-x-3">
+            <button onclick="closeUserDetailsModal()" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-300">
+                Funga
+            </button>
+            <button onclick="suspendCurrentUser()" class="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-all duration-300 shadow-md">
+                <i class="fas fa-pause mr-2"></i>
+                Zima Mtumiaji
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Suspend User Modal -->
+<div id="suspend-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-pause text-yellow-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Zima Mtumiaji</h3>
+            <p class="text-gray-600 mb-4" id="suspend-message">Una uhakika unataka kumzima mtumiaji huyu?</p>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2 text-left">Sababu:</label>
+                <textarea id="suspend-reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all duration-300" rows="3" placeholder="Andika sababu ya kumzima mtumiaji..."></textarea>
+            </div>
+            <div class="flex space-x-3 justify-center">
+                <button onclick="closeSuspendModal()" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-300">
+                    Ghairi
+                </button>
+                <button onclick="confirmSuspendUser()" class="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-all duration-300 shadow-md">
+                    <i class="fas fa-pause mr-2"></i>
+                    Thibitisha Kuzima
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete User Modal -->
+<div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-trash text-red-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Futa Mtumiaji</h3>
+            <p class="text-gray-600 mb-6" id="delete-message">Kitendo hiki hakiwezi kutenduliwa. Una uhakika?</p>
+            <div class="flex space-x-3 justify-center">
+                <button onclick="closeDeleteModal()" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-300">
+                    Ghairi
+                </button>
+                <button onclick="confirmDeleteUser()" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300 shadow-md">
+                    <i class="fas fa-trash mr-2"></i>
+                    Thibitisha Kufuta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div id="success-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Imefanikiwa!</h3>
+            <p class="text-gray-600 mb-4" id="success-message">Operesheni imekamilika kikamilifu</p>
+            <button onclick="closeSuccessModal()" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Error Modal -->
+<div id="error-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-circle text-red-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Hitilafu</h3>
+            <p class="text-gray-600 mb-6" id="error-message">Hitilafu imetokea wakati wa kukamilisha operesheni</p>
+            <button onclick="closeErrorModal()" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Warning Modal -->
+<div id="warning-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-yellow-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Taarifa Muhimu</h3>
+            <p class="text-gray-600 mb-6" id="warning-message">Tafadhali andika sababu ya kumzima mtumiaji</p>
+            <button onclick="closeWarningModal()" class="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Reboot Router Modal -->
+<div id="reboot-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-redo text-orange-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Reboot Router</h3>
+            <p class="text-gray-600 mb-6" id="reboot-message">Una uhakika unataka kureboot router hii? Hii itasumbua watumiaji wote waliounganishwa.</p>
+            <div class="flex space-x-3 justify-center">
+                <button onclick="closeRebootModal()" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-300">
+                    Ghairi
+                </button>
+                <button onclick="confirmRebootRouter()" class="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-all duration-300 shadow-md">
+                    <i class="fas fa-redo mr-2"></i>
+                    Thibitisha Reboot
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Coming Soon Modal -->
+<div id="coming-soon-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-tools text-orange-600 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">Inafanyiwa Kazi</h3>
+            <p class="text-gray-600 mb-6">Kipengele hiki kinafanyiwa kazi na kitapatikana hivi karibuni.</p>
+            <button onclick="closeComingSoonModal()" class="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-all duration-300 shadow-md w-full">
+                Sawa
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .backdrop-blur-sm {
+        backdrop-filter: blur(4px);
+    }
+    
+    .shadow-2xl {
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    
+    .tab-content {
+        display: none;
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .tab-button {
+        transition: all 0.3s ease;
+    }
+    
+    .tab-button:hover {
+        transform: translateY(-1px);
+    }
+</style>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         let currentPage = 1;
         const limit = 50;
+        let currentUserId = null;
+        let currentRouterId = null;
 
         // Tab switching functionality
         const tabs = {
@@ -154,6 +440,7 @@ const usersContent = `
         loadUsers(currentPage, '');
         loadOnlineUsers();
         loadRouters();
+        loadDashboardStats();
 
         // Search functionality
         const searchInput = document.getElementById('search');
@@ -170,123 +457,225 @@ const usersContent = `
             }, 500);
         });
 
+        // Filter functionality
+        document.getElementById('status-filter').addEventListener('change', function() {
+            currentPage = 1;
+            loadUsers(currentPage, searchInput.value);
+        });
+
+        document.getElementById('location-filter').addEventListener('change', function() {
+            currentPage = 1;
+            loadUsers(currentPage, searchInput.value);
+        });
+
+        // Load dashboard statistics
+        function loadDashboardStats() {
+            // Simulate API calls - replace with actual endpoints
+            setTimeout(() => {
+                document.getElementById('total-users-count').textContent = '1,247';
+                document.getElementById('online-users-count').textContent = '89';
+                document.getElementById('active-routers-count').textContent = '23';
+                document.getElementById('total-sessions').textContent = '456';
+            }, 1000);
+        }
+
         // Load users function
         function loadUsers(page, searchQuery = '') {
-            fetch(\`/api/admin/customers?page=\${page}&limit=\${limit}&search=\${encodeURIComponent(searchQuery)}\`)
-                .then(response => response.json())
+            const tableBody = document.getElementById('users-table');
+            tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center"><div class="flex justify-center items-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div><span class="ml-3 text-gray-600">Inapakia...</span></div></td></tr>';
+
+            fetch('/admin/customers?page=' + page + '&limit=' + limit + '&search=' + encodeURIComponent(searchQuery))
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (!data.success) {
                         console.error('Failed to load users:', data.message);
+                        showErrorMessage('Hitilafu: ' + data.message);
                         return;
                     }
 
-                    const tableBody = document.getElementById('users-table');
                     tableBody.innerHTML = '';
 
                     if (data.data.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Hakuna watumiaji waliopatikana</td></tr>';
+                        tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500"><div class="flex flex-col items-center"><i class="fas fa-users text-gray-400 text-4xl mb-2"></i><p>Hakuna watumiaji waliopatikana</p></div></td></tr>';
                         return;
                     }
 
                     data.data.forEach(user => {
                         const now = new Date();
-                        const usageUntil = new Date(user.usage_until);
-                        const isActive = usageUntil > now;
+                        const usageUntil = user.usage_until ? new Date(user.usage_until) : null;
+                        const isActive = usageUntil && usageUntil > now;
                         const remainingSeconds = isActive ? Math.max(0, (usageUntil - now) / 1000) : 0;
                         
                         const remainingTime = formatRemainingTime(remainingSeconds);
-                        const freeMB = Math.round(user.free_bytes / (1024 * 1024));
+                        const freeMB = Math.round((user.free_bytes || 0) / (1024 * 1024));
+
+                        const statusBadge = isActive ? 
+                            '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-circle text-xs mr-1"></i> Ana Tumia</span>' :
+                            '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-circle text-xs mr-1"></i> Ha Tumii</span>';
 
                         const row = document.createElement('tr');
-                        row.innerHTML = \`
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\${user.name || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${user.phone_number || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm \${isActive ? 'text-green-600' : 'text-red-600'}">\${remainingTime}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${freeMB} MB</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${user.location || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${new Date(user.created_at).toLocaleDateString('sw-TZ')}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button onclick="suspendUser(\${user.id})" class="text-yellow-600 hover:text-yellow-900 mr-3">Zima</button>
-                                <button onclick="deleteUser(\${user.id})" class="text-red-600 hover:text-red-900">Futa</button>
-                            </td>
-                        \`;
+                        row.className = 'hover:bg-gray-50 transition-colors duration-200';
+                        row.innerHTML = 
+                            '<td class="px-6 py-4 whitespace-nowrap">' +
+                                '<div class="flex items-center">' +
+                                    '<div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">' +
+                                        (user.name ? user.name.charAt(0).toUpperCase() : 'U') +
+                                    '</div>' +
+                                    '<div>' +
+                                        '<div class="font-medium text-gray-900">' + (user.name || 'N/A') + '</div>' +
+                                        '<div class="text-sm text-gray-500">' + statusBadge + '</div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">' + (user.phone_number || 'N/A') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap">' +
+                                '<span class="text-sm ' + (isActive ? 'text-green-600 font-semibold' : 'text-red-600') + '">' +
+                                    remainingTime +
+                                '</span>' +
+                            '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' +
+                                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">' +
+                                    freeMB + ' MB' +
+                                '</span>' +
+                            '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (user.location || 'N/A') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (user.created_at ? new Date(user.created_at).toLocaleDateString('sw-TZ') : 'N/A') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">' +
+                                '<button onclick="viewUserDetails(' + user.id + ')" class="text-orange-600 hover:text-orange-900 px-3 py-1 border border-orange-600 rounded-lg hover:bg-orange-50 transition-all duration-300 group">' +
+                                    '<i class="fas fa-eye group-hover:scale-110 transition-transform"></i>' +
+                                '</button>' +
+                                '<button onclick="showSuspendModal(' + user.id + ', \\'' + (user.name || 'N/A') + '\\')" class="text-yellow-600 hover:text-yellow-900 px-3 py-1 border border-yellow-600 rounded-lg hover:bg-yellow-50 transition-all duration-300 group">' +
+                                    '<i class="fas fa-pause group-hover:scale-110 transition-transform"></i>' +
+                                '</button>' +
+                                '<button onclick="showDeleteModal(' + user.id + ', \\'' + (user.name || 'N/A') + '\\')" class="text-red-600 hover:text-red-900 px-3 py-1 border border-red-600 rounded-lg hover:bg-red-50 transition-all duration-300 group">' +
+                                    '<i class="fas fa-trash group-hover:scale-110 transition-transform"></i>' +
+                                '</button>' +
+                            '</td>';
                         tableBody.appendChild(row);
                     });
 
                     // Update pagination
                     updatePagination(data.pagination, page, searchQuery);
                 })
-                .catch(error => console.error('Users fetch error:', error));
+                .catch(error => {
+                    console.error('Users fetch error:', error);
+                    showErrorMessage('Hitilafu ya mtandao: ' + error.message);
+                });
         }
 
         // Load online users function
         function loadOnlineUsers() {
-            fetch('/api/admin/online-customers')
-                .then(response => response.json())
+            const tableBody = document.getElementById('online-table');
+            tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center"><div class="flex justify-center items-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div><span class="ml-3 text-gray-600">Inapakia...</span></div></td></tr>';
+
+            fetch('/admin/online-customers')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (!data.success) {
                         console.error('Failed to load online users:', data.message);
+                        showErrorMessage('Hitilafu: ' + data.message);
                         return;
                     }
 
-                    const tableBody = document.getElementById('online-table');
                     const countElement = document.getElementById('online-count');
-                    
                     tableBody.innerHTML = '';
 
                     if (data.data.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Hakuna watumiaji walio online kwa sasa</td></tr>';
+                        tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500"><div class="flex flex-col items-center"><i class="fas fa-wifi text-gray-400 text-4xl mb-2"></i><p>Hakuna watumiaji walio online kwa sasa</p></div></td></tr>';
                         countElement.textContent = 'Hakuna watumiaji walio online';
                         return;
                     }
 
                     data.data.forEach(user => {
                         const now = new Date();
-                        const usageUntil = new Date(user.usage_until);
-                        const remainingSeconds = Math.max(0, (usageUntil - now) / 1000);
+                        const usageUntil = user.usage_until ? new Date(user.usage_until) : null;
+                        const remainingSeconds = usageUntil ? Math.max(0, (usageUntil - now) / 1000) : 0;
                         const remainingTime = formatRemainingTime(remainingSeconds);
                         const minutesAgo = user.minutes_ago || 0;
 
                         const row = document.createElement('tr');
-                        row.innerHTML = \`
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\${user.name || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${user.phone_number || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">\${user.mac_address || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${user.last_router_id || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">\${remainingTime}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${user.location || 'N/A'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${minutesAgo} dakika zilizopita</td>
-                        \`;
+                        row.className = 'hover:bg-green-50 transition-colors duration-200';
+                        row.innerHTML = 
+                            '<td class="px-6 py-4 whitespace-nowrap">' +
+                                '<div class="flex items-center">' +
+                                    '<div class="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-xs mr-3">' +
+                                        '<i class="fas fa-wifi text-xs"></i>' +
+                                    '</div>' +
+                                    '<div class="font-medium text-gray-900">' + (user.name || 'N/A') + '</div>' +
+                                '</div>' +
+                            '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">' + (user.phone_number || 'N/A') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap">' +
+                                '<span class="text-sm text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">' + (user.mac_address || 'N/A') + '</span>' +
+                            '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (user.last_router_id || 'N/A') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap">' +
+                                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">' +
+                                    remainingTime +
+                                '</span>' +
+                            '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (user.location || 'N/A') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' +
+                                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">' +
+                                    minutesAgo + ' dakika' +
+                                '</span>' +
+                            '</td>';
                         tableBody.appendChild(row);
                     });
 
-                    countElement.textContent = \`Jumla: \${data.count} watumiaji walio online\`;
+                    countElement.textContent = 'Jumla: ' + data.count + ' watumiaji walio online - ' + new Date().toLocaleTimeString('sw-TZ');
                 })
-                .catch(error => console.error('Online users fetch error:', error));
+                .catch(error => {
+                    console.error('Online users fetch error:', error);
+                    showErrorMessage('Hitilafu ya mtandao: ' + error.message);
+                });
         }
 
         // Load routers function
         function loadRouters() {
-            fetch('/api/admin/routers')
-                .then(response => response.json())
+            const tableBody = document.getElementById('routers-table');
+            tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center"><div class="flex justify-center items-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div><span class="ml-3 text-gray-600">Inapakia...</span></div></td></tr>';
+
+            fetch('/admin/routers')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (!data.success) {
                         console.error('Failed to load routers:', data.message);
+                        showErrorMessage('Hitilafu: ' + data.message);
                         return;
                     }
 
-                    const tableBody = document.getElementById('routers-table');
                     tableBody.innerHTML = '';
 
                     if (data.data.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Hakuna routers zilizopatikana</td></tr>';
+                        tableBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500"><div class="flex flex-col items-center"><i class="fas fa-router text-gray-400 text-4xl mb-2"></i><p>Hakuna routers zilizopatikana</p></div></td></tr>';
                         return;
                     }
 
                     // Get online users count for each router
-                    Promise.all(data.data.map(router => 
-                        fetch(\`/api/admin/router-sessions/\${router.router_id}\`)
-                            .then(res => res.json())
+                    const routerPromises = data.data.map(router => 
+                        fetch('/admin/router-sessions/' + router.router_id)
+                            .then(res => {
+                                if (!res.ok) {
+                                    throw new Error('Router sessions failed');
+                                }
+                                return res.json();
+                            })
                             .then(sessionData => ({
                                 router,
                                 onlineCount: sessionData.success ? sessionData.count : 0
@@ -295,32 +684,64 @@ const usersContent = `
                                 router,
                                 onlineCount: 0
                             }))
-                    )).then(results => {
+                    );
+
+                    Promise.all(routerPromises).then(results => {
                         results.forEach(({router, onlineCount}) => {
-                            const statusClass = router.status === 'online' ? 'text-green-600' : 
-                                              router.status === 'offline' ? 'text-red-600' : 'text-yellow-600';
+                            const statusClass = router.status === 'online' ? 
+                                'text-green-600 bg-green-100' : 
+                                router.status === 'offline' ? 
+                                'text-red-600 bg-red-100' : 
+                                'text-yellow-600 bg-yellow-100';
                             
                             const statusText = router.status === 'online' ? 'Online' :
                                               router.status === 'offline' ? 'Offline' : 'Maintenance';
 
+                            const statusIcon = router.status === 'online' ? 'fa-wifi' :
+                                             router.status === 'offline' ? 'fa-times-circle' : 'fa-tools';
+
                             const row = document.createElement('tr');
-                            row.innerHTML = \`
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\${router.router_name}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${router.location}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${router.ssid || 'N/A'}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm \${statusClass}">\${statusText}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${onlineCount} watumiaji</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${router.last_seen ? new Date(router.last_seen).toLocaleString('sw-TZ') : 'Hajajua'}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onclick="rebootRouter('\${router.router_id}')" class="text-blue-600 hover:text-blue-900 mr-3">Reboot</button>
-                                    <button onclick="editRouter(\${router.id})" class="text-primary hover:text-primary-dark">Hariri</button>
-                                </td>
-                            \`;
+                            row.className = 'hover:bg-orange-50 transition-colors duration-200';
+                            row.innerHTML = 
+                                '<td class="px-6 py-4 whitespace-nowrap">' +
+                                    '<div class="flex items-center">' +
+                                        '<div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">' +
+                                            '<i class="fas fa-router"></i>' +
+                                        '</div>' +
+                                        '<div class="font-medium text-gray-900">' + router.router_name + '</div>' +
+                                    '</div>' +
+                                '</td>' +
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + router.location + '</td>' +
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-orange-600">' + (router.ssid || 'N/A') + '</td>' +
+                                '<td class="px-6 py-4 whitespace-nowrap">' +
+                                    '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' + statusClass + '">' +
+                                        '<i class="fas ' + statusIcon + ' mr-1"></i>' +
+                                        statusText +
+                                    '</span>' +
+                                '</td>' +
+                                '<td class="px-6 py-4 whitespace-nowrap">' +
+                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ' + (onlineCount > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800') + '">' +
+                                        '<i class="fas fa-users mr-1"></i>' +
+                                        onlineCount + ' watumiaji' +
+                                    '</span>' +
+                                '</td>' +
+                                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (router.last_seen ? new Date(router.last_seen).toLocaleString('sw-TZ') : 'Hajajua') + '</td>' +
+                                '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">' +
+                                    '<button onclick="showRebootModal(\\'' + router.router_id + '\\', \\'' + router.router_name + '\\')" class="text-orange-600 hover:text-orange-900 px-3 py-1 border border-orange-600 rounded-lg hover:bg-orange-50 transition-all duration-300 group">' +
+                                        '<i class="fas fa-redo group-hover:scale-110 transition-transform"></i>' +
+                                    '</button>' +
+                                    '<button onclick="showComingSoon()" class="text-primary hover:text-primary-dark px-3 py-1 border border-primary rounded-lg hover:bg-orange-50 transition-all duration-300 group">' +
+                                        '<i class="fas fa-edit group-hover:scale-110 transition-transform"></i>' +
+                                    '</button>' +
+                                '</td>';
                             tableBody.appendChild(row);
                         });
                     });
                 })
-                .catch(error => console.error('Routers fetch error:', error));
+                .catch(error => {
+                    console.error('Routers fetch error:', error);
+                    showErrorMessage('Hitilafu ya mtandao: ' + error.message);
+                });
         }
 
         // Pagination function
@@ -330,17 +751,19 @@ const usersContent = `
             
             if (!pagination || pagination.pages <= 1) {
                 paginationElement.innerHTML = '';
-                infoElement.textContent = \`Jumla: \${pagination?.total || 0} watumiaji\`;
+                infoElement.textContent = 'Jumla: ' + (pagination?.total || 0) + ' watumiaji';
                 return;
             }
 
-            infoElement.textContent = \`Onyesho \${((currentPage - 1) * limit) + 1}-\${Math.min(currentPage * limit, pagination.total)} ya \${pagination.total} watumiaji\`;
+            infoElement.textContent = 'Onyesho ' + (((currentPage - 1) * limit) + 1) + '-' + Math.min(currentPage * limit, pagination.total) + ' ya ' + pagination.total + ' watumiaji';
 
             let paginationHTML = '';
 
             // Previous button
             if (currentPage > 1) {
-                paginationHTML += \`<button onclick="changePage(\${currentPage - 1}, '\${searchQuery}')" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Nyuma</button>\`;
+                paginationHTML += '<button onclick="changePage(' + (currentPage - 1) + ', \\'' + searchQuery + '\\')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all duration-300 hover:shadow-sm">' +
+                    '<i class="fas fa-chevron-left mr-1"></i>Nyuma' +
+                '</button>';
             }
 
             // Page numbers
@@ -349,15 +772,17 @@ const usersContent = `
 
             for (let i = startPage; i <= endPage; i++) {
                 if (i === currentPage) {
-                    paginationHTML += \`<button class="px-3 py-2 border border-primary bg-primary text-white rounded-md text-sm font-medium">\${i}</button>\`;
+                    paginationHTML += '<button class="px-4 py-2 border border-primary bg-primary text-white rounded-lg text-sm font-medium shadow-sm">' + i + '</button>';
                 } else {
-                    paginationHTML += \`<button onclick="changePage(\${i}, '\${searchQuery}')" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">\${i}</button>\`;
+                    paginationHTML += '<button onclick="changePage(' + i + ', \\'' + searchQuery + '\\')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all duration-300 hover:shadow-sm">' + i + '</button>';
                 }
             }
 
             // Next button
             if (currentPage < pagination.pages) {
-                paginationHTML += \`<button onclick="changePage(\${currentPage + 1}, '\${searchQuery}')" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Mbele</button>\`;
+                paginationHTML += '<button onclick="changePage(' + (currentPage + 1) + ', \\'' + searchQuery + '\\')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all duration-300 hover:shadow-sm">' +
+                    'Mbele<i class="fas fa-chevron-right ml-1"></i>' +
+                '</button>';
             }
 
             paginationElement.innerHTML = paginationHTML;
@@ -371,9 +796,9 @@ const usersContent = `
             const hours = Math.floor((seconds % 86400) / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
             
-            if (days > 0) return \`\${days}s \${hours}h\`;
-            if (hours > 0) return \`\${hours}h \${minutes}m\`;
-            if (minutes > 0) return \`\${minutes} dakika\`;
+            if (days > 0) return days + 's ' + hours + 'h';
+            if (hours > 0) return hours + 'h ' + minutes + 'm';
+            if (minutes > 0) return minutes + ' dakika';
             return 'Dakika chache';
         };
 
@@ -383,88 +808,232 @@ const usersContent = `
             loadUsers(page, searchQuery);
         };
 
-        // Action functions
-        window.suspendUser = function(userId) {
-            if (confirm('Una uhakika unataka kumzima mtumiaji huyu?')) {
-                fetch(\`/api/admin/suspend-customer/\${userId}\`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        reason: 'Suspended by admin',
-                        is_permanent: 0
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Mtumiaji amezimwa kikamilifu');
-                        loadUsers(currentPage, document.getElementById('search').value);
-                    } else {
-                        alert('Hitilafu: ' + (data.message || 'Imeshindikana kumzima mtumiaji'));
-                    }
-                })
-                .catch(error => console.error('Suspend user error:', error));
-            }
+        // Modal management functions
+        window.showModal = function(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove('hidden');
         };
 
-        window.deleteUser = function(userId) {
-            if (confirm('Una uhakika unataka kumfuta mtumiaji huyu kabisa?')) {
-                fetch(\`/api/admin/delete-customer/\${userId}\`, {
-                    method: 'DELETE'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Mtumiaji amefutwa kikamilifu');
-                        loadUsers(currentPage, document.getElementById('search').value);
-                    } else {
-                        alert('Hitilafu: ' + (data.message || 'Imeshindikana kumfuta mtumiaji'));
-                    }
-                })
-                .catch(error => console.error('Delete user error:', error));
-            }
+        window.closeModal = function(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.add('hidden');
         };
 
-        window.rebootRouter = function(routerId) {
-            if (confirm('Una uhakika unataka kureboot router hii?')) {
-                fetch(\`/api/admin/reboot-router/\${routerId}\`, {
-                    method: 'POST'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Router imereboot kikamilifu');
-                        loadRouters();
-                    } else {
-                        alert('Hitilafu: ' + (data.message || 'Imeshindikana kureboot router'));
-                    }
-                })
-                .catch(error => console.error('Reboot router error:', error));
-            }
+        // Success message function
+        window.showSuccessMessage = function(message) {
+            document.getElementById('success-message').textContent = message;
+            showModal('success-modal');
         };
 
-        window.editRouter = function(routerId) {
-            // Implement router edit functionality
-            alert('Hariri router: ' + routerId);
+        window.closeSuccessModal = function() {
+            closeModal('success-modal');
+        };
+
+        // Error message function
+        window.showErrorMessage = function(message) {
+            document.getElementById('error-message').textContent = message;
+            showModal('error-modal');
+        };
+
+        window.closeErrorModal = function() {
+            closeModal('error-modal');
+        };
+
+        // Warning message function
+        window.showWarningMessage = function(message) {
+            document.getElementById('warning-message').textContent = message;
+            showModal('warning-modal');
+        };
+
+        window.closeWarningModal = function() {
+            closeModal('warning-modal');
+        };
+
+        // User details functions
+        window.viewUserDetails = function(userId) {
+            currentUserId = userId;
+            showModal('user-details-modal');
+            loadUserDetails(userId);
+        };
+
+        window.closeUserDetailsModal = function() {
+            closeModal('user-details-modal');
+            currentUserId = null;
+        };
+
+        // Suspend user functions
+        window.showSuspendModal = function(userId, userName) {
+            currentUserId = userId;
+            document.getElementById('suspend-message').textContent = 'Una uhakika unataka kumzima ' + userName + '?';
+            document.getElementById('suspend-reason').value = '';
+            showModal('suspend-modal');
+        };
+
+        window.closeSuspendModal = function() {
+            closeModal('suspend-modal');
+            currentUserId = null;
+        };
+
+        window.confirmSuspendUser = function() {
+            const reason = document.getElementById('suspend-reason').value;
+            if (!reason.trim()) {
+                showWarningMessage('Tafadhali andika sababu ya kumzima mtumiaji');
+                return;
+            }
+
+            fetch('/admin/suspend-customer/' + currentUserId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    reason: reason,
+                    is_permanent: 0
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeSuspendModal();
+                    showSuccessMessage('Mtumiaji amezimwa kikamilifu');
+                    loadUsers(currentPage, document.getElementById('search').value);
+                } else {
+                    showErrorMessage('Hitilafu: ' + (data.message || 'Imeshindikana kumzima mtumiaji'));
+                }
+            })
+            .catch(error => {
+                console.error('Suspend user error:', error);
+                showErrorMessage('Hitilafu ya mtandao: ' + error.message);
+            });
+        };
+
+        // Delete user functions
+        window.showDeleteModal = function(userId, userName) {
+            currentUserId = userId;
+            document.getElementById('delete-message').textContent = 'Una uhakika unataka kumfuta ' + userName + ' kabisa? Kitendo hiki hakiwezi kutenduliwa!';
+            showModal('delete-modal');
+        };
+
+        window.closeDeleteModal = function() {
+            closeModal('delete-modal');
+            currentUserId = null;
+        };
+
+        window.confirmDeleteUser = function() {
+            fetch('/admin/delete-customer/' + currentUserId, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeDeleteModal();
+                    showSuccessMessage('Mtumiaji amefutwa kikamilifu');
+                    loadUsers(currentPage, document.getElementById('search').value);
+                } else {
+                    showErrorMessage('Hitilafu: ' + (data.message || 'Imeshindikana kumfuta mtumiaji'));
+                }
+            })
+            .catch(error => {
+                console.error('Delete user error:', error);
+                showErrorMessage('Hitilafu ya mtandao: ' + error.message);
+            });
+        };
+
+        // Router functions
+        window.showRebootModal = function(routerId, routerName) {
+            currentRouterId = routerId;
+            document.getElementById('reboot-message').textContent = 'Una uhakika unataka kureboot router "' + routerName + '"? Hii itasumbua watumiaji wote waliounganishwa.';
+            showModal('reboot-modal');
+        };
+
+        window.closeRebootModal = function() {
+            closeModal('reboot-modal');
+            currentRouterId = null;
+        };
+
+        window.confirmRebootRouter = function() {
+            fetch('/admin/reboot-router/' + currentRouterId, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeRebootModal();
+                    showSuccessMessage('Router imereboot kikamilifu');
+                    loadRouters();
+                } else {
+                    showErrorMessage('Hitilafu: ' + (data.message || 'Imeshindikana kureboot router'));
+                }
+            })
+            .catch(error => {
+                console.error('Reboot router error:', error);
+                showErrorMessage('Hitilafu ya mtandao: ' + error.message);
+            });
+        };
+
+        // Coming soon function
+        window.showComingSoon = function() {
+            showModal('coming-soon-modal');
+        };
+
+        window.closeComingSoonModal = function() {
+            closeModal('coming-soon-modal');
+        };
+
+        // Utility functions
+        window.exportUsersData = function() {
+            showComingSoon();
+        };
+
+        window.refreshAllData = function() {
+            loadUsers(currentPage, document.getElementById('search').value);
+            loadOnlineUsers();
+            loadRouters();
+            loadDashboardStats();
+            showSuccessMessage('Data zimeonyeshwa upya');
+        };
+
+        // Load user details (to be implemented)
+        function loadUserDetails(userId) {
+            // Implement user details loading
+            const content = document.getElementById('user-details-content');
+            content.innerHTML = 
+                '<div class="space-y-4">' +
+                    '<div class="grid grid-cols-2 gap-4">' +
+                        '<div class="bg-orange-50 p-4 rounded-lg">' +
+                            '<div class="text-sm text-orange-600">Jina Kamili</div>' +
+                            '<div class="font-semibold text-gray-800">John Doe</div>' +
+                        '</div>' +
+                        '<div class="bg-green-50 p-4 rounded-lg">' +
+                            '<div class="text-sm text-green-600">Namba ya Simu</div>' +
+                            '<div class="font-semibold text-gray-800">+255 123 456 789</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-4">' +
+                        '<div class="bg-orange-50 p-4 rounded-lg">' +
+                            '<div class="text-sm text-orange-600">Eneo</div>' +
+                            '<div class="font-semibold text-gray-800">Dar es Salaam</div>' +
+                        '</div>' +
+                        '<div class="bg-orange-50 p-4 rounded-lg">' +
+                            '<div class="text-sm text-orange-600">Muda Ulobaki</div>' +
+                            '<div class="font-semibold text-gray-800">2 siku 3 masaa</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+        }
+
+        window.suspendCurrentUser = function() {
+            if (currentUserId) {
+                showSuspendModal(currentUserId, 'mtumiaji huyu');
+            }
         };
     });
 </script>
-
-<style>
-.tab-content {
-    display: none;
-}
-.tab-content.active {
-    display: block;
-}
-</style>
 `;
 %>
 
 <%- include('layout', {
-    title: 'Watumiaji & Routers',
+    title: 'Watumiaji & Routers - Admin',
     activePage: 'users',
     body: usersContent
 }) %>

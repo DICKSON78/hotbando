@@ -1,4 +1,4 @@
-// routes/admin.js
+// routes/admin.js - ORGANIZED & CLEANED
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
@@ -6,7 +6,7 @@ const { adminAuth } = require('../middleware/authMiddleware');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 
-// ==================== ADMIN LOGIN ROUTES (NO AUTH) ====================
+// ==================== PUBLIC ROUTES (NO AUTH) ====================
 router.get('/login', (req, res) => {
     if (req.session.admin_user) {
         return res.redirect('/admin/dashboard');
@@ -89,11 +89,18 @@ router.post('/logout', (req, res) => {
 // ==================== PROTECTED ROUTES (WITH AUTH) ====================
 router.use(adminAuth);
 
-// ==================== EJS PAGE ROUTES ====================
+// ==================== PAGE ROUTES (RENDER EJS) ====================
 router.get('/dashboard', adminController.renderDashboardPage);
-router.get('/my-ads', adminController.renderMyAdsPage);
+router.get('/users', adminController.renderUsersPage);
+router.get('/vouchers', adminController.renderVouchersPage);
+router.get('/video-ads', adminController.renderVideoAdsPage);
 router.get('/upload-video', adminController.renderUploadVideoPage);
 router.get('/analytics', adminController.renderAnalyticsPage);
+router.get('/reports', adminController.renderReportsPage);
+router.get('/settings', adminController.renderSettingsPage);
+router.get('/my-ads', adminController.renderMyAdsPage);
+
+// Static pages (no controller needed)
 router.get('/approve-content', (req, res) => {
     res.render('admin/approve-content', {
         title: 'Idhini ya Maudhui',
@@ -101,8 +108,7 @@ router.get('/approve-content', (req, res) => {
         userName: req.session.admin_user?.name || 'Admin'
     });
 });
-router.get('/reports', adminController.renderReportsPage);
-router.get('/users', adminController.renderUsersPage);
+
 router.get('/generate-vouchers', (req, res) => {
     res.render('admin/generate-vouchers', {
         title: 'Undaa Vouchers',
@@ -110,33 +116,15 @@ router.get('/generate-vouchers', (req, res) => {
         userName: req.session.admin_user?.name || 'Admin'
     });
 });
-router.get('/settings', adminController.renderSettingsPage);
-router.get('/video-ads', adminController.renderVideoAdsPage);
-router.get('/vouchers', adminController.renderVouchersPage);
 
-// ==================== API ROUTES ====================
+// ==================== API ROUTES (JSON RESPONSES) ====================
 
-// Dashboard & Analytics
+// 📊 DASHBOARD & ANALYTICS API
 router.get('/dashboard-stats', adminController.dashboardStats);
-router.get('/analytics-data', adminController.adminAnalytics);
+router.get('/analytics-data', adminController.getAnalyticsData);
 router.get('/reports-data', adminController.reportsData);
 
-// Analytics API Routes - ZOTE ZIPO HAPA
-router.get('/api/admin/analytics', adminController.adminAnalytics);
-router.get('/api/admin/ad-views-data', adminController.getAdViewsData);
-router.get('/api/admin/analytics-stats', adminController.getAnalyticsStats);
-router.get('/api/admin/analytics-data', adminController.getAnalyticsData);
-router.get('/api/admin/ad-views', adminController.getAdViewsForAnalytics);
-
-// Voucher routes
-router.post('/generate-voucher', adminController.generateVoucher);
-router.get('/batches', adminController.getBatches);
-router.get('/vouchers/batch/:batchId', adminController.getVouchersByBatch);
-router.get('/voucher-report', adminController.getVoucherReport);
-router.get('/sales-summary', adminController.getSalesSummary);
-router.get('/voucher-stats', adminController.getVoucherStats);
-
-// User management
+// 👥 USER MANAGEMENT API
 router.get('/customers', adminController.getCustomers);
 router.get('/online-customers', adminController.getOnlineCustomers);
 router.post('/suspend-customer/:id', adminController.suspendCustomer);
@@ -144,38 +132,59 @@ router.post('/unsuspend/:id', adminController.unsuspendCustomer);
 router.post('/adjust-subscription/:id', adminController.adjustCustomerSubscription);
 router.delete('/delete-customer/:id', adminController.deleteCustomer);
 
-// Advertisement routes
+// 📡 ROUTER MANAGEMENT API
+router.get('/routers', adminController.getRouters);
+router.get('/router-sessions/:routerID', adminController.getRouterSessions);
+router.post('/reboot-router/:routerID', adminController.rebootRouter);
+
+// 🎫 VOUCHER MANAGEMENT API
+router.post('/generate-voucher', adminController.generateVoucher);
+router.get('/batches', adminController.getBatches);
+router.get('/vouchers/batch/:batchId', adminController.getVouchersByBatch);
+router.get('/voucher-report', adminController.getVoucherReport);
+router.get('/sales-summary', adminController.getSalesSummary);
+router.get('/voucher-stats', adminController.getVoucherStats);
+
+// 📢 ADVERTISEMENT MANAGEMENT API
 router.get('/ads-approve', adminController.getAdsToApprove);
 router.post('/approve-ad/:id', adminController.approveAd);
 router.post('/decline-ad/:id', adminController.declineAd);
-router.get('/api/my-ads', adminController.getMyAdsAPI);
 router.post('/create-ad', adminController.createAd);
 router.put('/update-ad/:id', adminController.updateAd);
 router.post('/upload-video', adminController.uploadVideo);
 router.get('/video-ads', adminController.getVideoAds);
 
-// Router management
-router.get('/routers', adminController.getRouters);
-router.get('/router-health', adminController.getRouterHealth);
-router.get('/router-sessions/:routerID', adminController.getRouterSessions);
-router.post('/add-router', adminController.addRouter);
-router.put('/update-router/:id', adminController.updateRouter);
-router.post('/reboot-router/:routerID', adminController.rebootRouter);
-
-// System settings
+// ⚙️ SYSTEM & SETTINGS API
 router.get('/system-settings', adminController.getSystemSettings);
 router.put('/system-settings', adminController.updateSystemSettings);
+router.get('/packages', adminController.getPackages);
+router.get('/sponsors', adminController.getSponsors);
 
-// Notifications
+// 🔔 NOTIFICATIONS API
 router.get('/notifications', adminController.getNotifications);
 router.put('/notification-read/:id', adminController.markNotificationRead);
 
-// Utility routes
-router.get('/ad-views', adminController.getAdViewsData);
-router.get('/sponsors', adminController.getSponsors);
-router.get('/packages', adminController.getPackages);
+// ==================== LEGACY/COMPATIBILITY ROUTES ====================
+// These are kept for backward compatibility
 
-// Legacy routes
+// Analytics compatibility routes
+router.get('/api/admin/analytics', adminController.adminAnalytics);
+router.get('/api/admin/ad-views-data', adminController.getAdViewsData);
+router.get('/api/admin/analytics-stats', adminController.getAnalyticsStats);
+router.get('/api/admin/ad-views', adminController.getAdViewsForAnalytics);
+
+// Ads compatibility routes
+router.get('/api/my-ads', adminController.getMyAdsAPI);
+
+// Router compatibility routes
+router.get('/router-health', adminController.getRouterHealth);
+router.post('/add-router', adminController.addRouter);
+router.put('/update-router/:id', adminController.updateRouter);
+
+// Utility compatibility routes
+router.get('/ad-views', adminController.getAdViewsData);
+
+// Legacy user routes (deprecated - use new ones above)
 router.post('/set-unlimited', adminController.setUnlimitedStatus);
 router.delete('/users/:id', adminController.deleteUser);
 router.get('/user-stats', adminController.getUserStats);

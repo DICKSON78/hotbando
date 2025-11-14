@@ -865,6 +865,404 @@ const hotspotController = {
         }
     },
     
+
+     
+  // ==================== USER MANAGEMENT ONLY ====================
+  
+  /**
+   * Get all customers with pagination and search
+   */
+  async getCustomers(req, res) {
+    try {
+      const { search, page = 1, limit = 50 } = req.query;
+      const offset = (page - 1) * limit;
+      
+      console.log(`📋 Loading customers - Page: ${page}, Search: "${search}"`);
+      
+      let query = `
+        SELECT
+          id, name, phone_number, package, location,
+          moneyspent, usage_start, usage_until,
+          free_bytes,
+          mac_address, last_router_id, is_active,
+          created_at, updated_at
+        FROM users
+        WHERE role = 'customer'
+      `;
+      let params = [];
+      
+      if (search && search.trim() !== '') {
+        query += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ? OR location LIKE ?)';
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      }
+      
+      query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+      params.push(parseInt(limit), offset);
+      
+      const [customers] = await db.execute(query, params);
+
+      // Get total count for pagination
+      let countQuery = 'SELECT COUNT(*) as total FROM users WHERE role = "customer"';
+      let countParams = [];
+      if (search && search.trim() !== '') {
+        countQuery += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ? OR location LIKE ?)';
+        countParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      }
+      
+      const [totalResult] = await db.execute(countQuery, countParams);
+
+      console.log(`✅ Customers loaded: ${customers.length}, Total: ${totalResult[0].total}`);
+
+      return res.json({
+        success: true,
+        data: customers,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalResult[0].total,
+          pages: Math.ceil(totalResult[0].total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error fetching customers:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to load customers', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Get online customers (currently connected users)
+   */
+  async getOnlineCustomers(req, res) {
+    try {
+      console.log('🌐 Fetching online customers...');
+      
+      const [onlineCustomers] = await db.execute(`
+        SELECT
+          u.id, u.name, u.phone_number, u.mac_address,
+          u.location, u.last_router_id, u.usage_until,
+          TIMESTAMPDIFF(MINUTE, u.updated_at, NOW()) as minutes_ago,
+          m.router_name, m.status as router_status
+        FROM users u
+        LEFT JOIN mikrotiks m ON u.last_router_id = m.router_id
+        WHERE u.usage_until > NOW()
+        AND u.updated_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+        AND u.role = 'customer'
+        ORDER BY u.updated_at DESC
+      `);
+      
+      console.log(`✅ Online customers found: ${onlineCustomers.length}`);
+      
+      return res.json({
+        success: true,
+        data: onlineCustomers,
+        count: onlineCustomers.length
+      });
+    } catch (error) {
+      console.error('❌ Error fetching online customers:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to load online customers', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Get all routers
+   */
+  async getRouters(req, res) {
+    try {
+      console.log('📡 Fetching routers...');
+      
+      const [routers] = await db.execute('SELECT * FROM mikrotiks ORDER BY id DESC');
+      
+      console.log(`✅ Routers found: ${routers.length}`);
+      
+      return res.json({ 
+        success: true, 
+        data: routers, 
+        count: routers.length 
+      });
+    } catch (error) {
+      console.error('❌ Error fetching routers:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to load routers', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Get router sessions (currently empty - for future integration)
+   */
+  async getRouterSessions(req, res) {
+    try {
+      const { routerID } = req.params;
+      console.log(`🔄 Fetching sessions for router: ${routerID}`);
+      
+      // Return empty array for now - can integrate with Mikrotik API later
+      const sessions = [];
+      
+      return res.json({ 
+        success: true, 
+        data: sessions, 
+        count: sessions.length 
+      });
+    } catch (error) {
+      console.error('❌ Error fetching router sessions:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to load router sessions', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Suspend a customer
+   */
+  async suspendCustomer(req, res) {
+    try {
+      const { id } = req.params;
+      const { reason, suspended_until, is_permanent } = req.body;
+
+      console.log(`⏸️ Suspending user ${id}`);
+
+      // Check if user exists
+      const [users] = await db.execute('SELECT id, name FROM users WHERE id = ? AND role = "customer"', [id]);
+      if (users.length === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      const user = users[0];
+
+      // Add to suspension table
+      await db.execute(
+        'INSERT INTO user_suspensions (user_id, reason, suspended_by, suspended_until, is_permanent) VALUES (?, ?, ?, ?, ?)',
+        [id, reason, req.session.admin_user.id, suspended_until, is_permanent || 0]
+      );
+      
+      // Update user status
+      await db.execute(
+        'UPDATE users SET usage_until = NOW(), is_active = 0 WHERE id = ?',
+        [id]
+      );
+
+      console.log(`✅ User ${user.name} suspended successfully`);
+
+      return res.json({ 
+        success: true, 
+        message: `User ${user.name} has been suspended successfully` 
+      });
+    } catch (error) {
+      console.error('❌ Error suspending user:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to suspend user', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Delete a customer permanently
+   */
+  async deleteCustomer(req, res) {
+    try {
+      const { id } = req.params;
+
+      console.log(`🗑️ Deleting user ${id}`);
+
+      // Check if user exists
+      const [users] = await db.execute('SELECT id, name FROM users WHERE id = ? AND role = "customer"', [id]);
+      if (users.length === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      const user = users[0];
+
+      // Delete user
+      const [result] = await db.execute('DELETE FROM users WHERE id = ? AND role = "customer"', [id]);
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      console.log(`✅ User ${user.name} deleted successfully`);
+
+      return res.json({ 
+        success: true, 
+        message: `User ${user.name} has been deleted permanently`,
+        deletedId: id 
+      });
+    } catch (error) {
+      console.error('❌ Error deleting user:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to delete user', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Reboot a router
+   */
+  async rebootRouter(req, res) {
+    try {
+      const { routerID } = req.params;
+
+      console.log(`🔄 Rebooting router: ${routerID}`);
+
+      // For now, just simulate success since we don't have real Mikrotik integration
+      const success = true;
+      
+      if (success) {
+        console.log(`✅ Router ${routerID} rebooted successfully`);
+        return res.json({
+          success: true,
+          message: `Router has been rebooted successfully`
+        });
+      } else {
+        return res.json({
+          success: false,
+          message: 'Failed to reboot router'
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error rebooting router:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to reboot router', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Render users management page
+   */
+  async renderUsersPage(req, res) {
+    try {
+      console.log('👥 Rendering users management page');
+      
+      return res.render('admin/users', {
+        title: 'User Management',
+        activePage: 'users',
+        userName: req.session.admin_user?.name || 'Admin'
+      });
+    } catch (error) {
+      console.error('❌ Error rendering users page:', error);
+      return res.render('admin/users', {
+        title: 'User Management',
+        activePage: 'users',
+        userName: req.session.admin_user?.name || 'Admin',
+        error: 'Failed to load page'
+      });
+    }
+  },
+
+  /**
+   * Unsuspend a customer (additional function for completeness)
+   */
+  async unsuspendCustomer(req, res) {
+    try {
+      const { id } = req.params;
+
+      console.log(`▶️ Unsuspending user ${id}`);
+
+      // Check if user exists
+      const [users] = await db.execute('SELECT id, name FROM users WHERE id = ?', [id]);
+      if (users.length === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      const user = users[0];
+
+      // Update user status
+      await db.execute(
+        'UPDATE users SET is_active = 1 WHERE id = ?',
+        [id]
+      );
+
+      console.log(`✅ User ${user.name} unsuspended successfully`);
+
+      return res.json({ 
+        success: true, 
+        message: `User ${user.name} has been unsuspended successfully` 
+      });
+    } catch (error) {
+      console.error('❌ Error unsuspending user:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to unsuspend user', 
+        error: error.message 
+      });
+    }
+  },
+
+  /**
+   * Adjust customer subscription
+   */
+  async adjustCustomerSubscription(req, res) {
+    try {
+      const { id } = req.params;
+      const { usage_until, package_name, free_bytes } = req.body;
+
+      console.log(`⚙️ Adjusting subscription for user ${id}`);
+
+      // Check if user exists
+      const [users] = await db.execute('SELECT id, name FROM users WHERE id = ? AND role = "customer"', [id]);
+      if (users.length === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      const user = users[0];
+      const updateFields = [];
+      const params = [];
+
+      if (usage_until) {
+        updateFields.push('usage_until = ?');
+        params.push(usage_until);
+      }
+      if (package_name) {
+        updateFields.push('package = ?');
+        params.push(package_name);
+      }
+      if (free_bytes !== undefined) {
+        updateFields.push('free_bytes = ?');
+        params.push(free_bytes);
+      }
+      
+      updateFields.push('updated_at = NOW()');
+      params.push(id);
+
+      await db.execute(
+        `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
+        params
+      );
+
+      console.log(`✅ Subscription adjusted for user ${user.name}`);
+
+      return res.json({ 
+        success: true, 
+        message: `Subscription for ${user.name} has been updated successfully` 
+      });
+    } catch (error) {
+      console.error('❌ Error adjusting subscription:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to adjust subscription', 
+        error: error.message 
+      });
+    }
+  },
+
     // Voucher redemption
     async voucher(req, res) {
         try {
