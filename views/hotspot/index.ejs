@@ -941,11 +941,102 @@
         // Handle partner form submission
         const partnerForm = document.querySelector('#partner-form form');
         if (partnerForm) {
-            partnerForm.addEventListener('submit', function(e) {
+            partnerForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                // Here you would typically send the form data to your server
-                alert('Asante! Ombi lako limepokelewa. Tutawasiliana nawe haraka iwezekanavyo.');
-                partnerForm.reset();
+
+                const submitBtn = partnerForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn.textContent;
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Inatuma...';
+
+                try {
+                    const formData = {
+                        fullName: document.getElementById('partner-name').value,
+                        location: document.getElementById('partner-location').value,
+                        businessType: document.getElementById('partner-business').value,
+                        packageType: document.getElementById('partner-package').value,
+                        phoneNumber: document.getElementById('partner-phone').value,
+                        email: document.getElementById('partner-email').value,
+                        message: document.getElementById('partner-message').value
+                    };
+
+                    const response = await fetch('/api/public/partner-application', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(data.message);
+                        partnerForm.reset();
+                    } else {
+                        alert(data.message || 'Kuna tatizo limetokea. Tafadhali jaribu tena.');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Samahani, kuna tatizo limetokea. Tafadhali jaribu tena baadaye.');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
+            });
+        }
+
+        // Handle contact form submission
+        const contactForm = document.querySelector('form[action="#"]');
+        const allForms = document.querySelectorAll('form');
+        let actualContactForm = null;
+
+        // Find the contact form (the one that's not the partner form)
+        allForms.forEach(form => {
+            if (form !== partnerForm && form.querySelector('#name')) {
+                actualContactForm = form;
+            }
+        });
+
+        if (actualContactForm) {
+            actualContactForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const submitBtn = actualContactForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn.textContent;
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Inatuma...';
+
+                try {
+                    const formData = {
+                        name: document.getElementById('name').value,
+                        email: document.getElementById('email').value,
+                        message: document.getElementById('message').value
+                    };
+
+                    const response = await fetch('/api/public/contact-message', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(data.message);
+                        actualContactForm.reset();
+                    } else {
+                        alert(data.message || 'Kuna tatizo limetokea. Tafadhali jaribu tena.');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Samahani, kuna tatizo limetokea. Tafadhali jaribu tena baadaye.');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
             });
         }
     </script>

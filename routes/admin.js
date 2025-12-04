@@ -117,6 +117,52 @@ router.get('/generate-vouchers', (req, res) => {
     });
 });
 
+// New feature pages
+router.get('/campaigns', (req, res) => {
+    res.render('admin/campaigns', {
+        title: 'Kampeni',
+        activePage: 'campaigns',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin'
+    });
+});
+
+router.get('/leads', (req, res) => {
+    res.render('admin/leads', {
+        title: 'Wateja Wapya',
+        activePage: 'leads',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin'
+    });
+});
+
+router.get('/wallet', (req, res) => {
+    res.render('admin/wallet', {
+        title: 'Pesa Yangu',
+        activePage: 'wallet',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin'
+    });
+});
+
+router.get('/locations', (req, res) => {
+    res.render('admin/locations', {
+        title: 'Maeneo',
+        activePage: 'locations',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin'
+    });
+});
+
+router.get('/revenue-share', (req, res) => {
+    res.render('admin/revenue-share', {
+        title: 'Mgawanyo',
+        activePage: 'revenue-share',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin'
+    });
+});
+
 // ==================== API ROUTES (JSON RESPONSES) ====================
 
 // 📊 DASHBOARD & ANALYTICS API

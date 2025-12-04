@@ -1691,6 +1691,253 @@ async getAdViewsForAnalytics(req, res) {
       });
     }
   }
+
+  // Get recent activity for reports page
+  async getRecentActivity(req, res) {
+    try {
+      const limit = parseInt(req.query.limit) || 20;
+
+      // Get different types of activities and combine them
+      const activities = [];
+
+      // 1. Recent user registrations
+      const [users] = await db.execute(`
+        SELECT id, name, phone, role, created_at
+        FROM users
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ORDER BY created_at DESC
+        LIMIT ?
+      `, [limit]);
+
+      users.forEach(user => {
+        activities.push({
+          created_at: user.created_at,
+          description: 'Mtumiaji mpya amejiunga',
+          user_name: user.name || user.phone,
+          status_text: user.role === 'sponsor' ? 'Sponsor' : user.role === 'agent' ? 'Agent' : 'Customer',
+          status_class: user.role === 'sponsor' ? 'bg-purple-100 text-purple-800' :
+                       user.role === 'agent' ? 'bg-blue-100 text-blue-800' :
+                       'bg-green-100 text-green-800'
+        });
+      });
+
+      // 2. Recent ad views
+      const [adViews] = await db.execute(`
+        SELECT av.created_at, u.name, u.phone, a.title
+        FROM ad_views av
+        JOIN users u ON av.user_id = u.id
+        JOIN ads a ON av.ad_id = a.id
+        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ORDER BY av.created_at DESC
+        LIMIT ?
+      `, [limit]);
+
+      adViews.forEach(view => {
+        activities.push({
+          created_at: view.created_at,
+          description: `Ameangalia tangazo: ${view.title}`,
+          user_name: view.name || view.phone,
+          status_text: 'Ad View',
+          status_class: 'bg-yellow-100 text-yellow-800'
+        });
+      });
+
+      // 3. Recent payments
+      const [payments] = await db.execute(`
+        SELECT p.created_at, u.name, u.phone, p.amount, p.status
+        FROM payments p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ORDER BY p.created_at DESC
+        LIMIT ?
+      `, [limit]);
+
+      payments.forEach(payment => {
+        activities.push({
+          created_at: payment.created_at,
+          description: `Malipo: TZS ${payment.amount.toLocaleString()}`,
+          user_name: payment.name || payment.phone,
+          status_text: payment.status === 'completed' ? 'Imekamilika' : payment.status === 'pending' ? 'Inasubiri' : 'Imefeli',
+          status_class: payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                       payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                       'bg-red-100 text-red-800'
+        });
+      });
+
+      // Sort all activities by date and limit
+      activities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      const limitedActivities = activities.slice(0, limit);
+
+      return res.json({
+        success: true,
+        activities: limitedActivities,
+        count: limitedActivities.length
+      });
+    } catch (error) {
+      console.error('Hitilafu katika kupakia shughuli:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindikana kupakia shughuli',
+        error: error.message
+      });
+    }
+  }
+
+  // Download report
+  async downloadReport(req, res) {
+    try {
+      const { format, startDate, endDate, reportType } = req.query;
+
+      if (!startDate || !endDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tarehe za kuanzia na mwisho zinahitajika'
+        });
+      }
+
+      // Get data based on report type
+      let data = [];
+      let headers = [];
+
+      if (reportType === 'all' || reportType === 'users') {
+        const [users] = await db.execute(`
+          SELECT id, name, phone, email, role, created_at, free_bytes
+          FROM users
+          WHERE created_at BETWEEN ? AND ?
+          ORDER BY created_at DESC
+        `, [startDate, endDate]);
+
+        if (reportType === 'users') {
+          data = users;
+          headers = ['ID', 'Jina', 'Simu', 'Email', 'Role', 'Tarehe', 'Data (MB)'];
+        }
+      }
+
+      if (reportType === 'all' || reportType === 'ads') {
+        const [ads] = await db.execute(`
+          SELECT a.id, a.title, a.duration, a.reward_bytes,
+                 COUNT(av.id) as views, a.created_at
+          FROM ads a
+          LEFT JOIN ad_views av ON a.id = av.ad_id
+          WHERE a.created_at BETWEEN ? AND ?
+          GROUP BY a.id
+          ORDER BY a.created_at DESC
+        `, [startDate, endDate]);
+
+        if (reportType === 'ads') {
+          data = ads;
+          headers = ['ID', 'Jina', 'Muda (sec)', 'Zawadi (bytes)', 'Views', 'Tarehe'];
+        }
+      }
+
+      if (reportType === 'all' || reportType === 'revenue') {
+        const [payments] = await db.execute(`
+          SELECT p.id, u.name, p.amount, p.payment_method, p.status, p.created_at
+          FROM payments p
+          JOIN users u ON p.user_id = u.id
+          WHERE p.created_at BETWEEN ? AND ?
+          ORDER BY p.created_at DESC
+        `, [startDate, endDate]);
+
+        if (reportType === 'revenue') {
+          data = payments;
+          headers = ['ID', 'Mtumiaji', 'Kiasi', 'Njia', 'Hali', 'Tarehe'];
+        }
+      }
+
+      if (reportType === 'all' || reportType === 'campaigns') {
+        const [campaigns] = await db.execute(`
+          SELECT c.id, c.name, c.type, c.budget, c.data_reward, c.status, c.created_at
+          FROM campaigns c
+          WHERE c.created_at BETWEEN ? AND ?
+          ORDER BY c.created_at DESC
+        `, [startDate, endDate]);
+
+        if (reportType === 'campaigns') {
+          data = campaigns;
+          headers = ['ID', 'Jina', 'Aina', 'Bajeti', 'Zawadi', 'Hali', 'Tarehe'];
+        }
+      }
+
+      // Generate report based on format
+      if (format === 'csv') {
+        // Generate CSV
+        let csv = headers.join(',') + '\n';
+        data.forEach(row => {
+          const values = Object.values(row).map(val => {
+            if (val === null || val === undefined) return '';
+            return \`"\${String(val).replace(/"/g, '""')}"\`;
+          });
+          csv += values.join(',') + '\n';
+        });
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', \`attachment; filename=hotbando_ripoti_\${reportType}_\${startDate}_to_\${endDate}.csv\`);
+        return res.send(csv);
+
+      } else if (format === 'excel') {
+        // Simple TSV format (can be opened in Excel)
+        let tsv = headers.join('\t') + '\n';
+        data.forEach(row => {
+          const values = Object.values(row).map(val => val === null || val === undefined ? '' : String(val));
+          tsv += values.join('\t') + '\n';
+        });
+
+        res.setHeader('Content-Type', 'application/vnd.ms-excel');
+        res.setHeader('Content-Disposition', \`attachment; filename=hotbando_ripoti_\${reportType}_\${startDate}_to_\${endDate}.xls\`);
+        return res.send(tsv);
+
+      } else if (format === 'pdf') {
+        // Simple HTML that can be saved as PDF
+        let html = \`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>HotBando Ripoti</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #FF7A30; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th { background: #FF7A30; color: white; padding: 10px; text-align: left; }
+    td { border: 1px solid #ddd; padding: 8px; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+  </style>
+</head>
+<body>
+  <h1>HotBando Ripoti - \${reportType.toUpperCase()}</h1>
+  <p><strong>Kipindi:</strong> \${startDate} hadi \${endDate}</p>
+  <p><strong>Tarehe ya Uchapisho:</strong> \${new Date().toLocaleDateString('sw-TZ')}</p>
+  <table>
+    <thead>
+      <tr>\${headers.map(h => \`<th>\${h}</th>\`).join('')}</tr>
+    </thead>
+    <tbody>
+      \${data.map(row => \`<tr>\${Object.values(row).map(val => \`<td>\${val === null || val === undefined ? '' : val}</td>\`).join('')}</tr>\`).join('')}
+    </tbody>
+  </table>
+  <script>window.print();</script>
+</body>
+</html>\`;
+
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(html);
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: 'Format si sahihi'
+      });
+
+    } catch (error) {
+      console.error('Hitilafu katika kupakua ripoti:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindikana kupakua ripoti',
+        error: error.message
+      });
+    }
+  }
 }
 
 // ==================== EXPORT INSTANCE ====================

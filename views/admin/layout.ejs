@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/js/notifications.js" defer></script>
     <script>
         tailwind.config = {
             theme: {
@@ -31,91 +32,282 @@
         }
     </script>
     <style>
+        /* Modern Sidebar Design */
         .sidebar {
             width: 280px;
-            transition: all 0.3s ease;
-            background-image: linear-gradient(to bottom, #FF7A30, #333333);
-            color: #fff;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(135deg, #FF7A30 0%, #e65a10 100%);
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
         }
+
+        .sidebar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.1) 0%,
+                transparent 50%
+            );
+            pointer-events: none;
+        }
+
         .main-content {
             margin-left: 280px;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(135deg, #f9f9f9 0%, #f1f1f1 100%);
+            min-height: 100vh;
         }
+
         .collapsed .sidebar {
-            width: 80px;
+            width: 75px;
         }
+
         .collapsed .main-content {
-            margin-left: 80px;
+            margin-left: 75px;
         }
-        .active-nav-item {
+
+        /* Modern Navigation Items */
+        .sidebar-item-hover {
             position: relative;
-            background-color: rgba(255, 255, 255, 0.2);
-            border-left: 4px solid #fff;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 12px;
+            overflow: hidden;
         }
-        .active-nav-item i, .active-nav-item span {
-            color: #fff !important;
-        }
-        .sidebar-item-hover:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-        .notification-dot {
+
+        .sidebar-item-hover::before {
+            content: '';
             position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #EF4444;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.6));
+            transform: scaleY(0);
+            transition: transform 0.3s ease;
         }
+
+        .sidebar-item-hover:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar-item-hover:hover::before {
+            transform: scaleY(1);
+        }
+
+        .sidebar-item-hover:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateX(4px);
+        }
+
+        .active-nav-item {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+            color: #7c2d12 !important;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+        }
+
+        .active-nav-item i, .active-nav-item span {
+            color: #7c2d12 !important;
+            font-weight: 600;
+        }
+
+        /* Modern Logo Container */
         .logo-container {
-            background-color: #fff;
-            border-radius: 9999px;
-            padding: 0.5rem;
-            margin: 1rem auto;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+            border-radius: 50%;
+            padding: 0.75rem;
+            margin: 1.5rem auto;
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.1),
+                inset 0 2px 8px rgba(255, 255, 255, 0.9);
             width: 100px;
             height: 100px;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        .logo-container::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(45deg, #FF7A30, #FFB366, #FF7A30);
+            border-radius: 50%;
+            z-index: -1;
+            animation: rotate 4s linear infinite;
+        }
+
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+
         .logo-container img {
             width: 100%;
             height: auto;
             object-fit: cover;
+            position: relative;
+            z-index: 1;
         }
+
+        .logo-container:hover {
+            transform: scale(1.05) rotate(5deg);
+            box-shadow:
+                0 12px 40px rgba(255, 122, 48, 0.3),
+                inset 0 2px 8px rgba(255, 255, 255, 0.9);
+        }
+
+        /* Dropdown Menus */
+        .dropdown-menu {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            margin-top: 4px;
+        }
+
+        .dropdown-menu.open {
+            max-height: 500px;
+        }
+
+        .dropdown-toggle {
+            cursor: pointer;
+            position: relative;
+        }
+
+        .dropdown-toggle i.fa-chevron-down {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 0.75rem;
+        }
+
+        .dropdown-toggle.open i.fa-chevron-down {
+            transform: rotate(180deg);
+        }
+
+        .dropdown-toggle:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        /* Submenu Items */
+        .dropdown-menu a {
+            padding-left: 3rem;
+            position: relative;
+        }
+
+        .dropdown-menu a::before {
+            content: '';
+            position: absolute;
+            left: 1.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .dropdown-menu a:hover::before {
+            background: #fff;
+            transform: translateY(-50%) scale(1.5);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+        }
+
+        /* Sidebar Text */
         .sidebar-text {
-            transition: opacity 0.2s ease;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            font-weight: 500;
+            letter-spacing: 0.3px;
         }
+
         .collapsed .sidebar-text {
             opacity: 0;
             display: none;
+            transform: translateX(-10px);
         }
-        .collapsed .logo-text {
-            display: none;
-        }
+
         .collapsed .logo-container {
             width: 50px;
             height: 50px;
+            margin: 1rem auto;
         }
+
+        /* Icons */
+        .sidebar i {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Scrollbar */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Header Enhancement */
+        header {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95) !important;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
             .sidebar {
-                width: 80px;
+                width: 75px;
             }
             .main-content {
-                margin-left: 80px;
+                margin-left: 75px;
             }
             .sidebar-text {
                 display: none;
             }
             .logo-container {
-                width: 50px;
-                height: 50px;
+                width: 45px;
+                height: 45px;
             }
-            .logo-text {
-                display: none;
-            }
+        }
+
+        /* Notification Dot */
+        .notification-dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #EF4444, #DC2626);
+            border: 2px solid white;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
         }
     </style>
 </head>
@@ -126,56 +318,141 @@
                 <img src="/assets/hot-bando-logo.png" alt="HotBando Logo">
             </div>
         </div>
-        <div class="p-4">
-            <ul class="space-y-2">
+        <div class="p-4 overflow-y-auto" style="max-height: calc(100vh - 200px);">
+            <ul class="space-y-1">
+                <!-- Dashboard -->
                 <li>
                     <a href="/admin/dashboard" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'dashboard' ? 'active-nav-item' : '' %>">
                         <i class="fas fa-home text-white"></i>
                         <span class="ml-3 sidebar-text">Dashibodi</span>
                     </a>
                 </li>
+
+                <!-- Campaigns & Marketing -->
                 <li>
-                    <a href="/admin/my-ads" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'my-ads' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-ad text-white"></i>
-                        <span class="ml-3 sidebar-text">Matangazo Yangu</span>
-                    </a>
+                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('campaigns-menu', this)">
+                        <div class="flex items-center">
+                            <i class="fas fa-bullhorn text-white"></i>
+                            <span class="ml-3 sidebar-text">Kampeni & Masoko</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
+                    </div>
+                    <ul id="campaigns-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
+                        <li>
+                            <a href="/admin/campaigns" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'campaigns' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-list text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Kampeni Zote</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/leads" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'leads' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-users text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Wateja Wapya</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/my-ads" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'my-ads' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-ad text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Matangazo Yangu</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/upload-video" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'upload-video' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-upload text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Pakia Video</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
+
+                <!-- Finance & Billing -->
                 <li>
-                    <a href="/admin/upload-video" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'upload-video' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-upload text-white"></i>
-                        <span class="ml-3 sidebar-text">Pakia Video</span>
-                    </a>
+                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('finance-menu', this)">
+                        <div class="flex items-center">
+                            <i class="fas fa-wallet text-white"></i>
+                            <span class="ml-3 sidebar-text">Fedha & Malipo</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
+                    </div>
+                    <ul id="finance-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
+                        <li>
+                            <a href="/admin/wallet" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'wallet' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-money-bill-wave text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Pesa Yangu</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/generate-vouchers" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'generate-vouchers' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-ticket-alt text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Undaa Vouchers</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/revenue-share" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'revenue-share' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-hand-holding-usd text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Mgawanyo</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
+
+                <!-- Locations & Users -->
                 <li>
-                    <a href="/admin/generate-vouchers" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'generate-vouchers' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-ticket-alt text-white"></i>
-                        <span class="ml-3 sidebar-text">Undaa Vouchers</span>
-                    </a>
+                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('users-menu', this)">
+                        <div class="flex items-center">
+                            <i class="fas fa-users-cog text-white"></i>
+                            <span class="ml-3 sidebar-text">Watumiaji & Maeneo</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
+                    </div>
+                    <ul id="users-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
+                        <li>
+                            <a href="/admin/users" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'users' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-user-tie text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Watumiaji</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/locations" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'locations' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-map-marker-alt text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Maeneo</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/approve-content" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'approve-content' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-check-circle text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Idhini Maudhui</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
+
+                <!-- Analytics & Reports -->
                 <li>
-                    <a href="/admin/analytics" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'analytics' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-chart-line text-white"></i>
-                        <span class="ml-3 sidebar-text">Takwimu</span>
-                    </a>
+                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('reports-menu', this)">
+                        <div class="flex items-center">
+                            <i class="fas fa-chart-bar text-white"></i>
+                            <span class="ml-3 sidebar-text">Takwimu & Ripoti</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
+                    </div>
+                    <ul id="reports-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
+                        <li>
+                            <a href="/admin/analytics" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'analytics' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-chart-line text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Takwimu</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/admin/reports" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'reports' ? 'active-nav-item' : '' %>">
+                                <i class="fas fa-chart-pie text-white text-xs"></i>
+                                <span class="ml-2 sidebar-text">Ripoti</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
-                <li>
-                    <a href="/admin/users" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'users' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-user-tie text-white"></i>
-                        <span class="ml-3 sidebar-text">Watumiaji</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/admin/approve-content" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'approve-content' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-check-circle text-white"></i>
-                        <span class="ml-3 sidebar-text">Idhini Maudhui</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/admin/reports" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'reports' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-chart-pie text-white"></i>
-                        <span class="ml-3 sidebar-text">Ripoti</span>
-                    </a>
-                </li>
+
+                <!-- Settings -->
                 <li>
                     <a href="/admin/settings" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'settings' ? 'active-nav-item' : '' %>">
                         <i class="fas fa-cog text-white"></i>
@@ -247,6 +524,29 @@
                     body.classList.remove('collapsed');
                 }
             }
+        });
+
+        // Dropdown toggle function
+        function toggleDropdown(menuId, toggleElement) {
+            const menu = document.getElementById(menuId);
+            menu.classList.toggle('open');
+            toggleElement.classList.toggle('open');
+
+            // Save state to localStorage
+            localStorage.setItem('dropdown_' + menuId, menu.classList.contains('open'));
+        }
+
+        // Restore dropdown states on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            ['campaigns-menu', 'finance-menu', 'users-menu', 'reports-menu'].forEach(menuId => {
+                const isOpen = localStorage.getItem('dropdown_' + menuId) === 'true';
+                if (isOpen) {
+                    const menu = document.getElementById(menuId);
+                    const toggle = menu.previousElementSibling;
+                    menu.classList.add('open');
+                    toggle.classList.add('open');
+                }
+            });
         });
     </script>
     <%- typeof scripts !== 'undefined' ? scripts : '' %>

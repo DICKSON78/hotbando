@@ -1,0 +1,613 @@
+<%
+  const walletContent = `
+    <div class="container mx-auto px-4 py-8">
+      <!-- Page Header -->
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800">Pesa Yangu</h1>
+          <p class="text-gray-600 text-sm mt-1">Simamia wallet yako na miamala</p>
+        </div>
+        <div class="flex space-x-3">
+          <button onclick="openDepositModal()" class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center">
+            <i class="fas fa-plus mr-2"></i>
+            Weka Pesa
+          </button>
+          <button onclick="openWithdrawModal()" class="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition flex items-center">
+            <i class="fas fa-minus mr-2"></i>
+            Toa Pesa
+          </button>
+        </div>
+      </div>
+
+      <!-- Balance Card -->
+      <div class="bg-gradient-to-r from-primary to-primary-dark rounded-lg shadow-lg p-8 mb-6 text-white">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-white text-opacity-90 text-sm mb-2">Salio la Sasa</p>
+            <h2 class="text-5xl font-bold" id="wallet-balance">TZS 0</h2>
+            <p class="text-white text-opacity-80 text-sm mt-3">
+              <i class="fas fa-info-circle mr-1"></i>
+              Wakutse kwa kikomo: <span id="low-balance-threshold">TZS 10,000</span>
+            </p>
+          </div>
+          <div class="text-right">
+            <div class="bg-white bg-opacity-20 rounded-lg p-4 backdrop-blur-sm">
+              <i class="fas fa-wallet text-6xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Jumla ya Deposits</p>
+              <h2 class="text-3xl font-bold text-green-600 mt-1" id="total-deposits">TZS 0</h2>
+            </div>
+            <div class="p-3 bg-green-100 rounded-full">
+              <i class="fas fa-arrow-down text-green-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Jumla ya Matumizi</p>
+              <h2 class="text-3xl font-bold text-red-600 mt-1" id="total-spent">TZS 0</h2>
+            </div>
+            <div class="p-3 bg-red-100 rounded-full">
+              <i class="fas fa-arrow-up text-red-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Miamala ya Mwezi</p>
+              <h2 class="text-3xl font-bold text-blue-600 mt-1" id="monthly-transactions">0</h2>
+            </div>
+            <div class="p-3 bg-blue-100 rounded-full">
+              <i class="fas fa-receipt text-blue-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Kampeni Zinazoendelea</p>
+              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="active-campaigns">0</h2>
+            </div>
+            <div class="p-3 bg-purple-100 rounded-full">
+              <i class="fas fa-bullhorn text-purple-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transaction Filter -->
+      <div class="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label class="text-sm text-gray-600">Aina ya Muamala</label>
+            <select id="filter-type" class="w-full mt-1 p-2 border border-gray-300 rounded-lg" onchange="filterTransactions()">
+              <option value="">Zote</option>
+              <option value="deposit">Kuweka Pesa</option>
+              <option value="withdrawal">Kutoa Pesa</option>
+              <option value="campaign_charge">Malipo ya Kampeni</option>
+              <option value="refund">Rejesho</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Tarehe Kuanzia</label>
+            <input type="date" id="filter-start-date" class="w-full mt-1 p-2 border border-gray-300 rounded-lg" onchange="filterTransactions()">
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Tarehe Mwisho</label>
+            <input type="date" id="filter-end-date" class="w-full mt-1 p-2 border border-gray-300 rounded-lg" onchange="filterTransactions()">
+          </div>
+          <div class="flex items-end">
+            <button onclick="clearFilters()" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+              <i class="fas fa-filter mr-2"></i>
+              Safisha Filter
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transactions Table -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="p-6 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Historia ya Miamala</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aina</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maelezo</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kiasi</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rejarence</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200" id="transactions-tbody">
+              <tr>
+                <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                  <div class="flex flex-col items-center">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3 text-gray-300"></i>
+                    <p>Inapakia miamala...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-4 border-t border-gray-200">
+          <div class="flex items-center justify-between">
+            <p class="text-sm text-gray-600">Inaonyesha <span id="showing-count">0</span> kati ya <span id="total-count">0</span></p>
+            <div class="flex space-x-2" id="pagination">
+              <!-- Pagination buttons -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deposit Modal -->
+    <div id="depositModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800">Weka Pesa</h3>
+            <button onclick="closeDepositModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <form id="depositForm" onsubmit="submitDeposit(event)">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kiasi (TZS) *</label>
+                <input type="number" name="amount" required min="1000" step="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ingiza kiasi">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Njia ya Malipo *</label>
+                <select name="payment_method" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                  <option value="">Chagua njia ya malipo</option>
+                  <option value="m-pesa">M-Pesa</option>
+                  <option value="tigo-pesa">Tigo Pesa</option>
+                  <option value="airtel-money">Airtel Money</option>
+                  <option value="bank">Bank Transfer</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Namba ya Simu *</label>
+                <input type="tel" name="phone_number" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="0712345678">
+                <p class="text-xs text-gray-500 mt-1">Namba utakayotumia kulipa</p>
+              </div>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p class="text-sm text-yellow-800">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  Utapokea ombi la kulipa kwenye simu yako. Thibitisha malipo kumaliza muamala.
+                </p>
+              </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+              <button type="button" onclick="closeDepositModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                Ghairi
+              </button>
+              <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <i class="fas fa-check mr-2"></i>
+                Omba Malipo
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Withdraw Modal -->
+    <div id="withdrawModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800">Toa Pesa</h3>
+            <button onclick="closeWithdrawModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <form id="withdrawForm" onsubmit="submitWithdraw(event)">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kiasi (TZS) *</label>
+                <input type="number" name="amount" required min="1000" step="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ingiza kiasi">
+                <p class="text-xs text-gray-500 mt-1">Salio lako: <span id="current-balance-display">TZS 0</span></p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Njia ya Kupokea *</label>
+                <select name="payment_method" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                  <option value="">Chagua njia ya kupokea</option>
+                  <option value="m-pesa">M-Pesa</option>
+                  <option value="tigo-pesa">Tigo Pesa</option>
+                  <option value="airtel-money">Airtel Money</option>
+                  <option value="bank">Bank Transfer</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Namba ya Simu/Account *</label>
+                <input type="text" name="phone_number" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="0712345678">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Sababu</label>
+                <textarea name="notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Sababu ya kutoa pesa (Optional)"></textarea>
+              </div>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p class="text-sm text-yellow-800">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  Ombi lako litakaguliwa na admin. Utapokea pesa ndani ya masaa 24.
+                </p>
+              </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+              <button type="button" onclick="closeWithdrawModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                Ghairi
+              </button>
+              <button type="submit" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
+                <i class="fas fa-paper-plane mr-2"></i>
+                Tuma Ombi
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let walletData = null;
+      let allTransactions = [];
+      let currentFilters = { type: '', startDate: '', endDate: '' };
+
+      async function loadWallet() {
+        try {
+          const response = await fetch('/api/wallet/');
+          const data = await response.json();
+
+          if (data.success) {
+            walletData = data.wallet;
+            updateWalletDisplay();
+          } else {
+            showError('Imeshindwa kupakia wallet');
+          }
+        } catch (error) {
+          console.error('Error loading wallet:', error);
+          showError('Hitilafu imetokea wakati wa kupakia wallet');
+        }
+      }
+
+      function updateWalletDisplay() {
+        if (!walletData) return;
+
+        document.getElementById('wallet-balance').textContent = 'TZS ' + formatMoney(walletData.balance);
+        document.getElementById('low-balance-threshold').textContent = 'TZS ' + formatMoney(walletData.low_balance_threshold);
+        document.getElementById('current-balance-display').textContent = 'TZS ' + formatMoney(walletData.balance);
+        document.getElementById('total-deposits').textContent = 'TZS ' + formatMoney(walletData.total_deposits || 0);
+        document.getElementById('total-spent').textContent = 'TZS ' + formatMoney(walletData.total_spent || 0);
+        document.getElementById('monthly-transactions').textContent = walletData.monthly_transactions || 0;
+        document.getElementById('active-campaigns').textContent = walletData.active_campaigns || 0;
+      }
+
+      async function loadTransactions() {
+        try {
+          const response = await fetch('/api/wallet/transactions');
+          const data = await response.json();
+
+          if (data.success) {
+            allTransactions = data.transactions || [];
+            applyFilters();
+          } else {
+            showError('Imeshindwa kupakia miamala');
+          }
+        } catch (error) {
+          console.error('Error loading transactions:', error);
+          showError('Hitilafu imetokea wakati wa kupakia miamala');
+        }
+      }
+
+      function filterTransactions() {
+        currentFilters.type = document.getElementById('filter-type').value;
+        currentFilters.startDate = document.getElementById('filter-start-date').value;
+        currentFilters.endDate = document.getElementById('filter-end-date').value;
+        applyFilters();
+      }
+
+      function clearFilters() {
+        document.getElementById('filter-type').value = '';
+        document.getElementById('filter-start-date').value = '';
+        document.getElementById('filter-end-date').value = '';
+        currentFilters = { type: '', startDate: '', endDate: '' };
+        applyFilters();
+      }
+
+      function applyFilters() {
+        let filtered = allTransactions;
+
+        if (currentFilters.type) {
+          filtered = filtered.filter(t => t.transaction_type === currentFilters.type);
+        }
+
+        if (currentFilters.startDate) {
+          filtered = filtered.filter(t => new Date(t.created_at) >= new Date(currentFilters.startDate));
+        }
+
+        if (currentFilters.endDate) {
+          const endDate = new Date(currentFilters.endDate);
+          endDate.setHours(23, 59, 59);
+          filtered = filtered.filter(t => new Date(t.created_at) <= endDate);
+        }
+
+        renderTransactions(filtered);
+      }
+
+      function renderTransactions(transactions) {
+        const tbody = document.getElementById('transactions-tbody');
+        const showingCount = document.getElementById('showing-count');
+        const totalCount = document.getElementById('total-count');
+
+        showingCount.textContent = transactions.length;
+        totalCount.textContent = allTransactions.length;
+
+        if (transactions.length === 0) {
+          tbody.innerHTML = \`
+            <tr>
+              <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                <i class="fas fa-receipt text-4xl mb-3 text-gray-300"></i>
+                <p>Hakuna miamala bado</p>
+              </td>
+            </tr>
+          \`;
+          return;
+        }
+
+        tbody.innerHTML = transactions.map(txn => \`
+          <tr class="hover:bg-gray-50 transition">
+            <td class="px-6 py-4 text-sm text-gray-900">\${formatDate(txn.created_at)}</td>
+            <td class="px-6 py-4">
+              <span class="px-2 py-1 text-xs rounded-full \${getTransactionTypeBadge(txn.transaction_type)}">
+                \${getTransactionTypeLabel(txn.transaction_type)}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-900">\${escapeHtml(txn.description || '-')}</td>
+            <td class="px-6 py-4">
+              <span class="text-sm font-medium \${txn.amount >= 0 ? 'text-green-600' : 'text-red-600'}">
+                \${txn.amount >= 0 ? '+' : ''}TZS \${formatMoney(Math.abs(txn.amount))}
+              </span>
+            </td>
+            <td class="px-6 py-4">
+              <span class="px-2 py-1 text-xs rounded-full \${getStatusBadge(txn.status)}">
+                \${getStatusLabel(txn.status)}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500">\${escapeHtml(txn.reference_number || '-')}</td>
+          </tr>
+        \`).join('');
+      }
+
+      function getTransactionTypeLabel(type) {
+        const labels = {
+          'deposit': 'Deposit',
+          'withdrawal': 'Withdrawal',
+          'campaign_charge': 'Malipo Kampeni',
+          'refund': 'Rejesho',
+          'reward': 'Tuzo'
+        };
+        return labels[type] || type;
+      }
+
+      function getTransactionTypeBadge(type) {
+        const badges = {
+          'deposit': 'bg-green-100 text-green-800',
+          'withdrawal': 'bg-orange-100 text-orange-800',
+          'campaign_charge': 'bg-red-100 text-red-800',
+          'refund': 'bg-blue-100 text-blue-800',
+          'reward': 'bg-purple-100 text-purple-800'
+        };
+        return badges[type] || 'bg-gray-100 text-gray-800';
+      }
+
+      function getStatusLabel(status) {
+        const labels = {
+          'completed': 'Imekamilika',
+          'pending': 'Inasubiri',
+          'failed': 'Imeshindwa',
+          'processing': 'Inachakatwa'
+        };
+        return labels[status] || status;
+      }
+
+      function getStatusBadge(status) {
+        const badges = {
+          'completed': 'bg-green-100 text-green-800',
+          'pending': 'bg-yellow-100 text-yellow-800',
+          'failed': 'bg-red-100 text-red-800',
+          'processing': 'bg-blue-100 text-blue-800'
+        };
+        return badges[status] || 'bg-gray-100 text-gray-800';
+      }
+
+      function formatMoney(amount) {
+        return Number(amount).toLocaleString();
+      }
+
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('sw-TZ', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+
+      function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function openDepositModal() {
+        document.getElementById('depositModal').classList.remove('hidden');
+      }
+
+      function closeDepositModal() {
+        document.getElementById('depositModal').classList.add('hidden');
+        document.getElementById('depositForm').reset();
+      }
+
+      function openWithdrawModal() {
+        document.getElementById('withdrawModal').classList.remove('hidden');
+      }
+
+      function closeWithdrawModal() {
+        document.getElementById('withdrawModal').classList.add('hidden');
+        document.getElementById('withdrawForm').reset();
+      }
+
+      async function submitDeposit(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        const depositData = {
+          amount: parseFloat(formData.get('amount')),
+          payment_method: formData.get('payment_method'),
+          phone_number: formData.get('phone_number')
+        };
+
+        try {
+          const response = await fetch('/api/wallet/deposit/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(depositData)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showSuccess('Ombi la malipo limetumwa! Thibitisha kwenye simu yako.');
+            closeDepositModal();
+
+            // Poll for payment status
+            if (data.payment_id) {
+              checkPaymentStatus(data.payment_id);
+            }
+          } else {
+            showError(data.error || 'Imeshindwa kutuma ombi la malipo');
+          }
+        } catch (error) {
+          console.error('Error submitting deposit:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      async function submitWithdraw(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        const withdrawData = {
+          amount: parseFloat(formData.get('amount')),
+          payment_method: formData.get('payment_method'),
+          phone_number: formData.get('phone_number'),
+          notes: formData.get('notes')
+        };
+
+        try {
+          const response = await fetch('/api/wallet/withdraw/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(withdrawData)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showSuccess('Ombi la kutoa pesa limetumwa kikamilifu! Utapokea pesa ndani ya masaa 24.');
+            closeWithdrawModal();
+            loadWallet();
+            loadTransactions();
+          } else {
+            showError(data.error || 'Imeshindwa kutuma ombi');
+          }
+        } catch (error) {
+          console.error('Error submitting withdrawal:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      async function checkPaymentStatus(paymentId) {
+        // Poll every 5 seconds for 2 minutes
+        let attempts = 0;
+        const maxAttempts = 24; // 2 minutes
+
+        const interval = setInterval(async () => {
+          attempts++;
+
+          try {
+            const response = await fetch(\`/api/wallet/payment/\${paymentId}\`);
+            const data = await response.json();
+
+            if (data.success && data.payment.status === 'completed') {
+              clearInterval(interval);
+              showSuccess('Malipo yamekamilika! Wallet yako imeongezwa pesa.');
+              loadWallet();
+              loadTransactions();
+            } else if (data.success && data.payment.status === 'failed') {
+              clearInterval(interval);
+              showError('Malipo yameshindwa. Tafadhali jaribu tena.');
+            } else if (attempts >= maxAttempts) {
+              clearInterval(interval);
+              showError('Muda umeisha. Angalia historia ya miamala kwa habari zaidi.');
+            }
+          } catch (error) {
+            console.error('Error checking payment status:', error);
+          }
+        }, 5000);
+      }
+
+      function showSuccess(message) {
+        alert(message);
+      }
+
+      function showError(message) {
+        alert(message);
+      }
+
+      // Initialize on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        loadWallet();
+        loadTransactions();
+
+        // Refresh data every 30 seconds
+        setInterval(() => {
+          loadWallet();
+          loadTransactions();
+        }, 30000);
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Pesa Yangu',
+    activePage: 'wallet',
+    body: walletContent
+}) %>

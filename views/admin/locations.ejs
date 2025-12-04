@@ -1,0 +1,562 @@
+<%
+  const locationsContent = `
+    <div class="container mx-auto px-4 py-8">
+      <!-- Page Header -->
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800">Maeneo</h1>
+          <p class="text-gray-600 text-sm mt-1">Simamia maeneo na franchise owners</p>
+        </div>
+        <button onclick="openAddLocationModal()" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center">
+          <i class="fas fa-plus mr-2"></i>
+          Ongeza Eneo
+        </button>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Jumla ya Maeneo</p>
+              <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-locations">0</h2>
+            </div>
+            <div class="p-3 bg-blue-100 rounded-full">
+              <i class="fas fa-map-marker-alt text-blue-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Routers</p>
+              <h2 class="text-3xl font-bold text-green-600 mt-1" id="total-routers">0</h2>
+            </div>
+            <div class="p-3 bg-green-100 rounded-full">
+              <i class="fas fa-wifi text-green-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Watumiaji Wote</p>
+              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="total-users">0</h2>
+            </div>
+            <div class="p-3 bg-purple-100 rounded-full">
+              <i class="fas fa-users text-purple-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Mapato ya Jumla</p>
+              <h2 class="text-3xl font-bold text-orange-600 mt-1" id="total-revenue">TZS 0</h2>
+            </div>
+            <div class="p-3 bg-orange-100 rounded-full">
+              <i class="fas fa-money-bill-wave text-orange-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Locations Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="locations-grid">
+        <!-- Loading state -->
+        <div class="col-span-full flex justify-center items-center py-12">
+          <div class="text-center">
+            <i class="fas fa-spinner fa-spin text-4xl mb-3 text-gray-300"></i>
+            <p class="text-gray-500">Inapakia maeneo...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Location Modal -->
+    <div id="addLocationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800">Ongeza Eneo Jipya</h3>
+            <button onclick="closeAddLocationModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <form id="addLocationForm" onsubmit="submitLocation(event)">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jina la Eneo *</label>
+                <input type="text" name="location_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Mfano: UDSM Main Campus">
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Jiji *</label>
+                  <input type="text" name="city" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Dar es Salaam">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Mkoa *</label>
+                  <input type="text" name="region" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Dar es Salaam">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Anuani Kamili</label>
+                <textarea name="address" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Anuani kamili ya eneo"></textarea>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Latitude</label>
+                  <input type="text" name="latitude" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="-6.7924">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Longitude</label>
+                  <input type="text" name="longitude" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="39.2083">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Aina ya Eneo *</label>
+                <select name="location_type" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Chagua aina</option>
+                  <option value="university">Chuo Kikuu</option>
+                  <option value="college">Chuo</option>
+                  <option value="hostel">Bweni</option>
+                  <option value="mall">Mall</option>
+                  <option value="restaurant">Mkahawa</option>
+                  <option value="hotel">Hoteli</option>
+                  <option value="office">Ofisi</option>
+                  <option value="residential">Makazi</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Franchise Owner (Optional)</label>
+                <select name="owner_id" id="owner-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Chagua franchise owner</option>
+                  <!-- Will be populated dynamically -->
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
+                <input type="number" name="commission_rate" step="0.01" min="0" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="10.00">
+                <p class="text-xs text-gray-500 mt-1">Kiwango cha mgawanyo kwa franchise owner</p>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Maelezo</label>
+                <textarea name="notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Maelezo ya ziada kuhusu eneo"></textarea>
+              </div>
+
+              <div class="flex items-center">
+                <input type="checkbox" name="is_active" id="is_active" checked class="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded">
+                <label for="is_active" class="ml-2 text-sm text-gray-700">Eneo linafanya kazi</label>
+              </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 mt-6">
+              <button type="button" onclick="closeAddLocationModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                Ghairi
+              </button>
+              <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
+                <i class="fas fa-save mr-2"></i>
+                Hifadhi Eneo
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Location Details Modal -->
+    <div id="locationDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800" id="location-details-title">Taarifa za Eneo</h3>
+            <button onclick="closeLocationDetailsModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6" id="locationDetailsContent">
+          <!-- Content will be loaded here -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let allLocations = [];
+      let franchiseOwners = [];
+
+      async function loadLocations() {
+        try {
+          const response = await fetch('/api/locations/');
+          const data = await response.json();
+
+          if (data.success) {
+            allLocations = data.locations || [];
+            renderLocations();
+            updateStats();
+          } else {
+            showError('Imeshindwa kupakia maeneo');
+          }
+        } catch (error) {
+          console.error('Error loading locations:', error);
+          showError('Hitilafu imetokea wakati wa kupakia maeneo');
+        }
+      }
+
+      async function loadFranchiseOwners() {
+        try {
+          // Load users with franchise_owner role
+          const response = await fetch('/admin/customers');
+          const data = await response.json();
+
+          if (data.success) {
+            franchiseOwners = data.customers.filter(u => u.role === 'franchise_owner');
+            populateOwnerSelect();
+          }
+        } catch (error) {
+          console.error('Error loading franchise owners:', error);
+        }
+      }
+
+      function populateOwnerSelect() {
+        const select = document.getElementById('owner-select');
+        franchiseOwners.forEach(owner => {
+          const option = document.createElement('option');
+          option.value = owner.id;
+          option.textContent = \`\${owner.name} (\${owner.phone})\`;
+          select.appendChild(option);
+        });
+      }
+
+      function updateStats() {
+        const totalRouters = allLocations.reduce((sum, loc) => sum + (loc.router_count || 0), 0);
+        const totalUsers = allLocations.reduce((sum, loc) => sum + (loc.user_count || 0), 0);
+        const totalRevenue = allLocations.reduce((sum, loc) => sum + (loc.revenue || 0), 0);
+
+        document.getElementById('total-locations').textContent = allLocations.length;
+        document.getElementById('total-routers').textContent = totalRouters;
+        document.getElementById('total-users').textContent = totalUsers;
+        document.getElementById('total-revenue').textContent = 'TZS ' + formatMoney(totalRevenue);
+      }
+
+      function renderLocations() {
+        const grid = document.getElementById('locations-grid');
+
+        if (allLocations.length === 0) {
+          grid.innerHTML = \`
+            <div class="col-span-full text-center py-12">
+              <i class="fas fa-map-marker-alt text-5xl mb-3 text-gray-300"></i>
+              <p class="text-gray-500 mb-4">Hakuna maeneo bado</p>
+              <button onclick="openAddLocationModal()" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
+                Ongeza Eneo la Kwanza
+              </button>
+            </div>
+          \`;
+          return;
+        }
+
+        grid.innerHTML = allLocations.map(location => \`
+          <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition">
+            <div class="p-6">
+              <!-- Location Header -->
+              <div class="flex justify-between items-start mb-4">
+                <div class="flex-1">
+                  <h3 class="text-lg font-semibold text-gray-800 mb-1">\${escapeHtml(location.location_name)}</h3>
+                  <p class="text-sm text-gray-500">
+                    <i class="fas fa-map-marker-alt mr-1"></i>
+                    \${escapeHtml(location.city)}, \${escapeHtml(location.region)}
+                  </p>
+                </div>
+                <span class="px-2 py-1 text-xs rounded-full \${location.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                  \${location.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+
+              <!-- Location Type Badge -->
+              <div class="mb-4">
+                <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                  <i class="fas fa-tag mr-1"></i>
+                  \${getLocationTypeLabel(location.location_type)}
+                </span>
+              </div>
+
+              <!-- Stats -->
+              <div class="grid grid-cols-3 gap-2 mb-4">
+                <div class="text-center p-2 bg-gray-50 rounded">
+                  <p class="text-2xl font-bold text-gray-800">\${location.router_count || 0}</p>
+                  <p class="text-xs text-gray-500">Routers</p>
+                </div>
+                <div class="text-center p-2 bg-gray-50 rounded">
+                  <p class="text-2xl font-bold text-gray-800">\${location.user_count || 0}</p>
+                  <p class="text-xs text-gray-500">Users</p>
+                </div>
+                <div class="text-center p-2 bg-gray-50 rounded">
+                  <p class="text-2xl font-bold text-gray-800">\${location.active_users || 0}</p>
+                  <p class="text-xs text-gray-500">Online</p>
+                </div>
+              </div>
+
+              <!-- Franchise Owner -->
+              \${location.owner_name ? \`
+                <div class="mb-4 p-3 bg-purple-50 border border-purple-100 rounded-lg">
+                  <p class="text-xs text-gray-500 mb-1">Franchise Owner:</p>
+                  <p class="text-sm font-medium text-gray-800">
+                    <i class="fas fa-user mr-1"></i>
+                    \${escapeHtml(location.owner_name)}
+                  </p>
+                  \${location.commission_rate ? \`
+                    <p class="text-xs text-gray-500 mt-1">
+                      Commission: \${location.commission_rate}%
+                    </p>
+                  \` : ''}
+                </div>
+              \` : ''}
+
+              <!-- Actions -->
+              <div class="flex space-x-2 pt-4 border-t border-gray-200">
+                <button onclick="viewLocationDetails(\${location.id})" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                  <i class="fas fa-eye mr-1"></i>
+                  Angalia
+                </button>
+                <button onclick="deleteLocation(\${location.id})" class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        \`).join('');
+      }
+
+      function getLocationTypeLabel(type) {
+        const labels = {
+          'university': 'Chuo Kikuu',
+          'college': 'Chuo',
+          'hostel': 'Bweni',
+          'mall': 'Mall',
+          'restaurant': 'Mkahawa',
+          'hotel': 'Hoteli',
+          'office': 'Ofisi',
+          'residential': 'Makazi'
+        };
+        return labels[type] || type;
+      }
+
+      function formatMoney(amount) {
+        return Number(amount).toLocaleString();
+      }
+
+      function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function openAddLocationModal() {
+        document.getElementById('addLocationModal').classList.remove('hidden');
+      }
+
+      function closeAddLocationModal() {
+        document.getElementById('addLocationModal').classList.add('hidden');
+        document.getElementById('addLocationForm').reset();
+      }
+
+      async function submitLocation(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        const locationData = {
+          location_name: formData.get('location_name'),
+          city: formData.get('city'),
+          region: formData.get('region'),
+          address: formData.get('address'),
+          latitude: formData.get('latitude') || null,
+          longitude: formData.get('longitude') || null,
+          location_type: formData.get('location_type'),
+          owner_id: formData.get('owner_id') || null,
+          commission_rate: formData.get('commission_rate') || null,
+          notes: formData.get('notes'),
+          is_active: formData.get('is_active') ? 1 : 0
+        };
+
+        try {
+          const response = await fetch('/api/locations/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(locationData)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showSuccess('Eneo limeongezwa kikamilifu!');
+            closeAddLocationModal();
+            loadLocations();
+          } else {
+            showError(data.error || 'Imeshindwa kuongeza eneo');
+          }
+        } catch (error) {
+          console.error('Error adding location:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      async function viewLocationDetails(locationId) {
+        try {
+          const response = await fetch(\`/api/locations/\${locationId}\`);
+          const data = await response.json();
+
+          if (data.success) {
+            const location = data.location;
+            document.getElementById('location-details-title').textContent = location.location_name;
+
+            let detailsHTML = \`
+              <div class="space-y-6">
+                <!-- Basic Info -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p class="text-sm text-gray-500">Jina la Eneo</p>
+                    <p class="font-medium">\${escapeHtml(location.location_name)}</p>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500">Aina</p>
+                    <p class="font-medium">\${getLocationTypeLabel(location.location_type)}</p>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500">Jiji</p>
+                    <p class="font-medium">\${escapeHtml(location.city)}</p>
+                  </div>
+                  <div>
+                    <p class="text-sm text-gray-500">Mkoa</p>
+                    <p class="font-medium">\${escapeHtml(location.region)}</p>
+                  </div>
+                  \${location.address ? \`
+                    <div class="col-span-2">
+                      <p class="text-sm text-gray-500">Anuani</p>
+                      <p class="font-medium">\${escapeHtml(location.address)}</p>
+                    </div>
+                  \` : ''}
+                </div>
+
+                <!-- Stats -->
+                <div class="border-t border-gray-200 pt-4">
+                  <h4 class="font-medium text-gray-800 mb-3">Takwimu</h4>
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center p-4 bg-blue-50 rounded-lg">
+                      <p class="text-3xl font-bold text-blue-600">\${location.router_count || 0}</p>
+                      <p class="text-sm text-gray-600">Routers</p>
+                    </div>
+                    <div class="text-center p-4 bg-purple-50 rounded-lg">
+                      <p class="text-3xl font-bold text-purple-600">\${location.user_count || 0}</p>
+                      <p class="text-sm text-gray-600">Watumiaji</p>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                      <p class="text-3xl font-bold text-green-600">\${location.active_users || 0}</p>
+                      <p class="text-sm text-gray-600">Online</p>
+                    </div>
+                    <div class="text-center p-4 bg-orange-50 rounded-lg">
+                      <p class="text-2xl font-bold text-orange-600">TZS \${formatMoney(location.revenue || 0)}</p>
+                      <p class="text-sm text-gray-600">Mapato</p>
+                    </div>
+                  </div>
+                </div>
+
+                \${location.owner_name ? \`
+                  <div class="border-t border-gray-200 pt-4">
+                    <h4 class="font-medium text-gray-800 mb-3">Franchise Owner</h4>
+                    <div class="bg-purple-50 border border-purple-100 rounded-lg p-4">
+                      <p class="font-medium text-gray-800">\${escapeHtml(location.owner_name)}</p>
+                      \${location.owner_phone ? \`
+                        <p class="text-sm text-gray-600 mt-1">
+                          <i class="fas fa-phone mr-1"></i>
+                          \${escapeHtml(location.owner_phone)}
+                        </p>
+                      \` : ''}
+                      \${location.commission_rate ? \`
+                        <p class="text-sm text-gray-600 mt-1">
+                          <i class="fas fa-percentage mr-1"></i>
+                          Commission: \${location.commission_rate}%
+                        </p>
+                      \` : ''}
+                    </div>
+                  </div>
+                \` : ''}
+
+                \${location.notes ? \`
+                  <div class="border-t border-gray-200 pt-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Maelezo</h4>
+                    <p class="text-sm text-gray-600">\${escapeHtml(location.notes)}</p>
+                  </div>
+                \` : ''}
+              </div>
+            \`;
+
+            document.getElementById('locationDetailsContent').innerHTML = detailsHTML;
+            document.getElementById('locationDetailsModal').classList.remove('hidden');
+          }
+        } catch (error) {
+          console.error('Error loading location details:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      function closeLocationDetailsModal() {
+        document.getElementById('locationDetailsModal').classList.add('hidden');
+      }
+
+      async function deleteLocation(locationId) {
+        if (!confirm('Je, una uhakika unataka kufuta eneo hili?')) return;
+
+        try {
+          const response = await fetch(\`/api/locations/\${locationId}\`, {
+            method: 'DELETE'
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showSuccess('Eneo limefutwa kikamilifu');
+            loadLocations();
+          } else {
+            showError(data.error || 'Imeshindwa kufuta eneo');
+          }
+        } catch (error) {
+          console.error('Error deleting location:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      function showSuccess(message) {
+        alert(message);
+      }
+
+      function showError(message) {
+        alert(message);
+      }
+
+      // Initialize on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        loadLocations();
+        loadFranchiseOwners();
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Maeneo',
+    activePage: 'locations',
+    body: locationsContent
+}) %>

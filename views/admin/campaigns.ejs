@@ -1,0 +1,615 @@
+<%
+  const campaignsContent = `
+    <div class="container mx-auto px-4 py-8">
+      <!-- Page Header -->
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800">Kampeni Zote</h1>
+          <p class="text-gray-600 text-sm mt-1">Simamia kampeni za benki na matangazo</p>
+        </div>
+        <button onclick="openCreateCampaignModal()" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center">
+          <i class="fas fa-plus mr-2"></i>
+          Unda Kampeni Mpya
+        </button>
+      </div>
+
+      <!-- Filters -->
+      <div class="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label class="text-sm text-gray-600">Aina ya Kampeni</label>
+            <select id="filter-type" class="w-full mt-1 p-2 border border-gray-300 rounded-lg" onchange="filterCampaigns()">
+              <option value="">Zote</option>
+              <option value="bank_form">Fomu za Benki</option>
+              <option value="ad_video">Matangazo (Video)</option>
+              <option value="ad_image">Matangazo (Picha)</option>
+              <option value="app_install">Usakinishaji wa App</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Hali</label>
+            <select id="filter-status" class="w-full mt-1 p-2 border border-gray-300 rounded-lg" onchange="filterCampaigns()">
+              <option value="">Zote</option>
+              <option value="1">Inafanya Kazi</option>
+              <option value="0">Haifanyi Kazi</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Mmiliki</label>
+            <select id="filter-owner" class="w-full mt-1 p-2 border border-gray-300 rounded-lg" onchange="filterCampaigns()">
+              <option value="">Wote</option>
+              <option value="bank">Benki</option>
+              <option value="advertiser">Watangazaji</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button onclick="clearFilters()" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+              <i class="fas fa-filter mr-2"></i>
+              Safisha Filter
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Jumla ya Kampeni</p>
+              <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-campaigns">0</h2>
+            </div>
+            <div class="p-3 bg-blue-100 rounded-full">
+              <i class="fas fa-bullhorn text-blue-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Zinazofanya Kazi</p>
+              <h2 class="text-3xl font-bold text-green-600 mt-1" id="active-campaigns">0</h2>
+            </div>
+            <div class="p-3 bg-green-100 rounded-full">
+              <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Wateja Wapya</p>
+              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="total-leads">0</h2>
+            </div>
+            <div class="p-3 bg-purple-100 rounded-full">
+              <i class="fas fa-users text-purple-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Bajeti Iliyotumika</p>
+              <h2 class="text-3xl font-bold text-orange-600 mt-1" id="total-spent">TZS 0</h2>
+            </div>
+            <div class="p-3 bg-orange-100 rounded-full">
+              <i class="fas fa-money-bill-wave text-orange-600 text-2xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campaigns Table -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="p-6 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Orodha ya Kampeni</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina la Kampeni</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aina</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mmiliki</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wateja</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bajeti</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vitendo</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200" id="campaigns-tbody">
+              <!-- Data will be loaded via JavaScript -->
+              <tr>
+                <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                  <div class="flex flex-col items-center">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3 text-gray-300"></i>
+                    <p>Inapakia kampeni...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-4 border-t border-gray-200">
+          <div class="flex items-center justify-between">
+            <p class="text-sm text-gray-600">Inaonyesha <span id="showing-count">0</span> kati ya <span id="total-count">0</span></p>
+            <div class="flex space-x-2" id="pagination">
+              <!-- Pagination buttons -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Campaign Modal -->
+    <div id="createCampaignModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800">Unda Kampeni Mpya</h3>
+            <button onclick="closeCreateCampaignModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <form id="createCampaignForm" onsubmit="submitCampaign(event)">
+            <!-- Campaign Type Selection -->
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Aina ya Kampeni</label>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <label class="campaign-type-option cursor-pointer">
+                  <input type="radio" name="campaign_type" value="bank_form" class="hidden" onchange="showCampaignFields(this.value)">
+                  <div class="border-2 border-gray-300 rounded-lg p-4 text-center hover:border-primary transition campaign-type-card">
+                    <i class="fas fa-file-alt text-3xl text-blue-600 mb-2"></i>
+                    <p class="text-sm font-medium">Fomu ya Benki</p>
+                  </div>
+                </label>
+                <label class="campaign-type-option cursor-pointer">
+                  <input type="radio" name="campaign_type" value="ad_video" class="hidden" onchange="showCampaignFields(this.value)">
+                  <div class="border-2 border-gray-300 rounded-lg p-4 text-center hover:border-primary transition campaign-type-card">
+                    <i class="fas fa-video text-3xl text-red-600 mb-2"></i>
+                    <p class="text-sm font-medium">Video Ad</p>
+                  </div>
+                </label>
+                <label class="campaign-type-option cursor-pointer">
+                  <input type="radio" name="campaign_type" value="ad_image" class="hidden" onchange="showCampaignFields(this.value)">
+                  <div class="border-2 border-gray-300 rounded-lg p-4 text-center hover:border-primary transition campaign-type-card">
+                    <i class="fas fa-image text-3xl text-green-600 mb-2"></i>
+                    <p class="text-sm font-medium">Image Ad</p>
+                  </div>
+                </label>
+                <label class="campaign-type-option cursor-pointer">
+                  <input type="radio" name="campaign_type" value="app_install" class="hidden" onchange="showCampaignFields(this.value)">
+                  <div class="border-2 border-gray-300 rounded-lg p-4 text-center hover:border-primary transition campaign-type-card">
+                    <i class="fas fa-mobile-alt text-3xl text-purple-600 mb-2"></i>
+                    <p class="text-sm font-medium">App Install</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Dynamic Campaign Fields Container -->
+            <div id="campaignFieldsContainer" class="hidden">
+              <!-- Common fields -->
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Jina la Kampeni *</label>
+                  <input type="text" name="campaign_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Maelezo</label>
+                  <textarea name="description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bajeti ya Jumla (TZS) *</label>
+                    <input type="number" name="total_budget" required min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bei kwa Kila Mtumiaji (TZS) *</label>
+                    <input type="number" name="cost_per_completion" required min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Thamani ya Data (MB)</label>
+                  <input type="number" name="reward_bytes" value="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                  <p class="text-xs text-gray-500 mt-1">Data itakayopewa mtumiaji baada ya kukamilisha</p>
+                </div>
+              </div>
+
+              <!-- Type-specific fields will be added here -->
+              <div id="typeSpecificFields" class="mt-4"></div>
+            </div>
+
+            <div class="flex justify-end space-x-4 mt-6" id="formActions" style="display: none;">
+              <button type="button" onclick="closeCreateCampaignModal()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                Ghairi
+              </button>
+              <button type="submit" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
+                <i class="fas fa-save mr-2"></i>
+                Hifadhi Kampeni
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .campaign-type-option input:checked + .campaign-type-card {
+        border-color: #FF7A30;
+        background-color: rgba(255, 122, 48, 0.05);
+      }
+    </style>
+
+    <script>
+      let allCampaigns = [];
+      let currentFilters = { type: '', status: '', owner: '' };
+
+      // Load campaigns from API
+      async function loadCampaigns() {
+        try {
+          const response = await fetch('/api/campaigns/my-campaigns');
+          const data = await response.json();
+
+          if (data.success) {
+            allCampaigns = data.campaigns || [];
+            applyFilters();
+            updateStats();
+          } else {
+            showError('Imeshindwa kupakia kampeni');
+          }
+        } catch (error) {
+          console.error('Error loading campaigns:', error);
+          showError('Hitilafu imetokea wakati wa kupakia kampeni');
+        }
+      }
+
+      function updateStats() {
+        const totalCampaigns = allCampaigns.length;
+        const activeCampaigns = allCampaigns.filter(c => c.is_active).length;
+        const totalLeads = allCampaigns.reduce((sum, c) => sum + (c.completions_count || 0), 0);
+        const totalSpent = allCampaigns.reduce((sum, c) => sum + (c.spent_budget || 0), 0);
+
+        document.getElementById('total-campaigns').textContent = totalCampaigns;
+        document.getElementById('active-campaigns').textContent = activeCampaigns;
+        document.getElementById('total-leads').textContent = totalLeads;
+        document.getElementById('total-spent').textContent = 'TZS ' + formatMoney(totalSpent);
+      }
+
+      function filterCampaigns() {
+        currentFilters.type = document.getElementById('filter-type').value;
+        currentFilters.status = document.getElementById('filter-status').value;
+        currentFilters.owner = document.getElementById('filter-owner').value;
+        applyFilters();
+      }
+
+      function clearFilters() {
+        document.getElementById('filter-type').value = '';
+        document.getElementById('filter-status').value = '';
+        document.getElementById('filter-owner').value = '';
+        currentFilters = { type: '', status: '', owner: '' };
+        applyFilters();
+      }
+
+      function applyFilters() {
+        let filtered = allCampaigns;
+
+        if (currentFilters.type) {
+          filtered = filtered.filter(c => c.campaign_type === currentFilters.type);
+        }
+
+        if (currentFilters.status !== '') {
+          const isActive = currentFilters.status === '1';
+          filtered = filtered.filter(c => c.is_active === isActive);
+        }
+
+        if (currentFilters.owner) {
+          filtered = filtered.filter(c => c.owner_type === currentFilters.owner);
+        }
+
+        renderCampaigns(filtered);
+      }
+
+      function renderCampaigns(campaigns) {
+        const tbody = document.getElementById('campaigns-tbody');
+        const showingCount = document.getElementById('showing-count');
+        const totalCount = document.getElementById('total-count');
+
+        showingCount.textContent = campaigns.length;
+        totalCount.textContent = allCampaigns.length;
+
+        if (campaigns.length === 0) {
+          tbody.innerHTML = \`
+            <tr>
+              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                <i class="fas fa-bullhorn text-4xl mb-3 text-gray-300"></i>
+                <p>Hakuna kampeni zilizozoundwa bado</p>
+                <button onclick="openCreateCampaignModal()" class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
+                  Unda Kampeni ya Kwanza
+                </button>
+              </td>
+            </tr>
+          \`;
+          return;
+        }
+
+        tbody.innerHTML = campaigns.map(campaign => \`
+          <tr class="hover:bg-gray-50 transition">
+            <td class="px-6 py-4">
+              <div class="font-medium text-gray-900">\${escapeHtml(campaign.campaign_name)}</div>
+              <div class="text-sm text-gray-500">\${escapeHtml(campaign.description || '')}</div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="px-2 py-1 text-xs rounded-full \${getCampaignTypeBadge(campaign.campaign_type)}">
+                \${getCampaignTypeLabel(campaign.campaign_type)}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-900">\${escapeHtml(campaign.company_name || campaign.owner_name || '-')}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">\${campaign.completions_count || 0}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">
+              <div class="text-xs text-gray-500">TZS \${formatMoney(campaign.spent_budget || 0)}</div>
+              <div class="text-xs text-gray-400">/ \${formatMoney(campaign.total_budget || 0)}</div>
+            </td>
+            <td class="px-6 py-4">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" \${campaign.is_active ? 'checked' : ''} class="sr-only peer"
+                       onchange="toggleCampaign(\${campaign.id}, this.checked)">
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </td>
+            <td class="px-6 py-4 text-sm">
+              <div class="flex space-x-2">
+                <button onclick="viewCampaignDetails(\${campaign.id})" class="text-blue-600 hover:text-blue-800" title="Angalia">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <a href="/admin/leads?campaign_id=\${campaign.id}" class="text-purple-600 hover:text-purple-800" title="Wateja">
+                  <i class="fas fa-users"></i>
+                </a>
+                <button onclick="deleteCampaign(\${campaign.id})" class="text-red-600 hover:text-red-800" title="Futa">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        \`).join('');
+      }
+
+      function getCampaignTypeLabel(type) {
+        const labels = {
+          'bank_form': 'Fomu ya Benki',
+          'ad_video': 'Video',
+          'ad_image': 'Picha',
+          'app_install': 'App Install',
+          'survey': 'Utafiti'
+        };
+        return labels[type] || type;
+      }
+
+      function getCampaignTypeBadge(type) {
+        const badges = {
+          'bank_form': 'bg-blue-100 text-blue-800',
+          'ad_video': 'bg-red-100 text-red-800',
+          'ad_image': 'bg-green-100 text-green-800',
+          'app_install': 'bg-purple-100 text-purple-800',
+          'survey': 'bg-yellow-100 text-yellow-800'
+        };
+        return badges[type] || 'bg-gray-100 text-gray-800';
+      }
+
+      function formatMoney(amount) {
+        return Number(amount).toLocaleString();
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function openCreateCampaignModal() {
+        document.getElementById('createCampaignModal').classList.remove('hidden');
+      }
+
+      function closeCreateCampaignModal() {
+        document.getElementById('createCampaignModal').classList.add('hidden');
+        document.getElementById('createCampaignForm').reset();
+        document.getElementById('campaignFieldsContainer').classList.add('hidden');
+        document.getElementById('formActions').style.display = 'none';
+      }
+
+      function showCampaignFields(type) {
+        const container = document.getElementById('campaignFieldsContainer');
+        const typeSpecificFields = document.getElementById('typeSpecificFields');
+        const formActions = document.getElementById('formActions');
+
+        container.classList.remove('hidden');
+        formActions.style.display = 'flex';
+
+        // Type-specific fields
+        let specificHTML = '';
+        if (type === 'bank_form') {
+          specificHTML = \`
+            <div class="border-t border-gray-200 pt-4">
+              <h4 class="font-medium text-gray-800 mb-3">Taarifa za Fomu</h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Jina la Benki *</label>
+                  <input type="text" name="company_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Maelezo ya Bidhaa/Huduma</label>
+                  <textarea name="product_details" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Sehemu za Fomu (moja kwa mstari)</label>
+                  <textarea name="form_fields" rows="5" class="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm" placeholder="full_name:text:Jina kamili&#10;phone:tel:Namba ya simu&#10;email:email:Barua pepe"></textarea>
+                  <p class="text-xs text-gray-500 mt-1">Format: field_name:field_type:field_label</p>
+                </div>
+              </div>
+            </div>
+          \`;
+        } else if (type === 'ad_video') {
+          specificHTML = \`
+            <div class="border-t border-gray-200 pt-4">
+              <h4 class="font-medium text-gray-800 mb-3">Taarifa za Video</h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">URL ya Video *</label>
+                  <input type="url" name="video_url" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Muda wa Video (sekunde) *</label>
+                  <input type="number" name="video_duration" required min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+              </div>
+            </div>
+          \`;
+        } else if (type === 'app_install') {
+          specificHTML = \`
+            <div class="border-t border-gray-200 pt-4">
+              <h4 class="font-medium text-gray-800 mb-3">Taarifa za App</h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Jina la App *</label>
+                  <input type="text" name="app_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Play Store URL *</label>
+                  <input type="url" name="app_url" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://play.google.com/store/apps/details?id=...">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">URL ya Picha ya App</label>
+                  <input type="url" name="app_icon_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+              </div>
+            </div>
+          \`;
+        }
+
+        typeSpecificFields.innerHTML = specificHTML;
+      }
+
+      async function submitCampaign(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+
+        // Convert form data to JSON
+        const campaignData = {
+          campaign_type: formData.get('campaign_type'),
+          campaign_name: formData.get('campaign_name'),
+          description: formData.get('description'),
+          total_budget: parseFloat(formData.get('total_budget')),
+          cost_per_completion: parseFloat(formData.get('cost_per_completion')),
+          reward_bytes: parseInt(formData.get('reward_bytes')) * 1024 * 1024, // Convert MB to bytes
+          content: {}
+        };
+
+        // Type-specific content
+        if (campaignData.campaign_type === 'bank_form') {
+          campaignData.company_name = formData.get('company_name');
+          campaignData.content.form_fields = formData.get('form_fields');
+          campaignData.content.product_details = formData.get('product_details');
+        } else if (campaignData.campaign_type === 'ad_video') {
+          campaignData.content.video_url = formData.get('video_url');
+          campaignData.content.video_duration = parseInt(formData.get('video_duration'));
+        } else if (campaignData.campaign_type === 'app_install') {
+          campaignData.content.app_name = formData.get('app_name');
+          campaignData.content.app_url = formData.get('app_url');
+          campaignData.content.app_icon_url = formData.get('app_icon_url');
+        }
+
+        try {
+          const response = await fetch('/api/campaigns/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(campaignData)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showSuccess('Kampeni imeundwa kikamilifu!');
+            closeCreateCampaignModal();
+            loadCampaigns();
+          } else {
+            showError(data.error || 'Imeshindwa kuunda kampeni');
+          }
+        } catch (error) {
+          console.error('Error creating campaign:', error);
+          showError('Hitilafu imetokea wakati wa kuunda kampeni');
+        }
+      }
+
+      async function toggleCampaign(id, isActive) {
+        try {
+          const response = await fetch(\`/api/campaigns/\${id}/toggle\`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            showSuccess('Kampeni imebadilishwa kikamilifu');
+            loadCampaigns();
+          } else {
+            showError(data.error || 'Imeshindwa kubadilisha kampeni');
+          }
+        } catch (error) {
+          console.error('Error toggling campaign:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      async function deleteCampaign(id) {
+        if (!confirm('Je, una uhakika unataka kufuta kampeni hii?')) return;
+
+        try {
+          const response = await fetch(\`/api/campaigns/\${id}\`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            showSuccess('Kampeni imefutwa kikamilifu');
+            loadCampaigns();
+          } else {
+            showError(data.error || 'Imeshindwa kufuta kampeni');
+          }
+        } catch (error) {
+          console.error('Error deleting campaign:', error);
+          showError('Hitilafu imetokea');
+        }
+      }
+
+      async function viewCampaignDetails(id) {
+        window.location.href = \`/admin/leads?campaign_id=\${id}\`;
+      }
+
+      function showSuccess(message) {
+        alert(message); // Replace with better notification system
+      }
+
+      function showError(message) {
+        alert(message); // Replace with better notification system
+      }
+
+      // Initialize on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        loadCampaigns();
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Kampeni',
+    activePage: 'campaigns',
+    body: campaignsContent
+}) %>

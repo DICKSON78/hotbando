@@ -26,10 +26,20 @@ app.set('views', path.join(__dirname, 'views'));
 // Routes
 const hotspotRoutes = require('./routes/hotspot');
 const adminRoutes = require('./routes/admin');
+const campaignRoutes = require('./routes/campaignRoutes');
+const walletRoutes = require('./routes/walletRoutes');
+const revenueShareRoutes = require('./routes/revenueShareRoutes');
+const locationRoutes = require('./routes/locationRoutes');
+const publicRoutes = require('./routes/publicRoutes');
 
 // Use routes
 app.use('/hotspot', hotspotRoutes);
 app.use('/admin', adminRoutes);
+app.use('/api/campaigns', campaignRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/revenue-share', revenueShareRoutes);
+app.use('/api/locations', locationRoutes);
+app.use('/api/public', publicRoutes);
 
 // Home route
 app.get('/', (req, res) => {
