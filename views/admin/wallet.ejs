@@ -1,5 +1,66 @@
 <%
   const walletContent = `
+    <style>
+      /* Analytics Design System */
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .badge-success { background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-warning { background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-danger { background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-info { background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
       <!-- Page Header -->
       <div class="flex justify-between items-center mb-6">
@@ -20,11 +81,11 @@
       </div>
 
       <!-- Balance Card -->
-      <div class="bg-gradient-to-r from-primary to-primary-dark rounded-lg shadow-lg p-8 mb-6 text-white">
+      <div class="stat-card mb-6" style="background: linear-gradient(135deg, #FF7A30 0%, #FF5722 100%); padding: 32px;">
         <div class="flex justify-between items-center">
           <div>
             <p class="text-white text-opacity-90 text-sm mb-2">Salio la Sasa</p>
-            <h2 class="text-5xl font-bold" id="wallet-balance">TZS 0</h2>
+            <h2 class="text-5xl font-bold text-white" id="wallet-balance">TZS 0</h2>
             <p class="text-white text-opacity-80 text-sm mt-3">
               <i class="fas fa-info-circle mr-1"></i>
               Wakutse kwa kikomo: <span id="low-balance-threshold">TZS 10,000</span>
@@ -32,7 +93,7 @@
           </div>
           <div class="text-right">
             <div class="bg-white bg-opacity-20 rounded-lg p-4 backdrop-blur-sm">
-              <i class="fas fa-wallet text-6xl"></i>
+              <i class="fas fa-wallet text-6xl text-white"></i>
             </div>
           </div>
         </div>
@@ -40,50 +101,50 @@
 
       <!-- Stats Cards -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Jumla ya Deposits</p>
-              <h2 class="text-3xl font-bold text-green-600 mt-1" id="total-deposits">TZS 0</h2>
+              <p class="stat-label">Jumla ya Deposits</p>
+              <p class="stat-value text-green-600" id="total-deposits">TZS 0</p>
             </div>
-            <div class="p-3 bg-green-100 rounded-full">
-              <i class="fas fa-arrow-down text-green-600 text-2xl"></i>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-arrow-down text-green-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Jumla ya Matumizi</p>
-              <h2 class="text-3xl font-bold text-red-600 mt-1" id="total-spent">TZS 0</h2>
+              <p class="stat-label">Jumla ya Matumizi</p>
+              <p class="stat-value text-red-600" id="total-spent">TZS 0</p>
             </div>
-            <div class="p-3 bg-red-100 rounded-full">
-              <i class="fas fa-arrow-up text-red-600 text-2xl"></i>
+            <div class="stat-icon bg-red-100">
+              <i class="fas fa-arrow-up text-red-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Miamala ya Mwezi</p>
-              <h2 class="text-3xl font-bold text-blue-600 mt-1" id="monthly-transactions">0</h2>
+              <p class="stat-label">Miamala ya Mwezi</p>
+              <p class="stat-value text-blue-600" id="monthly-transactions">0</p>
             </div>
-            <div class="p-3 bg-blue-100 rounded-full">
-              <i class="fas fa-receipt text-blue-600 text-2xl"></i>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-receipt text-blue-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Kampeni Zinazoendelea</p>
-              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="active-campaigns">0</h2>
+              <p class="stat-label">Kampeni Zinazoendelea</p>
+              <p class="stat-value text-purple-600" id="active-campaigns">0</p>
             </div>
-            <div class="p-3 bg-purple-100 rounded-full">
-              <i class="fas fa-bullhorn text-purple-600 text-2xl"></i>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-bullhorn text-purple-600 text-xl"></i>
             </div>
           </div>
         </div>
@@ -120,23 +181,21 @@
       </div>
 
       <!-- Transactions Table -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div class="p-6 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-800">Historia ya Miamala</h3>
-        </div>
+      <div class="stat-card">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Historia ya Miamala</h3>
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+          <table class="data-table">
+            <thead>
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aina</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maelezo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kiasi</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rejarence</th>
+                <th>Tarehe</th>
+                <th>Aina</th>
+                <th>Maelezo</th>
+                <th>Kiasi</th>
+                <th>Hali</th>
+                <th>Rejarence</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200" id="transactions-tbody">
+            <tbody id="transactions-tbody">
               <tr>
                 <td colspan="6" class="px-6 py-12 text-center text-gray-500">
                   <div class="flex flex-col items-center">

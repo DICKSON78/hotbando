@@ -1,5 +1,65 @@
 <%
   const revenueShareContent = `
+    <style>
+      /* Analytics Design System */
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .badge-success { background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-warning { background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-info { background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
       <!-- Page Header -->
       <div class="flex justify-between items-center mb-6">
@@ -21,50 +81,50 @@
 
       <!-- Stats Cards -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Jumla ya Mapato</p>
-              <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-revenue">TZS 0</h2>
+              <p class="stat-label">Jumla ya Mapato</p>
+              <p class="stat-value text-blue-600" id="total-revenue">TZS 0</p>
             </div>
-            <div class="p-3 bg-blue-100 rounded-full">
-              <i class="fas fa-money-bill-wave text-blue-600 text-2xl"></i>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-money-bill-wave text-blue-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Malipo Yanasubiri</p>
-              <h2 class="text-3xl font-bold text-yellow-600 mt-1" id="pending-payouts">TZS 0</h2>
+              <p class="stat-label">Malipo Yanasubiri</p>
+              <p class="stat-value text-yellow-600" id="pending-payouts">TZS 0</p>
             </div>
-            <div class="p-3 bg-yellow-100 rounded-full">
-              <i class="fas fa-clock text-yellow-600 text-2xl"></i>
+            <div class="stat-icon bg-yellow-100">
+              <i class="fas fa-clock text-yellow-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Malipo Yaliyoidhinishwa</p>
-              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="approved-payouts">TZS 0</h2>
+              <p class="stat-label">Malipo Yaliyoidhinishwa</p>
+              <p class="stat-value text-purple-600" id="approved-payouts">TZS 0</p>
             </div>
-            <div class="p-3 bg-purple-100 rounded-full">
-              <i class="fas fa-check text-purple-600 text-2xl"></i>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-check text-purple-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Malipo Yalipolipwa</p>
-              <h2 class="text-3xl font-bold text-green-600 mt-1" id="paid-payouts">TZS 0</h2>
+              <p class="stat-label">Malipo Yalipolipwa</p>
+              <p class="stat-value text-green-600" id="paid-payouts">TZS 0</p>
             </div>
-            <div class="p-3 bg-green-100 rounded-full">
-              <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-check-circle text-green-600 text-xl"></i>
             </div>
           </div>
         </div>
@@ -102,27 +162,25 @@
       </div>
 
       <!-- Payouts Table -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div class="p-6 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-800">Historia ya Malipo</h3>
-        </div>
+      <div class="stat-card">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Historia ya Malipo</h3>
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+          <table class="data-table">
+            <thead>
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th>
                   <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)" class="rounded">
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partner</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eneo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kipindi</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapato Jumla</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kiasi cha Malipo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vitendo</th>
+                <th>Partner</th>
+                <th>Eneo</th>
+                <th>Kipindi</th>
+                <th>Mapato Jumla</th>
+                <th>Kiasi cha Malipo</th>
+                <th>Hali</th>
+                <th>Vitendo</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200" id="payouts-tbody">
+            <tbody id="payouts-tbody">
               <tr>
                 <td colspan="8" class="px-6 py-12 text-center text-gray-500">
                   <div class="flex flex-col items-center">

@@ -142,6 +142,29 @@ class AdminController {
         data: viewsTrend.map(item => item.total)
       };
 
+      // 10. ROUTER STATS (for sidebar)
+      const [routerStats] = await db.execute(`
+        SELECT
+          COUNT(*) as total_routers,
+          SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online_routers
+        FROM mikrotiks WHERE is_active = 1
+      `);
+      const onlineRouters = routerStats[0]?.online_routers || 0;
+      const totalRouters = routerStats[0]?.total_routers || 0;
+
+      // 11. ACTIVE USERS (users currently using the system)
+      const [activeUsersResult] = await db.execute(`
+        SELECT COUNT(*) as count FROM users
+        WHERE role = 'customer' AND usage_until > NOW() AND is_active = 1
+      `);
+      const activeUsers = activeUsersResult[0]?.count || 0;
+
+      // 12. TOTAL USERS
+      const [totalUsersResult] = await db.execute(`
+        SELECT COUNT(*) as count FROM users WHERE role = 'customer'
+      `);
+      const totalUsers = totalUsersResult[0]?.count || 0;
+
       console.log('Takwimu zimepakuliwa kikamilifu');
       return {
         totalViews,
@@ -152,7 +175,11 @@ class AdminController {
         activeAdsList,
         pendingApprovals,
         recentActivity,
-        chartData
+        chartData,
+        online_routers: onlineRouters,
+        total_routers: totalRouters,
+        active_users: activeUsers,
+        total_users: totalUsers
       };
     } catch (error) {
       console.error('Hitilafu katika dashboard stats:', error);
@@ -173,7 +200,11 @@ class AdminController {
         chartData: {
           labels: ['Leo', 'Jana', 'Juzi', '3', '4', '5', '6'],
           data: [0, 0, 0, 0, 0, 0, 0]
-        }
+        },
+        online_routers: 0,
+        total_routers: 0,
+        active_users: 0,
+        total_users: 0
       };
     }
   }
@@ -1297,8 +1328,13 @@ async getAdViewsForAnalytics(req, res) {
   // ==================== MIKROTIK ROUTER METHODS ====================
   async getRouters(req, res) {
     try {
-      const [routers] = await db.execute('SELECT * FROM mikrotiks ORDER BY id DESC');
-      return res.json({ success: true, data: routers, count: routers.length });
+      const [routers] = await db.execute(`
+        SELECT m.*, l.name as location_name, l.city
+        FROM mikrotiks m
+        LEFT JOIN locations l ON m.location_id = l.id
+        ORDER BY m.id DESC
+      `);
+      return res.json({ success: true, routers: routers, count: routers.length });
     } catch (error) {
       console.error('Hitilafu katika kupata routers:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kupata routers', error: error.message });
@@ -1318,13 +1354,14 @@ async getAdViewsForAnalytics(req, res) {
 
   async addRouter(req, res) {
     try {
-      const { router_id, router_name, host, user, password, port, location, ssid } = req.body;
+      const { router_id, router_name, host, user, password, port, location_id, ssid, model, serial_number } = req.body;
       if (!router_id || !router_name || !host || !user || !password) {
         return res.status(400).json({ success: false, message: 'Taarifa zote za msingi zinahitajika' });
       }
       await db.execute(
-        'INSERT INTO mikrotiks (router_id, router_name, host, user, password, port, location, ssid, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "online", NOW(), NOW())',
-        [router_id, router_name, host, user, password, port || 8728, location, ssid]
+        `INSERT INTO mikrotiks (router_id, router_name, host, user, password, port, location_id, ssid, model, serial_number, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "offline", NOW(), NOW())`,
+        [router_id, router_name, host, user, password, port || 8728, location_id || null, ssid || null, model || null, serial_number || null]
       );
       return res.json({ success: true, message: 'Router imeongezwa kikamilifu' });
     } catch (error) {
@@ -1366,14 +1403,263 @@ async getAdViewsForAnalytics(req, res) {
   async rebootRouter(req, res) {
     try {
       const { routerID } = req.params;
-      const success = await mikrotikService.rebootRouter(routerID);
+      const result = await mikrotikService.rebootRouter(routerID);
       return res.json({
-        success: success,
-        message: success ? 'Router imeanzishwa upya' : 'Imeshindikana kuanzisha upya router'
+        success: result.success !== false,
+        message: result.success !== false ? 'Router imeanzishwa upya' : 'Imeshindikana kuanzisha upya router'
       });
     } catch (error) {
       console.error('Hitilafu katika kuanzisha upya router:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kuanzisha upya router', error: error.message });
+    }
+  }
+
+  async getRouterById(req, res) {
+    try {
+      const { id } = req.params;
+      const [routers] = await db.execute('SELECT * FROM mikrotiks WHERE id = ? OR router_id = ?', [id, id]);
+      if (routers.length === 0) {
+        return res.status(404).json({ success: false, message: 'Router hakupatikana' });
+      }
+      return res.json({ success: true, router: routers[0] });
+    } catch (error) {
+      console.error('Hitilafu katika kupata router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata router', error: error.message });
+    }
+  }
+
+  async getAllRoutersStatus(req, res) {
+    try {
+      const [routers] = await db.execute('SELECT router_id, router_name FROM mikrotiks');
+      const statusPromises = routers.map(async (router) => {
+        try {
+          const health = await mikrotikService.getRouterHealth(router.router_id);
+          return {
+            routerId: router.router_id,
+            routerName: router.router_name,
+            isOnline: health.status === 'online',
+            activeUsers: health.connectedUsers || 0,
+            cpu: health.cpu || 0,
+            memory: health.memory || 0,
+            uptime: health.uptime || 'N/A'
+          };
+        } catch (e) {
+          return {
+            routerId: router.router_id,
+            routerName: router.router_name,
+            isOnline: false,
+            activeUsers: 0,
+            cpu: 0,
+            memory: 0,
+            uptime: 'N/A'
+          };
+        }
+      });
+      const routers_status = await Promise.all(statusPromises);
+      return res.json({ success: true, routers: routers_status });
+    } catch (error) {
+      console.error('Hitilafu katika kupata status za routers:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata status', error: error.message });
+    }
+  }
+
+  async getRouterLiveStatus(req, res) {
+    try {
+      const { routerID } = req.params;
+      const status = await mikrotikService.getFullRouterStatus(routerID);
+      return res.json({ success: true, status: status.status || status });
+    } catch (error) {
+      console.error('Hitilafu katika kupata status ya router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata status', error: error.message });
+    }
+  }
+
+  async getRouterHotspotSessions(req, res) {
+    try {
+      const { routerID } = req.params;
+      const result = await mikrotikService.getActiveHotspotSessions(routerID);
+      return res.json({ success: true, sessions: result.sessions || [], count: result.count || 0 });
+    } catch (error) {
+      console.error('Hitilafu katika kupata hotspot sessions:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata sessions', error: error.message });
+    }
+  }
+
+  async getRouterHotspotUsers(req, res) {
+    try {
+      const { routerID } = req.params;
+      const result = await mikrotikService.getHotspotUsersList(routerID);
+      return res.json({ success: true, users: result.users || [] });
+    } catch (error) {
+      console.error('Hitilafu katika kupata hotspot users:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata users', error: error.message });
+    }
+  }
+
+  async kickHotspotUser(req, res) {
+    try {
+      const { routerID } = req.params;
+      const { sessionId } = req.body;
+      if (!sessionId) {
+        return res.status(400).json({ success: false, message: 'Session ID inahitajika' });
+      }
+      const result = await mikrotikService.kickHotspotUser(routerID, sessionId);
+      return res.json(result);
+    } catch (error) {
+      console.error('Hitilafu katika kumfukuza mtumiaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kumfukuza mtumiaji', error: error.message });
+    }
+  }
+
+  async getRouterBindings(req, res) {
+    try {
+      const { routerID } = req.params;
+      const result = await mikrotikService.getIpBindings(routerID);
+      return res.json({ success: true, bindings: result.bindings || [] });
+    } catch (error) {
+      console.error('Hitilafu katika kupata bindings:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata bindings', error: error.message });
+    }
+  }
+
+  async getRouterInterfaces(req, res) {
+    try {
+      const { routerID } = req.params;
+      const result = await mikrotikService.getInterfaces(routerID);
+      return res.json({ success: true, interfaces: result.interfaces || [] });
+    } catch (error) {
+      console.error('Hitilafu katika kupata interfaces:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata interfaces', error: error.message });
+    }
+  }
+
+  async getRouterLogs(req, res) {
+    try {
+      const { routerID } = req.params;
+      const limit = parseInt(req.query.limit) || 50;
+      const result = await mikrotikService.getSystemLogs(routerID, limit);
+      return res.json({ success: true, logs: result.logs || [] });
+    } catch (error) {
+      console.error('Hitilafu katika kupata logs:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata logs', error: error.message });
+    }
+  }
+
+  async deleteRouter(req, res) {
+    try {
+      const { id } = req.params;
+      const [result] = await db.execute('DELETE FROM mikrotiks WHERE id = ? OR router_id = ?', [id, id]);
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Router hakupatikana' });
+      }
+      return res.json({ success: true, message: 'Router imefutwa kikamilifu' });
+    } catch (error) {
+      console.error('Hitilafu katika kufuta router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kufuta router', error: error.message });
+    }
+  }
+
+  // Get active users on a specific router with subscription details
+  async getRouterActiveUsers(req, res) {
+    try {
+      const { routerID } = req.params;
+
+      // Get router info with location and owner details
+      const [routerInfo] = await db.execute(`
+        SELECT m.*,
+               l.name as location_name, l.city, l.region,
+               fo.name as owner_name, fo.phone_number as owner_phone, fo.email as owner_email
+        FROM mikrotiks m
+        LEFT JOIN locations l ON m.location_id = l.id
+        LEFT JOIN users fo ON l.franchise_owner_id = fo.id
+        WHERE m.router_id = ?
+      `, [routerID]);
+
+      if (routerInfo.length === 0) {
+        return res.status(404).json({ success: false, message: 'Router hakupatikana' });
+      }
+
+      // Get active users on this router
+      const [activeUsers] = await db.execute(`
+        SELECT
+          u.id, u.name, u.phone_number, u.mac_address,
+          u.package, u.usage_start, u.usage_until,
+          u.free_bytes / (1024*1024) as free_mb,
+          u.moneyspent,
+          TIMESTAMPDIFF(SECOND, NOW(), u.usage_until) as seconds_remaining,
+          CASE
+            WHEN u.package IS NULL OR u.package = '' THEN 'ads'
+            WHEN u.moneyspent > 0 THEN 'paid'
+            ELSE 'ads'
+          END as subscription_type,
+          CASE
+            WHEN u.usage_until <= NOW() THEN 0
+            WHEN u.usage_start IS NULL THEN 0
+            ELSE ROUND(
+              (TIMESTAMPDIFF(SECOND, u.usage_start, NOW()) /
+               TIMESTAMPDIFF(SECOND, u.usage_start, u.usage_until)) * 100
+            )
+          END as usage_progress_percent
+        FROM users u
+        WHERE u.last_router_id = ?
+        AND u.usage_until > NOW()
+        AND u.role = 'customer'
+        ORDER BY u.usage_until ASC
+      `, [routerID]);
+
+      // Calculate summary stats
+      const totalUsers = activeUsers.length;
+      const paidUsers = activeUsers.filter(u => u.subscription_type === 'paid').length;
+      const adsUsers = activeUsers.filter(u => u.subscription_type === 'ads').length;
+      const totalRevenue = activeUsers.reduce((sum, u) => sum + (parseFloat(u.moneyspent) || 0), 0);
+
+      return res.json({
+        success: true,
+        router: routerInfo[0],
+        activeUsers,
+        stats: {
+          totalUsers,
+          paidUsers,
+          adsUsers,
+          totalRevenue
+        }
+      });
+    } catch (error) {
+      console.error('Hitilafu katika kupata watumiaji wa router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata watumiaji', error: error.message });
+    }
+  }
+
+  // Get detailed router info with owner and coverage area
+  async getRouterDetails(req, res) {
+    try {
+      const { routerID } = req.params;
+
+      const [router] = await db.execute(`
+        SELECT m.*,
+               l.name as location_name, l.city, l.region, l.address as location_address,
+               l.latitude, l.longitude, l.location_type,
+               fo.name as owner_name, fo.phone_number as owner_phone, fo.email as owner_email,
+               (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND usage_until > NOW() AND role = 'customer') as active_users_count,
+               (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_users_count,
+               (SELECT COALESCE(SUM(moneyspent), 0) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_revenue
+        FROM mikrotiks m
+        LEFT JOIN locations l ON m.location_id = l.id
+        LEFT JOIN users fo ON l.franchise_owner_id = fo.id
+        WHERE m.router_id = ?
+      `, [routerID]);
+
+      if (router.length === 0) {
+        return res.status(404).json({ success: false, message: 'Router hakupatikana' });
+      }
+
+      return res.json({
+        success: true,
+        router: router[0]
+      });
+    } catch (error) {
+      console.error('Hitilafu katika kupata taarifa za router:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata taarifa', error: error.message });
     }
   }
 
@@ -1866,13 +2152,13 @@ async getAdViewsForAnalytics(req, res) {
         data.forEach(row => {
           const values = Object.values(row).map(val => {
             if (val === null || val === undefined) return '';
-            return \`"\${String(val).replace(/"/g, '""')}"\`;
+           return `"${String(val).replace(/"/g, '""')}"`;
           });
           csv += values.join(',') + '\n';
         });
 
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', \`attachment; filename=hotbando_ripoti_\${reportType}_\${startDate}_to_\${endDate}.csv\`);
+        res.setHeader('Content-Disposition', `attachment; filename=hotbando_ripoti_${reportType}_${startDate}_to_${endDate}.csv`);
         return res.send(csv);
 
       } else if (format === 'excel') {
@@ -1884,12 +2170,12 @@ async getAdViewsForAnalytics(req, res) {
         });
 
         res.setHeader('Content-Type', 'application/vnd.ms-excel');
-        res.setHeader('Content-Disposition', \`attachment; filename=hotbando_ripoti_\${reportType}_\${startDate}_to_\${endDate}.xls\`);
+        res.setHeader('Content-Disposition', `attachment; filename=hotbando_ripoti_${reportType}_${startDate}_to_${endDate}.xls`);
         return res.send(tsv);
 
       } else if (format === 'pdf') {
         // Simple HTML that can be saved as PDF
-        let html = \`
+        let html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -1905,20 +2191,20 @@ async getAdViewsForAnalytics(req, res) {
   </style>
 </head>
 <body>
-  <h1>HotBando Ripoti - \${reportType.toUpperCase()}</h1>
-  <p><strong>Kipindi:</strong> \${startDate} hadi \${endDate}</p>
-  <p><strong>Tarehe ya Uchapisho:</strong> \${new Date().toLocaleDateString('sw-TZ')}</p>
+  <h1>HotBando Ripoti - ${reportType.toUpperCase()}</h1>
+  <p><strong>Kipindi:</strong> ${startDate} hadi ${endDate}</p>
+  <p><strong>Tarehe ya Uchapisho:</strong> ${new Date().toLocaleDateString('sw-TZ')}</p>
   <table>
     <thead>
-      <tr>\${headers.map(h => \`<th>\${h}</th>\`).join('')}</tr>
+      <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
     </thead>
     <tbody>
-      \${data.map(row => \`<tr>\${Object.values(row).map(val => \`<td>\${val === null || val === undefined ? '' : val}</td>\`).join('')}</tr>\`).join('')}
+      ${data.map(row => `<tr>${Object.values(row).map(val => `<td>${val === null || val === undefined ? '' : val}</td>`).join('')}</tr>`).join('')}
     </tbody>
   </table>
   <script>window.print();</script>
 </body>
-</html>\`;
+</html>`;
 
         res.setHeader('Content-Type', 'text/html');
         return res.send(html);
@@ -1934,6 +2220,101 @@ async getAdViewsForAnalytics(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Imeshindikana kupakua ripoti',
+        error: error.message
+      });
+    }
+  }
+
+  // ==================== WIREGUARD METHODS ====================
+
+  /**
+   * Get all WireGuard peers (routers with WireGuard configured)
+   */
+  async getWireGuardPeers(req, res) {
+    try {
+      const wireguardService = require('../utils/wireguard');
+      const result = await wireguardService.getWireGuardPeers();
+      return res.json(result);
+    } catch (error) {
+      console.error('Error getting WireGuard peers:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindwa kupata WireGuard peers',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Generate WireGuard server config
+   */
+  async getWireGuardServerConfig(req, res) {
+    try {
+      const wireguardService = require('../utils/wireguard');
+      const peersResult = await wireguardService.getWireGuardPeers();
+      const config = wireguardService.generateServerConfig(peersResult.peers || []);
+
+      return res.json({
+        success: true,
+        config,
+        serverInfo: {
+          publicIp: wireguardService.vpsConfig.publicIp,
+          port: wireguardService.vpsConfig.listenPort,
+          network: wireguardService.vpsConfig.networkCidr
+        }
+      });
+    } catch (error) {
+      console.error('Error generating server config:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindwa kutengeneza server config',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Generate WireGuard configuration for a router
+   */
+  async generateWireGuardConfig(req, res) {
+    try {
+      const { routerID } = req.params;
+      const wireguardService = require('../utils/wireguard');
+
+      const result = await wireguardService.generateRouterConfig(routerID);
+
+      if (result.success) {
+        return res.json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error('Error generating WireGuard config:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindwa kutengeneza WireGuard config',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Get VPS setup guide
+   */
+  async getVpsSetupGuide(req, res) {
+    try {
+      const wireguardService = require('../utils/wireguard');
+      const guide = wireguardService.getVpsSetupGuide();
+
+      return res.json({
+        success: true,
+        guide
+      });
+    } catch (error) {
+      console.error('Error getting VPS guide:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Imeshindwa kupata VPS guide',
         error: error.message
       });
     }

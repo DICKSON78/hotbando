@@ -1,209 +1,484 @@
-<%- include('layout', {
-    title: 'Ripoti',
-    activePage: 'reports',
-    body: `
+<%
+  const reportsContent = `
+    <style>
+      /* Analytics Design System */
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .table-container {
+        overflow-x: auto;
+      }
+      .badge-success { background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-warning { background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-danger { background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-info { background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-primary { background: #e0e7ff; color: #4338ca; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+
+      .report-btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .report-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      .report-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .report-btn-csv { background: #3b82f6; color: white; }
+      .report-btn-csv:hover { background: #2563eb; }
+      .report-btn-excel { background: #10b981; color: white; }
+      .report-btn-excel:hover { background: #059669; }
+      .report-btn-pdf { background: #ef4444; color: white; }
+      .report-btn-pdf:hover { background: #dc2626; }
+
+      .form-input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.2s;
+        background: white;
+      }
+      .form-input:focus {
+        outline: none;
+        border-color: #FF7A30;
+        box-shadow: 0 0 0 3px rgba(255, 122, 48, 0.1);
+      }
+      .form-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+      }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
-        <!-- Page Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Ripoti za Mfumo</h1>
-            <p class="text-gray-600">Pakua ripoti na angalia shughuli</p>
+      <!-- Page Header -->
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800">Ripoti za Mfumo</h1>
+          <p class="text-gray-600 mt-1">Pakua ripoti na angalie shughuli za mfumo</p>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Jumla ya Ripoti</p>
+              <p class="stat-value text-blue-600">12</p>
+            </div>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-file-alt text-blue-600 text-xl"></i>
+            </div>
+          </div>
         </div>
 
-        <!-- Report Actions -->
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-            <h3 class="text-xl font-semibold text-gray-800 mb-6">Pakua Ripoti</h3>
-
-            <!-- Date Range Filter -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Kuanzia</label>
-                    <input type="date" id="start-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Hadi</label>
-                    <input type="date" id="end-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Aina ya Ripoti</label>
-                    <select id="report-type" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="all">Ripoti Kamili</option>
-                        <option value="users">Watumiaji</option>
-                        <option value="ads">Matangazo</option>
-                        <option value="revenue">Mapato</option>
-                        <option value="campaigns">Kampeni</option>
-                    </select>
-                </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Shughuli za Leo</p>
+              <p class="stat-value text-green-600" id="today-activities">0</p>
             </div>
-
-            <!-- Download Buttons -->
-            <div class="flex flex-wrap gap-4">
-                <button onclick="downloadReport('csv')" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors flex items-center">
-                    <i class="fas fa-file-csv mr-2"></i>
-                    Pakua CSV
-                </button>
-                <button onclick="downloadReport('excel')" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center">
-                    <i class="fas fa-file-excel mr-2"></i>
-                    Pakua Excel
-                </button>
-                <button onclick="downloadReport('pdf')" class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center">
-                    <i class="fas fa-file-pdf mr-2"></i>
-                    Pakua PDF
-                </button>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-chart-line text-green-600 text-xl"></i>
             </div>
+          </div>
         </div>
 
-        <!-- Recent Activity -->
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200 mt-8">
-            <h3 class="text-xl font-semibold text-gray-800 mb-6">Shughuli za Hivi Karibuni</h3>
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="bg-gray-50 border-b border-gray-200">
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shughuli</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mtumiaji</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
-                        </tr>
-                    </thead>
-                    <tbody id="activity-table" class="bg-white divide-y divide-gray-200">
-                        <tr>
-                            <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                                <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
-                                <p>Inapakia shughuli...</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Watumiaji Active</p>
+              <p class="stat-value text-purple-600" id="total-users">0</p>
             </div>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-users text-purple-600 text-xl"></i>
+            </div>
+          </div>
         </div>
+
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Kampeni Active</p>
+              <p class="stat-value text-orange-600" id="active-campaigns">0</p>
+            </div>
+            <div class="stat-icon bg-orange-100">
+              <i class="fas fa-bullhorn text-orange-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Report Generator -->
+      <div class="chart-container mb-6">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800">Tengeneza Ripoti</h3>
+            <p class="text-sm text-gray-600 mt-1">Chagua tarehe na aina ya ripoti unayotaka kupakua</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="badge-info">
+              <i class="fas fa-info-circle mr-1"></i>
+              Export Data
+            </span>
+          </div>
+        </div>
+
+        <!-- Date Range Filter -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label class="form-label">
+              <i class="fas fa-calendar-alt mr-1 text-gray-400"></i>
+              Tarehe ya Kuanzia
+            </label>
+            <input type="date" id="start-date" class="form-input">
+          </div>
+          <div>
+            <label class="form-label">
+              <i class="fas fa-calendar-check mr-1 text-gray-400"></i>
+              Tarehe ya Mwisho
+            </label>
+            <input type="date" id="end-date" class="form-input">
+          </div>
+          <div>
+            <label class="form-label">
+              <i class="fas fa-filter mr-1 text-gray-400"></i>
+              Aina ya Ripoti
+            </label>
+            <select id="report-type" class="form-input">
+              <option value="all">Ripoti Kamili</option>
+              <option value="users">Watumiaji</option>
+              <option value="ads">Matangazo</option>
+              <option value="revenue">Mapato</option>
+              <option value="campaigns">Kampeni</option>
+              <option value="transactions">Miamala</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Download Buttons -->
+        <div class="flex flex-wrap gap-3">
+          <button onclick="downloadReport('csv')" class="report-btn report-btn-csv">
+            <i class="fas fa-file-csv mr-2"></i>
+            Pakua CSV
+          </button>
+          <button onclick="downloadReport('excel')" class="report-btn report-btn-excel">
+            <i class="fas fa-file-excel mr-2"></i>
+            Pakua Excel
+          </button>
+          <button onclick="downloadReport('pdf')" class="report-btn report-btn-pdf">
+            <i class="fas fa-file-pdf mr-2"></i>
+            Pakua PDF
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="chart-container">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800">Shughuli za Hivi Karibuni</h3>
+            <p class="text-sm text-gray-600 mt-1">Matukio ya mfumo ya siku 7 zilizopita</p>
+          </div>
+          <button onclick="loadRecentActivity()" class="text-sm text-primary hover:text-primary-dark flex items-center">
+            <i class="fas fa-sync-alt mr-1"></i>
+            Refresh
+          </button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Tarehe & Muda</th>
+                <th>Shughuli</th>
+                <th>Mtumiaji</th>
+                <th>Hali</th>
+              </tr>
+            </thead>
+            <tbody id="activity-table">
+              <tr>
+                <td colspan="4" class="text-center py-12">
+                  <div class="flex flex-col items-center">
+                    <i class="fas fa-spinner fa-spin text-3xl text-primary mb-3"></i>
+                    <p class="text-gray-500">Inapakia shughuli...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="hidden text-center py-12">
+          <div class="flex flex-col items-center">
+            <div class="stat-icon bg-gray-100 mb-4">
+              <i class="fas fa-inbox text-gray-400 text-2xl"></i>
+            </div>
+            <p class="text-gray-600 font-medium">Hakuna shughuli za hivi karibuni</p>
+            <p class="text-sm text-gray-500 mt-1">Shughuli zitaonekana hapa zinapotokea</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
-        // Load recent activity
-        async function loadRecentActivity() {
-            try {
-                const response = await fetch('/admin/recent-activity?limit=20');
-                const data = await response.json();
-
-                const activityTable = document.getElementById('activity-table');
-
-                if (!data.success || !data.activities || data.activities.length === 0) {
-                    activityTable.innerHTML = \`
-                        <tr>
-                            <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                                Hakuna shughuli za hivi karibuni
-                            </td>
-                        </tr>
-                    \`;
-                    return;
-                }
-
-                activityTable.innerHTML = data.activities.map(activity => \`
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            \${new Date(activity.created_at).toLocaleDateString('sw-TZ', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}
-                        </td>
-                        <td class="px-6 py-4 text-sm text-gray-700">
-                            \${activity.description}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            \${activity.user_name || 'N/A'}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full \${activity.status_class}">
-                                \${activity.status_text}
-                            </span>
-                        </td>
-                    </tr>
-                \`).join('');
-            } catch (error) {
-                console.error('Error loading activity:', error);
-                const activityTable = document.getElementById('activity-table');
-                activityTable.innerHTML = \`
-                    <tr>
-                        <td colspan="4" class="px-6 py-8 text-center text-red-500">
-                            <i class="fas fa-exclamation-triangle mb-2"></i>
-                            <p>Hitilafu katika kupakia shughuli</p>
-                        </td>
-                    </tr>
-                \`;
-            }
-        }
-
-        // Download report
-        async function downloadReport(format) {
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-            const reportType = document.getElementById('report-type').value;
-
-            if (!startDate || !endDate) {
-                alert('Tafadhali chagua tarehe za kuanzia na mwisho');
-                return;
-            }
-
-            try {
-                // Show loading
-                const button = event.target;
-                const originalText = button.innerHTML;
-                button.disabled = true;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Inatayarisha...';
-
-                // Download the file
-                const url = \`/admin/download-report?\${new URLSearchParams({
-                    format,
-                    startDate,
-                    endDate,
-                    reportType
-                })}\`;
-
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    throw new Error('Imeshindwa kupakua ripoti');
-                }
-
-                const blob = await response.blob();
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = \`hotbando_ripoti_\${reportType}_\${startDate}_to_\${endDate}.\${format === 'excel' ? 'xlsx' : format}\`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(downloadUrl);
-                document.body.removeChild(a);
-
-                // Show success
-                alert('Ripoti imepakuwa!');
-                button.disabled = false;
-                button.innerHTML = originalText;
-            } catch (error) {
-                console.error('Error downloading report:', error);
-                alert('Hitilafu katika kupakua ripoti. Tafadhali jaribu tena.');
-                button.disabled = false;
-                button.innerHTML = originalText;
-            }
-        }
-
-        // Set default dates
-        document.addEventListener('DOMContentLoaded', () => {
-            // Set end date to today
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('end-date').value = today;
-
-            // Set start date to 30 days ago
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            document.getElementById('start-date').value = thirtyDaysAgo.toISOString().split('T')[0];
-
-            // Load data
-            loadRecentActivity();
+      // Format date for display
+      function formatDateTime(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('sw-TZ', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
         });
+      }
+
+      // Load recent activity
+      async function loadRecentActivity() {
+        try {
+          const activityTable = document.getElementById('activity-table');
+          const emptyState = document.getElementById('empty-state');
+
+          // Show loading
+          activityTable.innerHTML = \`
+            <tr>
+              <td colspan="4" class="text-center py-12">
+                <div class="flex flex-col items-center">
+                  <i class="fas fa-spinner fa-spin text-3xl text-primary mb-3"></i>
+                  <p class="text-gray-500">Inapakia shughuli...</p>
+                </div>
+              </td>
+            </tr>
+          \`;
+          emptyState.classList.add('hidden');
+
+          const response = await fetch('/admin/recent-activity?limit=20');
+          const data = await response.json();
+
+          if (!data.success || !data.activities || data.activities.length === 0) {
+            activityTable.innerHTML = '';
+            emptyState.classList.remove('hidden');
+            return;
+          }
+
+          // Update today's activities count
+          const todayCount = data.activities.filter(activity => {
+            const activityDate = new Date(activity.created_at);
+            const today = new Date();
+            return activityDate.toDateString() === today.toDateString();
+          }).length;
+          document.getElementById('today-activities').textContent = todayCount;
+
+          // Render activity rows
+          activityTable.innerHTML = data.activities.map(activity => {
+            const statusClass = activity.status_class || 'badge-info';
+            const statusText = activity.status_text || 'N/A';
+
+            return \`
+              <tr>
+                <td class="whitespace-nowrap">
+                  <div class="flex items-center">
+                    <i class="fas fa-clock text-gray-400 mr-2 text-xs"></i>
+                    <span class="text-sm text-gray-900">\${formatDateTime(activity.created_at)}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="text-sm text-gray-700">\${activity.description || 'N/A'}</div>
+                </td>
+                <td class="whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center mr-2">
+                      <i class="fas fa-user text-primary text-xs"></i>
+                    </div>
+                    <span class="text-sm text-gray-900">\${activity.user_name || 'System'}</span>
+                  </div>
+                </td>
+                <td class="whitespace-nowrap">
+                  <span class="\${statusClass}">
+                    \${statusText}
+                  </span>
+                </td>
+              </tr>
+            \`;
+          }).join('');
+
+          emptyState.classList.add('hidden');
+        } catch (error) {
+          console.error('Error loading activity:', error);
+          const activityTable = document.getElementById('activity-table');
+          activityTable.innerHTML = \`
+            <tr>
+              <td colspan="4" class="text-center py-12">
+                <div class="flex flex-col items-center">
+                  <div class="stat-icon bg-red-100 mb-3">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                  </div>
+                  <p class="text-red-600 font-medium">Hitilafu katika kupakia shughuli</p>
+                  <p class="text-sm text-gray-500 mt-1">\${error.message}</p>
+                  <button onclick="loadRecentActivity()" class="mt-3 text-sm text-primary hover:text-primary-dark">
+                    <i class="fas fa-redo mr-1"></i>
+                    Jaribu Tena
+                  </button>
+                </div>
+              </td>
+            </tr>
+          \`;
+        }
+      }
+
+      // Download report
+      async function downloadReport(format) {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        const reportType = document.getElementById('report-type').value;
+
+        if (!startDate || !endDate) {
+          alert('Tafadhali chagua tarehe za kuanzia na mwisho');
+          return;
+        }
+
+        try {
+          const button = event.target.closest('button');
+          const originalHTML = button.innerHTML;
+
+          // Show loading state
+          button.disabled = true;
+          button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Inatayarisha...';
+
+          // Download the file
+          const url = \`/admin/download-report?\${new URLSearchParams({
+            format,
+            startDate,
+            endDate,
+            reportType
+          })}\`;
+
+          const response = await fetch(url);
+
+          if (!response.ok) {
+            throw new Error('Imeshindwa kupakua ripoti');
+          }
+
+          const blob = await response.blob();
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = \`hotbando_ripoti_\${reportType}_\${startDate}_to_\${endDate}.\${format === 'excel' ? 'xlsx' : format}\`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(downloadUrl);
+          document.body.removeChild(a);
+
+          // Show success
+          button.innerHTML = '<i class="fas fa-check mr-2"></i>Imepakuwa!';
+          setTimeout(() => {
+            button.disabled = false;
+            button.innerHTML = originalHTML;
+          }, 2000);
+        } catch (error) {
+          console.error('Error downloading report:', error);
+          alert('Hitilafu: ' + error.message);
+
+          const button = event.target.closest('button');
+          button.disabled = false;
+          button.innerHTML = button.getAttribute('data-original') || originalHTML;
+        }
+      }
+
+      // Initialize on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        // Set default dates
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('end-date').value = today;
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        document.getElementById('start-date').value = thirtyDaysAgo.toISOString().split('T')[0];
+
+        // Load initial data
+        loadRecentActivity();
+      });
     </script>
-    `
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Ripoti',
+    activePage: 'reports',
+    body: reportsContent
 }) %>

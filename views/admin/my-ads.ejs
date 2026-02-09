@@ -1,90 +1,162 @@
-<% 
+<%
   // Safely handle data with proper fallbacks
   const safeMyAdsList = typeof myAdsList !== 'undefined' && Array.isArray(myAdsList) ? myAdsList : [];
-  
+
   const dashboardContent = `
+    <style>
+      /* Analytics Design System */
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .table-container {
+        overflow-x: auto;
+      }
+      .badge-success { background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-warning { background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-danger { background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h2 class="text-2xl font-bold text-gray-800">Kampeni Zangu za Matangazo</h2>
-            <p class="text-gray-600 mt-1">Dhibiti na uangalie matangazo yako yote</p>
-          </div>
-          <a href="/admin/upload-video" class="bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-3 rounded-lg hover:from-orange-700 hover:to-red-700 transition-colors shadow-sm flex items-center">
-            <i class="fas fa-plus mr-2"></i>Tangazo Jipya
-          </a>
+      <!-- Page Header -->
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-800">Kampeni Zangu za Matangazo</h2>
+          <p class="text-gray-600 mt-1">Dhibiti na uangalie matangazo yako yote</p>
         </div>
-        
-        <!-- Stats Overview -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-            <div class="flex items-center">
-              <div class="bg-blue-100 p-2 rounded-lg mr-3">
-                <i class="fas fa-ad text-blue-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-blue-600 font-medium">Jumla ya Matangazo</p>
-                <p class="text-2xl font-bold text-blue-700" id="total-ads-count">${safeMyAdsList.length}</p>
-              </div>
+        <a href="/admin/upload-video" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center">
+          <i class="fas fa-plus mr-2"></i>Tangazo Jipya
+        </a>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Jumla ya Matangazo</p>
+              <p class="stat-value text-blue-600" id="total-ads-count">${safeMyAdsList.length}</p>
             </div>
-          </div>
-          
-          <div class="bg-green-50 p-4 rounded-lg border border-green-100">
-            <div class="flex items-center">
-              <div class="bg-green-100 p-2 rounded-lg mr-3">
-                <i class="fas fa-play-circle text-green-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-green-600 font-medium">Yanayofanya Kazi</p>
-                <p class="text-2xl font-bold text-green-700" id="active-ads-count">${
-                  safeMyAdsList.filter(ad => ad.is_active === 1 && ad.approved === 1).length
-                }</p>
-              </div>
-            </div>
-          </div>
-          
-          <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
-            <div class="flex items-center">
-              <div class="bg-purple-100 p-2 rounded-lg mr-3">
-                <i class="fas fa-eye text-purple-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-purple-600 font-medium">Jumla ya Maonyesho</p>
-                <p class="text-2xl font-bold text-purple-700" id="total-views-count">${
-                  safeMyAdsList.reduce((total, ad) => total + (ad.views_count || 0), 0).toLocaleString()
-                }</p>
-              </div>
-            </div>
-          </div>
-          
-          <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
-            <div class="flex items-center">
-              <div class="bg-orange-100 p-2 rounded-lg mr-3">
-                <i class="fas fa-database text-orange-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-orange-600 font-medium">Data Iliyotumika</p>
-                <p class="text-2xl font-bold text-orange-700" id="total-data-count">${
-                  Math.round(safeMyAdsList.reduce((total, ad) => total + (ad.total_data_earned || 0), 0) / (1024 * 1024 * 1024) * 100) / 100
-                } GB</p>
-              </div>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-ad text-blue-600 text-xl"></i>
             </div>
           </div>
         </div>
-        
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
+
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Yanayofanya Kazi</p>
+              <p class="stat-value text-green-600" id="active-ads-count">${
+                safeMyAdsList.filter(ad => ad.is_active === 1 && ad.approved === 1).length
+              }</p>
+            </div>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-play-circle text-green-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Jumla ya Maonyesho</p>
+              <p class="stat-value text-purple-600" id="total-views-count">${
+                safeMyAdsList.reduce((total, ad) => total + (ad.views_count || 0), 0).toLocaleString()
+              }</p>
+            </div>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-eye text-purple-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Data Iliyotumika</p>
+              <p class="stat-value text-orange-600" id="total-data-count">${
+                Math.round(safeMyAdsList.reduce((total, ad) => total + (ad.total_data_earned || 0), 0) / (1024 * 1024 * 1024) * 100) / 100
+              } GB</p>
+            </div>
+            <div class="stat-icon bg-orange-100">
+              <i class="fas fa-database text-orange-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="chart-container">
+        <div class="table-container">
+          <table class="data-table">
             <thead>
-              <tr class="bg-gray-50">
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jina la Tangazo</th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Hali</th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Maonyesho</th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data Iliyosambazwa</th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tarehe</th>
-                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vitendo</th>
+              <tr>
+                <th>Jina la Tangazo</th>
+                <th>Hali</th>
+                <th>Maonyesho</th>
+                <th>Data Iliyosambazwa</th>
+                <th>Tarehe</th>
+                <th>Vitendo</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200 bg-white" id="my-ads-table">
+            <tbody class="bg-white" id="my-ads-table">
               ${safeMyAdsList.length > 0 ?
                 safeMyAdsList.map(ad => {
                   // Safely handle ad properties
@@ -103,13 +175,13 @@
                   let statusText = '';
                   
                   if (adIsActive && adApproved) {
-                    statusClass = 'bg-green-100 text-green-800';
+                    statusClass = 'badge-success';
                     statusText = 'Inayofanya Kazi';
                   } else if (!adApproved) {
-                    statusClass = 'bg-yellow-100 text-yellow-800';
+                    statusClass = 'badge-warning';
                     statusText = 'Inasubiri';
                   } else {
-                    statusClass = 'bg-red-100 text-red-800';
+                    statusClass = 'badge-danger';
                     statusText = 'Imesimamishwa';
                   }
                   
@@ -130,8 +202,7 @@
                         </div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
-                          <i class="fas fa-circle mr-1 text-xs"></i>
+                        <span class="${statusClass}">
                           ${statusText}
                         </span>
                       </td>
@@ -185,7 +256,7 @@
                       <i class="fas fa-ad text-4xl mb-3 text-gray-300"></i>
                       <p class="text-lg font-medium mb-2">Hakuna Matangazo</p>
                       <p class="text-sm mb-4">Huna matangazo yoyote bado. Anza kwa kuongeza tangazo jipya.</p>
-                      <a href="/admin/upload-video" class="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition flex items-center">
+                      <a href="/admin/upload-video" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-dark transition flex items-center">
                         <i class="fas fa-plus mr-2"></i>Anza Kampeni Mpya
                       </a>
                     </div>
@@ -195,14 +266,6 @@
               }
             </tbody>
           </table>
-        </div>
-        
-        <!-- Loading State -->
-        <div id="loading-state" class="hidden py-12 text-center">
-          <div class="flex flex-col items-center justify-center">
-            <i class="fas fa-spinner fa-spin text-3xl text-orange-600 mb-3"></i>
-            <p class="text-gray-600">Inapakia matangazo...</p>
-          </div>
         </div>
       </div>
     </div>

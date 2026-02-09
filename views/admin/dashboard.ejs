@@ -1,10 +1,10 @@
-<% 
+<%
   // Safely handle all data with proper fallbacks - FIXED VERSION
   const safeTotalViews = typeof totalViews !== 'undefined' ? totalViews : 0;
   const safeActiveAds = typeof activeAds !== 'undefined' ? activeAds : 0;
   const safeDataDistributed = typeof dataDistributed !== 'undefined' ? dataDistributed : 0;
   const safeCompletionRate = typeof completionRate !== 'undefined' ? completionRate : 0;
-  
+
   // FIX: Check if variables exist before using them
   const safeRecentActivity = typeof recentActivity !== 'undefined' && Array.isArray(recentActivity) ? recentActivity : [];
   const safeActiveAdsList = typeof activeAdsList !== 'undefined' && Array.isArray(activeAdsList) ? activeAdsList : [];
@@ -24,54 +24,424 @@
   const finalRecentActivity = safeRecentActivity.length > 0 ? safeRecentActivity : defaultRecentActivity;
 
   const dashboardContent = `
+    <style>
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-card.clickable:hover {
+        border-color: #FF7A30;
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .stat-change {
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 20px;
+        margin-top: 8px;
+      }
+      .stat-change.positive {
+        background: #dcfce7;
+        color: #16a34a;
+      }
+      .stat-change.negative {
+        background: #fee2e2;
+        color: #dc2626;
+      }
+      .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .chart-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+      .chart-subtitle {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .period-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .period-btn.active {
+        background: #FF7A30;
+        color: white;
+      }
+      .period-btn:not(.active) {
+        background: #f3f4f6;
+        color: #6b7280;
+      }
+      .period-btn:hover:not(.active) {
+        background: #e5e7eb;
+      }
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: #f9fafb;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        transition: background 0.2s;
+      }
+      .metric-row:hover {
+        background: #f3f4f6;
+      }
+      .metric-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .progress-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+      }
+      .table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .badge-success { background: #dcfce7; color: #16a34a; }
+      .badge-warning { background: #fef3c7; color: #d97706; }
+      .badge-danger { background: #fee2e2; color: #dc2626; }
+      .badge-info { background: #dbeafe; color: #2563eb; }
+      .badge-primary { background: #fff7ed; color: #ea580c; }
+
+      /* Stats Modal Styles */
+      .stats-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+      }
+      .stats-modal.show {
+        display: flex;
+      }
+      .stats-modal-content {
+        background: white;
+        border-radius: 16px;
+        max-width: 800px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        animation: modalSlideIn 0.3s ease;
+      }
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      .stats-modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+        border-radius: 16px 16px 0 0;
+      }
+      .stats-modal-body {
+        padding: 24px;
+      }
+      .stats-modal-close {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        border: none;
+        background: #f3f4f6;
+        color: #6b7280;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+      }
+      .stats-modal-close:hover {
+        background: #ef4444;
+        color: white;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+      }
+      .stats-item {
+        background: #f9fafb;
+        padding: 16px;
+        border-radius: 12px;
+        text-align: center;
+        border: 1px solid #e5e7eb;
+      }
+      .stats-item-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1f2937;
+      }
+      .stats-item-label {
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 4px;
+      }
+      .mini-chart {
+        height: 120px;
+        margin-top: 16px;
+      }
+      .breakdown-list {
+        margin-top: 16px;
+      }
+      .breakdown-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .breakdown-item:last-child {
+        border-bottom: none;
+      }
+      .breakdown-color {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        margin-right: 10px;
+      }
+
+      /* Quick Stats Bar */
+      .quick-stats-bar {
+        display: flex;
+        gap: 20px;
+        padding: 12px 20px;
+        background: linear-gradient(135deg, #FF7A30 0%, #FF9A5A 100%);
+        border-radius: 12px;
+        margin-bottom: 24px;
+        color: white;
+        overflow-x: auto;
+      }
+      .quick-stat {
+        display: flex;
+        flex-direction: column;
+        min-width: 100px;
+      }
+      .quick-stat-value {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .quick-stat-label {
+        font-size: 11px;
+        opacity: 0.9;
+      }
+
+      /* Tab System */
+      .analytics-tabs {
+        display: flex;
+        gap: 4px;
+        background: #f3f4f6;
+        padding: 4px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        overflow-x: auto;
+      }
+      .analytics-tab {
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.2s;
+      }
+      .analytics-tab.active {
+        background: white;
+        color: #1f2937;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .analytics-tab:hover:not(.active) {
+        color: #1f2937;
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* Loading Overlay */
+      .loading-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        z-index: 10;
+      }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
       <!-- Statistics Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <!-- Total Views Card -->
-        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between border border-gray-200">
-          <div>
-            <p class="text-sm text-gray-500">Jumla ya Maonyesho</p>
-            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-views">${safeTotalViews.toLocaleString()}</h2>
-            <p class="text-xs text-green-600 mt-1">+12% from last month</p>
-          </div>
-          <div class="p-3 bg-blue-100 rounded-full">
-            <i class="fas fa-eye text-blue-600 text-2xl"></i>
+        <div class="stat-card clickable" onclick="openStatsModal('views')">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Jumla ya Maonyesho</p>
+              <p class="stat-value text-blue-600" id="total-views">${safeTotalViews.toLocaleString()}</p>
+              <span class="stat-change positive">
+                <i class="fas fa-arrow-up mr-1"></i>+12%
+              </span>
+            </div>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-eye text-blue-600 text-xl"></i>
+            </div>
           </div>
         </div>
 
         <!-- Active Ads Card -->
-        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between border border-gray-200">
-          <div>
-            <p class="text-sm text-gray-500">Matangazo Yanayofanya Kazi</p>
-            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="active-ads">${safeActiveAds}</h2>
-            <p class="text-xs text-green-600 mt-1">Active campaigns</p>
-          </div>
-          <div class="p-3 bg-green-100 rounded-full">
-            <i class="fas fa-ad text-green-600 text-2xl"></i>
+        <div class="stat-card clickable" onclick="openStatsModal('ads')">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Matangazo Yanayofanya Kazi</p>
+              <p class="stat-value text-green-600" id="active-ads">${safeActiveAds}</p>
+              <span class="stat-change positive">
+                <i class="fas fa-arrow-up mr-1"></i>+5%
+              </span>
+            </div>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-ad text-green-600 text-xl"></i>
+            </div>
           </div>
         </div>
 
         <!-- Data Distributed Card -->
-        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between border border-gray-200">
-          <div>
-            <p class="text-sm text-gray-500">Data Iliyosambazwa</p>
-            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="data-distributed">${safeDataDistributed} GB</h2>
-            <p class="text-xs text-blue-600 mt-1">Total distributed</p>
-          </div>
-          <div class="p-3 bg-purple-100 rounded-full">
-            <i class="fas fa-database text-purple-600 text-2xl"></i>
+        <div class="stat-card clickable" onclick="openStatsModal('data')">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Data Iliyosambazwa</p>
+              <p class="stat-value text-purple-600" id="data-distributed">${safeDataDistributed} GB</p>
+              <span class="stat-change positive">
+                <i class="fas fa-arrow-up mr-1"></i>+18%
+              </span>
+            </div>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-database text-purple-600 text-xl"></i>
+            </div>
           </div>
         </div>
 
         <!-- Completion Rate Card -->
-        <div class="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between border border-gray-200">
-          <div>
-            <p class="text-sm text-gray-500">Kiwango cha Kukamilika</p>
-            <h2 class="text-3xl font-bold text-gray-800 mt-1" id="completion-rate">${safeCompletionRate}%</h2>
-            <p class="text-xs text-orange-600 mt-1">View completion</p>
-          </div>
-          <div class="p-3 bg-orange-100 rounded-full">
-            <i class="fas fa-check-circle text-orange-600 text-2xl"></i>
+        <div class="stat-card clickable" onclick="openStatsModal('completion')">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Kiwango cha Kukamilika</p>
+              <p class="stat-value text-orange-600" id="completion-rate">${safeCompletionRate}%</p>
+              <span class="stat-change positive">
+                <i class="fas fa-arrow-up mr-1"></i>+3%
+              </span>
+            </div>
+            <div class="stat-icon bg-orange-100">
+              <i class="fas fa-check-circle text-orange-600 text-xl"></i>
+            </div>
           </div>
         </div>
       </div>
@@ -79,12 +449,15 @@
       <!-- Charts and Recent Activity -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <!-- Views Chart -->
-        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">Muhtasari wa Maonyesho (Siku 7 zilizopita)</h3>
-            <div class="flex space-x-2">
-              <button class="px-3 py-1 text-xs bg-orange-600 text-white rounded-lg">Siku 7</button>
-              <button class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-lg">Mwezi 1</button>
+        <div class="lg:col-span-2 chart-container">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">Muhtasari wa Maonyesho (Siku 7 zilizopita)</h3>
+              <p class="chart-subtitle">Trend ya maonyesho ya matangazo</p>
+            </div>
+            <div class="flex gap-2">
+              <button class="period-btn active">Siku 7</button>
+              <button class="period-btn">Mwezi 1</button>
             </div>
           </div>
           <div class="w-full" style="height: 300px;">
@@ -93,10 +466,12 @@
         </div>
 
         <!-- Recent Activity -->
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">Shughuli za Hivi Karibuni</h3>
-            <span class="text-xs text-gray-500">Sasa hivi</span>
+        <div class="chart-container">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">Shughuli za Hivi Karibuni</h3>
+              <p class="chart-subtitle">Sasa hivi</p>
+            </div>
           </div>
           <ul class="space-y-4" id="recent-activity">
             ${finalRecentActivity.length > 0 ?
@@ -125,39 +500,41 @@
       <!-- Recent Ads and Pending Approvals -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Recent Ads -->
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">Matangazo ya Hivi Karibuni</h3>
+        <div class="chart-container">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">Matangazo ya Hivi Karibuni</h3>
+            </div>
             <a href="/admin/my-ads" class="text-sm text-orange-600 hover:text-orange-700 font-medium">Angalia yote</a>
           </div>
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
+          <div class="table-container">
+            <table class="data-table">
               <thead>
-                <tr class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  <th class="py-3 px-4">Jina la Tangazo</th>
-                  <th class="py-3 px-4">Hali</th>
-                  <th class="py-3 px-4">Maonyesho</th>
-                  <th class="py-3 px-4">Tarehe</th>
+                <tr>
+                  <th>Jina la Tangazo</th>
+                  <th>Hali</th>
+                  <th>Maonyesho</th>
+                  <th>Tarehe</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-200 bg-white" id="recent-ads">
+              <tbody id="recent-ads">
                 ${safeActiveAdsList.length > 0 ?
                   safeActiveAdsList.map(ad => `
-                    <tr class="hover:bg-gray-50 transition">
-                      <td class="py-4 px-4 text-sm font-medium text-gray-900">${ad.title || 'Untitled Ad'}</td>
-                      <td class="py-4 px-4">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <tr>
+                      <td class="font-medium text-gray-900">${ad.title || 'Untitled Ad'}</td>
+                      <td>
+                        <span class="badge badge-success">
                           <i class="fas fa-circle mr-1 text-xs"></i>
                           Active
                         </span>
                       </td>
-                      <td class="py-4 px-4 text-sm text-gray-900">${(ad.views || 0).toLocaleString()}</td>
-                      <td class="py-4 px-4 text-sm text-gray-500">${ad.created_at ? new Date(ad.created_at).toLocaleDateString('sw-TZ') : 'N/A'}</td>
+                      <td class="text-gray-900">${(ad.views || 0).toLocaleString()}</td>
+                      <td class="text-gray-500">${ad.created_at ? new Date(ad.created_at).toLocaleDateString('sw-TZ') : 'N/A'}</td>
                     </tr>
                   `).join('') :
                   `
                   <tr>
-                    <td colspan="4" class="py-8 px-4 text-center text-gray-500">
+                    <td colspan="4" class="text-center py-8 text-gray-500">
                       <i class="fas fa-ad text-3xl mb-2 text-gray-300"></i>
                       <p>Hakuna matangazo ya hivi karibuni</p>
                     </td>
@@ -170,10 +547,12 @@
         </div>
 
         <!-- Pending Approvals -->
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">Idhini Inayosubiri</h3>
-            <span class="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded-full">${safePendingApprovals.length} New</span>
+        <div class="chart-container">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">Idhini Inayosubiri</h3>
+            </div>
+            <span class="badge badge-primary">${safePendingApprovals.length} New</span>
           </div>
           <ul class="space-y-3" id="pending-approvals">
             ${safePendingApprovals.length > 0 ?
@@ -190,8 +569,8 @@
                   </div>
                   <div class="flex space-x-2">
                     ${ad.video_url ? `
-                      <a href="${ad.video_url}" target="_blank" 
-                         class="text-blue-600 hover:text-blue-700 text-sm font-medium" 
+                      <a href="${ad.video_url}" target="_blank"
+                         class="text-blue-600 hover:text-blue-700 text-sm font-medium"
                          title="Angalia Video">
                         <i class="fas fa-play"></i>
                       </a>
@@ -221,21 +600,27 @@
     <!-- Charts Script -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+      // Placeholder function for modal (will be implemented later if needed)
+      function openStatsModal(type) {
+        console.log('Opening stats modal for:', type);
+        // TODO: Implement modal functionality
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
         // Initialize Views Chart
         const viewsCanvas = document.getElementById('viewsChart');
         if (viewsCanvas) {
           const viewsCtx = viewsCanvas.getContext('2d');
-          
+
           // Use chartData from server or fallback to viewsTrend
-          const chartLabels = ${JSON.stringify(safeChartData.labels.length > 0 ? safeChartData.labels : 
+          const chartLabels = ${JSON.stringify(safeChartData.labels.length > 0 ? safeChartData.labels :
             safeViewsTrend.map(item => {
               const date = new Date(item.date);
               return date.toLocaleDateString('sw-TZ', { day: 'numeric', month: 'short' });
             })
           )};
-          
-          const chartData = ${JSON.stringify(safeChartData.data.length > 0 ? safeChartData.data : 
+
+          const chartData = ${JSON.stringify(safeChartData.data.length > 0 ? safeChartData.data :
             safeViewsTrend.map(item => item.total)
           )};
 
@@ -351,16 +736,16 @@
                 const adsTable = document.getElementById('recent-ads');
                 if (adsTable && data.activeAdsList && data.activeAdsList.length > 0) {
                   adsTable.innerHTML = data.activeAdsList.map(ad => \`
-                    <tr class="hover:bg-gray-50 transition">
-                      <td class="py-4 px-4 text-sm font-medium text-gray-900">\${ad.title || 'Untitled Ad'}</td>
-                      <td class="py-4 px-4">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <tr>
+                      <td class="font-medium text-gray-900">\${ad.title || 'Untitled Ad'}</td>
+                      <td>
+                        <span class="badge badge-success">
                           <i class="fas fa-circle mr-1 text-xs"></i>
                           Active
                         </span>
                       </td>
-                      <td class="py-4 px-4 text-sm text-gray-900">\${(ad.views || 0).toLocaleString()}</td>
-                      <td class="py-4 px-4 text-sm text-gray-500">\${ad.created_at ? new Date(ad.created_at).toLocaleDateString('sw-TZ') : 'N/A'}</td>
+                      <td class="text-gray-900">\${(ad.views || 0).toLocaleString()}</td>
+                      <td class="text-gray-500">\${ad.created_at ? new Date(ad.created_at).toLocaleDateString('sw-TZ') : 'N/A'}</td>
                     </tr>
                   \`).join('');
                 }
@@ -381,8 +766,8 @@
                       </div>
                       <div class="flex space-x-2">
                         \${ad.video_url ? \`
-                          <a href="\${ad.video_url}" target="_blank" 
-                             class="text-blue-600 hover:text-blue-700 text-sm font-medium" 
+                          <a href="\${ad.video_url}" target="_blank"
+                             class="text-blue-600 hover:text-blue-700 text-sm font-medium"
                              title="Angalia Video">
                             <i class="fas fa-play"></i>
                           </a>

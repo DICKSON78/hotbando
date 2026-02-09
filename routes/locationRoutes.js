@@ -28,6 +28,7 @@ router.get('/:id/performance', franchiseAuth, locationController.getLocationPerf
 router.get('/', adminAuth, locationController.getAllLocations);
 router.get('/top', adminAuth, locationController.getTopLocations);
 router.get('/stats', adminAuth, locationController.getLocationStats);
+router.get('/detailed-stats', adminAuth, locationController.getLocationDetailedStats);
 router.get('/:id', adminAuth, locationController.getLocationById);
 router.post('/', adminAuth, locationController.createLocation);
 router.put('/:id', adminAuth, locationController.updateLocation);

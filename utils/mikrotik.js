@@ -1,22 +1,38 @@
 // utils/mikrotik.js
+// Extended MikroTik Service with full remote management via WireGuard
 const RouterOSAPI = require('node-routeros').RouterOSAPI;
 
 class MikrotikService {
     constructor() {
         this.connections = new Map();
+        this.connectionTimeout = 10000; // 10 seconds
     }
 
+    /**
+     * Get router connection - supports both direct and WireGuard connections
+     * @param {string|number} routerID - Router ID from database
+     * @returns {Promise<RouterOSAPI>} - Connected RouterOS API instance
+     */
     async getRouterConnection(routerID) {
         try {
+            // Check if we have an existing connection
             if (this.connections.has(routerID)) {
-                return this.connections.get(routerID);
+                const existingConn = this.connections.get(routerID);
+                // Test if connection is still alive
+                try {
+                    await existingConn.write('/system/identity/print');
+                    return existingConn;
+                } catch (e) {
+                    // Connection is dead, remove it
+                    this.connections.delete(routerID);
+                }
             }
 
             // Get router details from database
             const db = require('../config/database');
             const [routers] = await db.execute(
-                'SELECT * FROM mikrotiks WHERE router_id = ?',
-                [routerID]
+                'SELECT * FROM mikrotiks WHERE router_id = ? OR id = ?',
+                [routerID, routerID]
             );
 
             if (routers.length === 0) {
@@ -24,35 +40,53 @@ class MikrotikService {
             }
 
             const router = routers[0];
+
+            // Create new connection (works via WireGuard if host is WG IP)
             const conn = new RouterOSAPI({
                 host: router.host,
                 user: router.user,
                 password: router.password,
                 port: router.port || 8728,
-                timeout: router.timeout || 3
+                timeout: router.timeout || 10
             });
 
             await conn.connect();
             this.connections.set(routerID, conn);
-            
+
             // Update router status
             await db.execute(
-                'UPDATE mikrotiks SET status = "online", last_seen = NOW() WHERE router_id = ?',
-                [routerID]
+                'UPDATE mikrotiks SET status = "online", last_seen = NOW() WHERE router_id = ? OR id = ?',
+                [routerID, routerID]
             );
 
+            console.log(`✅ Connected to router ${router.router_name} (${router.host})`);
             return conn;
         } catch (error) {
             console.error(`❌ Router connection error for ${routerID}:`, error.message);
-            
+
             // Update router status to offline
             const db = require('../config/database');
             await db.execute(
-                'UPDATE mikrotiks SET status = "offline" WHERE router_id = ?',
-                [routerID]
+                'UPDATE mikrotiks SET status = "offline" WHERE router_id = ? OR id = ?',
+                [routerID, routerID]
             );
 
             throw error;
+        }
+    }
+
+    /**
+     * Disconnect a specific router
+     */
+    async disconnectRouter(routerID) {
+        if (this.connections.has(routerID)) {
+            try {
+                const conn = this.connections.get(routerID);
+                conn.close();
+            } catch (e) {
+                // Ignore close errors
+            }
+            this.connections.delete(routerID);
         }
     }
 
@@ -195,12 +229,518 @@ class MikrotikService {
         try {
             const conn = await this.getRouterConnection(routerID);
             await conn.write('/system/reboot', []);
-            
+
+            // Remove from connections since it will disconnect
+            this.connections.delete(routerID);
+
             console.log(`🔄 Router ${routerID} reboot initiated`);
-            return true;
+            return { success: true, message: 'Router rebooting...' };
         } catch (error) {
             console.error(`❌ Reboot router error:`, error.message);
-            return false;
+            return { success: false, error: error.message };
+        }
+    }
+
+    // ==================== IP BINDING MANAGEMENT ====================
+
+    /**
+     * Get all IP bindings from hotspot
+     */
+    async getIpBindings(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const bindings = await conn.write('/ip/hotspot/ip-binding/print');
+
+            // Filter out empty results
+            const clean = bindings.filter(item => item['!empty'] === undefined);
+            return { success: true, bindings: clean };
+        } catch (error) {
+            console.error(`❌ Get IP bindings error:`, error.message);
+            return { success: false, error: error.message, bindings: [] };
+        }
+    }
+
+    /**
+     * Add IP binding (bypass MAC/IP from hotspot login)
+     */
+    async addIpBinding(routerID, { mac, ip, type = 'bypassed', comment = '' }) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            const params = ['=type=' + type];
+            if (mac) params.push('=mac-address=' + mac);
+            if (ip) params.push('=address=' + ip);
+            if (comment) params.push('=comment=' + comment);
+
+            const result = await conn.write('/ip/hotspot/ip-binding/add', params);
+
+            console.log(`✅ IP binding added: MAC=${mac}, IP=${ip}`);
+            return { success: true, result };
+        } catch (error) {
+            console.error(`❌ Add IP binding error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Remove IP binding by MAC or IP
+     */
+    async removeIpBinding(routerID, { mac, ip, bindingId }) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            if (bindingId) {
+                // Remove by ID directly
+                await conn.write('/ip/hotspot/ip-binding/remove', ['=.id=' + bindingId]);
+                return { success: true, message: 'Binding removed' };
+            }
+
+            // Find bindings matching MAC or IP
+            const filters = [];
+            if (mac) filters.push('?mac-address=' + mac);
+            if (ip) filters.push('?address=' + ip);
+
+            const bindings = await conn.write('/ip/hotspot/ip-binding/print', filters);
+            const clean = bindings.filter(item => item['!empty'] === undefined);
+
+            if (clean.length === 0) {
+                return { success: false, error: 'Binding not found' };
+            }
+
+            // Remove all matching bindings
+            const removed = [];
+            for (const binding of clean) {
+                await conn.write('/ip/hotspot/ip-binding/remove', ['=.id=' + binding['.id']]);
+                removed.push(binding);
+            }
+
+            return { success: true, removedCount: removed.length, removed };
+        } catch (error) {
+            console.error(`❌ Remove IP binding error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // ==================== HOTSPOT SERVER MANAGEMENT ====================
+
+    /**
+     * Get all hotspot servers
+     */
+    async getHotspotServers(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const servers = await conn.write('/ip/hotspot/print');
+            return { success: true, servers };
+        } catch (error) {
+            console.error(`❌ Get hotspot servers error:`, error.message);
+            return { success: false, error: error.message, servers: [] };
+        }
+    }
+
+    /**
+     * Enable/Disable hotspot server
+     */
+    async toggleHotspotServer(routerID, serverName, enable = true) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            // Find the server by name
+            const servers = await conn.write('/ip/hotspot/print', ['?name=' + serverName]);
+
+            if (servers.length === 0) {
+                return { success: false, error: 'Hotspot server not found' };
+            }
+
+            const serverId = servers[0]['.id'];
+            const command = enable ? '/ip/hotspot/enable' : '/ip/hotspot/disable';
+
+            await conn.write(command, ['=.id=' + serverId]);
+
+            console.log(`✅ Hotspot server ${serverName} ${enable ? 'enabled' : 'disabled'}`);
+            return { success: true, message: `Hotspot ${enable ? 'enabled' : 'disabled'}` };
+        } catch (error) {
+            console.error(`❌ Toggle hotspot error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Get active hotspot sessions
+     */
+    async getActiveHotspotSessions(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const sessions = await conn.write('/ip/hotspot/active/print');
+            return { success: true, sessions, count: sessions.length };
+        } catch (error) {
+            console.error(`❌ Get active sessions error:`, error.message);
+            return { success: false, error: error.message, sessions: [], count: 0 };
+        }
+    }
+
+    /**
+     * Kick/disconnect active user from hotspot
+     */
+    async kickHotspotUser(routerID, sessionId) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            await conn.write('/ip/hotspot/active/remove', ['=.id=' + sessionId]);
+
+            console.log(`✅ User kicked from hotspot`);
+            return { success: true, message: 'User disconnected' };
+        } catch (error) {
+            console.error(`❌ Kick user error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // ==================== SYSTEM MANAGEMENT ====================
+
+    /**
+     * Get system identity
+     */
+    async getSystemIdentity(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const [identity] = await conn.write('/system/identity/print');
+            return { success: true, identity: identity.name };
+        } catch (error) {
+            console.error(`❌ Get identity error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Set system identity
+     */
+    async setSystemIdentity(routerID, name) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            await conn.write('/system/identity/set', ['=name=' + name]);
+
+            console.log(`✅ Router identity set to: ${name}`);
+            return { success: true, message: 'Identity updated' };
+        } catch (error) {
+            console.error(`❌ Set identity error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Get system resource (CPU, memory, uptime, etc.)
+     */
+    async getSystemResource(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const [resource] = await conn.write('/system/resource/print');
+
+            return {
+                success: true,
+                resource: {
+                    uptime: resource.uptime,
+                    version: resource.version,
+                    buildTime: resource['build-time'],
+                    cpuLoad: parseInt(resource['cpu-load']) || 0,
+                    cpuCount: parseInt(resource['cpu-count']) || 1,
+                    cpuFrequency: parseInt(resource['cpu-frequency']) || 0,
+                    freeMemory: parseInt(resource['free-memory']) || 0,
+                    totalMemory: parseInt(resource['total-memory']) || 0,
+                    freeHddSpace: parseInt(resource['free-hdd-space']) || 0,
+                    totalHddSpace: parseInt(resource['total-hdd-space']) || 0,
+                    architectureName: resource['architecture-name'],
+                    boardName: resource['board-name'],
+                    platform: resource.platform
+                }
+            };
+        } catch (error) {
+            console.error(`❌ Get system resource error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Get router board info
+     */
+    async getRouterBoard(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const [board] = await conn.write('/system/routerboard/print');
+            return { success: true, board };
+        } catch (error) {
+            console.error(`❌ Get routerboard error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Shutdown router
+     */
+    async shutdownRouter(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            await conn.write('/system/shutdown');
+
+            this.connections.delete(routerID);
+            console.log(`🛑 Router ${routerID} shutdown initiated`);
+            return { success: true, message: 'Router shutting down...' };
+        } catch (error) {
+            console.error(`❌ Shutdown router error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // ==================== INTERFACE MANAGEMENT ====================
+
+    /**
+     * Get all interfaces
+     */
+    async getInterfaces(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const interfaces = await conn.write('/interface/print');
+            return { success: true, interfaces };
+        } catch (error) {
+            console.error(`❌ Get interfaces error:`, error.message);
+            return { success: false, error: error.message, interfaces: [] };
+        }
+    }
+
+    /**
+     * Enable/Disable interface
+     */
+    async toggleInterface(routerID, interfaceName, enable = true) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            const interfaces = await conn.write('/interface/print', ['?name=' + interfaceName]);
+            if (interfaces.length === 0) {
+                return { success: false, error: 'Interface not found' };
+            }
+
+            const interfaceId = interfaces[0]['.id'];
+            const command = enable ? '/interface/enable' : '/interface/disable';
+
+            await conn.write(command, ['=.id=' + interfaceId]);
+
+            console.log(`✅ Interface ${interfaceName} ${enable ? 'enabled' : 'disabled'}`);
+            return { success: true, message: `Interface ${enable ? 'enabled' : 'disabled'}` };
+        } catch (error) {
+            console.error(`❌ Toggle interface error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Get wireless interfaces
+     */
+    async getWirelessInterfaces(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const wireless = await conn.write('/interface/wireless/print');
+            return { success: true, wireless };
+        } catch (error) {
+            console.error(`❌ Get wireless error:`, error.message);
+            return { success: false, error: error.message, wireless: [] };
+        }
+    }
+
+    // ==================== HOTSPOT USER MANAGEMENT ====================
+
+    /**
+     * Get all hotspot users
+     */
+    async getHotspotUsersList(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const users = await conn.write('/ip/hotspot/user/print');
+            return { success: true, users };
+        } catch (error) {
+            console.error(`❌ Get hotspot users error:`, error.message);
+            return { success: false, error: error.message, users: [] };
+        }
+    }
+
+    /**
+     * Add hotspot user
+     */
+    async addHotspotUser(routerID, { name, password, profile = 'default', comment = '' }) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            const params = [
+                '=name=' + name,
+                '=password=' + password,
+                '=profile=' + profile
+            ];
+            if (comment) params.push('=comment=' + comment);
+
+            await conn.write('/ip/hotspot/user/add', params);
+
+            console.log(`✅ Hotspot user added: ${name}`);
+            return { success: true, message: 'User added successfully' };
+        } catch (error) {
+            console.error(`❌ Add hotspot user error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Remove hotspot user
+     */
+    async removeHotspotUser(routerID, username) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            const users = await conn.write('/ip/hotspot/user/print', ['?name=' + username]);
+            if (users.length === 0) {
+                return { success: false, error: 'User not found' };
+            }
+
+            await conn.write('/ip/hotspot/user/remove', ['=.id=' + users[0]['.id']]);
+
+            console.log(`✅ Hotspot user removed: ${username}`);
+            return { success: true, message: 'User removed successfully' };
+        } catch (error) {
+            console.error(`❌ Remove hotspot user error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Get hotspot user profiles
+     */
+    async getHotspotProfiles(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const profiles = await conn.write('/ip/hotspot/user/profile/print');
+            return { success: true, profiles };
+        } catch (error) {
+            console.error(`❌ Get profiles error:`, error.message);
+            return { success: false, error: error.message, profiles: [] };
+        }
+    }
+
+    // ==================== LOG MANAGEMENT ====================
+
+    /**
+     * Get system logs
+     */
+    async getSystemLogs(routerID, limit = 50) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const logs = await conn.write('/log/print');
+
+            // Return last N logs
+            const recentLogs = logs.slice(-limit);
+            return { success: true, logs: recentLogs };
+        } catch (error) {
+            console.error(`❌ Get logs error:`, error.message);
+            return { success: false, error: error.message, logs: [] };
+        }
+    }
+
+    // ==================== BANDWIDTH/QUEUE MANAGEMENT ====================
+
+    /**
+     * Get simple queues
+     */
+    async getSimpleQueues(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const queues = await conn.write('/queue/simple/print');
+            return { success: true, queues };
+        } catch (error) {
+            console.error(`❌ Get queues error:`, error.message);
+            return { success: false, error: error.message, queues: [] };
+        }
+    }
+
+    /**
+     * Add simple queue for bandwidth control
+     */
+    async addSimpleQueue(routerID, { name, target, maxLimit, comment = '' }) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            const params = [
+                '=name=' + name,
+                '=target=' + target,
+                '=max-limit=' + maxLimit
+            ];
+            if (comment) params.push('=comment=' + comment);
+
+            await conn.write('/queue/simple/add', params);
+
+            console.log(`✅ Queue added: ${name}`);
+            return { success: true, message: 'Queue added successfully' };
+        } catch (error) {
+            console.error(`❌ Add queue error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // ==================== COMPREHENSIVE STATUS ====================
+
+    /**
+     * Get complete router status (for dashboard)
+     */
+    async getFullRouterStatus(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            // Fetch all data in parallel
+            const [
+                identityResult,
+                resourceResult,
+                sessionsResult,
+                interfacesResult
+            ] = await Promise.all([
+                conn.write('/system/identity/print').catch(() => [{}]),
+                conn.write('/system/resource/print').catch(() => [{}]),
+                conn.write('/ip/hotspot/active/print').catch(() => []),
+                conn.write('/interface/print').catch(() => [])
+            ]);
+
+            const identity = identityResult[0] || {};
+            const resource = resourceResult[0] || {};
+            const sessions = sessionsResult || [];
+            const interfaces = interfacesResult || [];
+
+            // Calculate memory usage percentage
+            const totalMem = parseInt(resource['total-memory']) || 1;
+            const freeMem = parseInt(resource['free-memory']) || 0;
+            const memoryUsage = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
+            return {
+                success: true,
+                status: {
+                    routerID,
+                    identity: identity.name || 'Unknown',
+                    isOnline: true,
+                    uptime: resource.uptime || '0s',
+                    version: resource.version || 'Unknown',
+                    cpu: parseInt(resource['cpu-load']) || 0,
+                    memory: memoryUsage,
+                    activeUsers: sessions.length,
+                    interfaces: interfaces.filter(i => !i.disabled).length,
+                    totalInterfaces: interfaces.length,
+                    platform: resource.platform || 'Unknown',
+                    boardName: resource['board-name'] || 'Unknown',
+                    lastChecked: new Date().toISOString()
+                }
+            };
+        } catch (error) {
+            console.error(`❌ Get full status error:`, error.message);
+            return {
+                success: false,
+                status: {
+                    routerID,
+                    identity: 'Unknown',
+                    isOnline: false,
+                    error: error.message,
+                    lastChecked: new Date().toISOString()
+                }
+            };
         }
     }
 

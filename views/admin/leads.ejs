@@ -1,5 +1,86 @@
 <%
   const leadsContent = `
+    <style>
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .badge-success { background: #dcfce7; color: #16a34a; }
+      .badge-warning { background: #fef3c7; color: #d97706; }
+      .badge-danger { background: #fee2e2; color: #dc2626; }
+      .badge-info { background: #dbeafe; color: #2563eb; }
+      .badge-primary { background: #fff7ed; color: #ea580c; }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
       <!-- Page Header -->
       <div class="flex justify-between items-center mb-6">
@@ -14,7 +95,7 @@
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
+      <div class="chart-container mb-6">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label class="text-sm text-gray-600">Chagua Kampeni</label>
@@ -48,85 +129,85 @@
 
       <!-- Stats Cards -->
       <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Jumla ya Wateja</p>
-              <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-leads">0</h2>
+              <p class="stat-label">Jumla ya Wateja</p>
+              <p class="stat-value text-blue-600" id="total-leads">0</p>
             </div>
-            <div class="p-3 bg-blue-100 rounded-full">
-              <i class="fas fa-users text-blue-600 text-2xl"></i>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-users text-blue-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Wapya</p>
-              <h2 class="text-3xl font-bold text-blue-600 mt-1" id="new-leads">0</h2>
+              <p class="stat-label">Wapya</p>
+              <p class="stat-value text-blue-600" id="new-leads">0</p>
             </div>
-            <div class="p-3 bg-blue-100 rounded-full">
-              <i class="fas fa-user-plus text-blue-600 text-2xl"></i>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-user-plus text-blue-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Wamepigiwa</p>
-              <h2 class="text-3xl font-bold text-yellow-600 mt-1" id="contacted-leads">0</h2>
+              <p class="stat-label">Wamepigiwa</p>
+              <p class="stat-value text-yellow-600" id="contacted-leads">0</p>
             </div>
-            <div class="p-3 bg-yellow-100 rounded-full">
-              <i class="fas fa-phone text-yellow-600 text-2xl"></i>
+            <div class="stat-icon bg-yellow-100">
+              <i class="fas fa-phone text-yellow-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Wamestahili</p>
-              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="qualified-leads">0</h2>
+              <p class="stat-label">Wamestahili</p>
+              <p class="stat-value text-purple-600" id="qualified-leads">0</p>
             </div>
-            <div class="p-3 bg-purple-100 rounded-full">
-              <i class="fas fa-check text-purple-600 text-2xl"></i>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-check text-purple-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Converted</p>
-              <h2 class="text-3xl font-bold text-green-600 mt-1" id="converted-leads">0</h2>
+              <p class="stat-label">Converted</p>
+              <p class="stat-value text-green-600" id="converted-leads">0</p>
             </div>
-            <div class="p-3 bg-green-100 rounded-full">
-              <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-check-circle text-green-600 text-xl"></i>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Leads Table -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div class="p-6 border-b border-gray-200">
+      <div class="chart-container">
+        <div class="mb-4 pb-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-800">Orodha ya Wateja</h3>
         </div>
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jina</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Simu</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kampeni</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hali</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarehe</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vitendo</th>
+                <th>Jina</th>
+                <th>Simu</th>
+                <th>Kampeni</th>
+                <th>Hali</th>
+                <th>Tarehe</th>
+                <th>Vitendo</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200" id="leads-tbody">
+            <tbody id="leads-tbody">
               <tr>
                 <td colspan="6" class="px-6 py-12 text-center text-gray-500">
                   <div class="flex flex-col items-center">

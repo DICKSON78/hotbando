@@ -154,6 +154,15 @@ router.get('/locations', (req, res) => {
     });
 });
 
+router.get('/routers', (req, res) => {
+    res.render('admin/routers', {
+        title: 'Routers',
+        activePage: 'routers',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin'
+    });
+});
+
 router.get('/revenue-share', (req, res) => {
     res.render('admin/revenue-share', {
         title: 'Mgawanyo',
@@ -179,7 +188,7 @@ router.post('/adjust-subscription/:id', adminController.adjustCustomerSubscripti
 router.delete('/delete-customer/:id', adminController.deleteCustomer);
 
 // 📡 ROUTER MANAGEMENT API
-router.get('/routers', adminController.getRouters);
+router.get('/api/routers', adminController.getRouters);
 router.get('/router-sessions/:routerID', adminController.getRouterSessions);
 router.post('/reboot-router/:routerID', adminController.rebootRouter);
 

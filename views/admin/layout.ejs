@@ -3,28 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
     <title>HotBando - <%= typeof title !== 'undefined' ? title : 'Dashibodi' %></title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/js/ajax-utils.js"></script>
     <script src="/js/notifications.js" defer></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
-                        poppins: ['Poppins', 'sans-serif'],
+                        inter: ['Inter', 'sans-serif'],
                     },
                     colors: {
                         primary: {
-                            light: '#ff9d5c',
-                            DEFAULT: '#FF7A30',
-                            dark: '#e05a10',
-                        },
-                        secondary: {
-                            light: '#f1f1f1',
-                            DEFAULT: '#f9f9f9',
-                            dark: '#0f0f0f',
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#FF7A30',
+                            600: '#ea580c',
+                            700: '#c2410c',
+                            800: '#9a3412',
+                            900: '#7c2d12',
                         }
                     }
                 }
@@ -32,521 +36,556 @@
         }
     </script>
     <style>
-        /* Modern Sidebar Design */
+        * { font-family: 'Inter', sans-serif; }
+
+        /* Orange Theme Sidebar */
         .sidebar {
-            width: 280px;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(135deg, #FF7A30 0%, #e65a10 100%);
-            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(10px);
-            position: relative;
-            overflow: hidden;
+            width: 260px;
+            background: linear-gradient(180deg, #FF7A30 0%, #e65a10 50%, #c2410c 100%);
+            transition: all 0.3s ease;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
         }
 
-        .sidebar::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg,
-                rgba(255, 255, 255, 0.1) 0%,
-                transparent 50%
-            );
-            pointer-events: none;
-        }
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
 
         .main-content {
-            margin-left: 280px;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(135deg, #f9f9f9 0%, #f1f1f1 100%);
+            margin-left: 260px;
+            transition: all 0.3s ease;
+            background: #f8fafc;
             min-height: 100vh;
         }
 
-        .collapsed .sidebar {
-            width: 75px;
+        .collapsed .sidebar { width: 72px; }
+        .collapsed .main-content { margin-left: 72px; }
+        .collapsed .sidebar-text { display: none; }
+        .collapsed .section-title { display: none; }
+        .collapsed .logo-text { display: none; }
+        .collapsed .dropdown-arrow { display: none; }
+        .collapsed .sidebar-nav { padding: 0 10px; }
+        .collapsed .nav-item { justify-content: center; padding: 12px; }
+        .collapsed .nav-item i { margin-right: 0; }
+        .collapsed .submenu { display: none !important; }
+        .collapsed .user-details { display: none; }
+        .collapsed .sidebar-stats { display: none; }
+
+        /* Navigation Styles */
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 11px 14px;
+            color: rgba(255,255,255,0.85);
+            border-radius: 8px;
+            margin-bottom: 2px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
         }
 
-        .collapsed .main-content {
-            margin-left: 75px;
+        .nav-item:hover {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            transform: translateX(2px);
         }
 
-        /* Modern Navigation Items */
-        .sidebar-item-hover {
-            position: relative;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border-radius: 12px;
+        .nav-item.active {
+            background: white;
+            color: #c2410c;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .nav-item.active i { color: #FF7A30; }
+
+        .nav-item i {
+            width: 20px;
+            font-size: 15px;
+            margin-right: 12px;
+            text-align: center;
+        }
+
+        /* Section Title */
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.5);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 20px 14px 8px;
+        }
+
+        /* Submenu */
+        .submenu {
+            max-height: 0;
             overflow: hidden;
+            transition: max-height 0.3s ease;
+            background: rgba(0,0,0,0.1);
+            border-radius: 8px;
+            margin: 2px 0 6px 0;
         }
 
-        .sidebar-item-hover::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-            background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.6));
-            transform: scaleY(0);
+        .submenu.open { max-height: 400px; }
+
+        .submenu .nav-item {
+            padding: 9px 14px 9px 46px;
+            font-size: 13px;
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .submenu .nav-item:first-child { border-radius: 8px 8px 0 0; }
+        .submenu .nav-item:last-child { border-radius: 0 0 8px 8px; }
+
+        /* Dropdown Arrow */
+        .dropdown-arrow {
+            margin-left: auto;
+            font-size: 10px;
             transition: transform 0.3s ease;
         }
 
-        .sidebar-item-hover:hover {
-            background: rgba(255, 255, 255, 0.15);
-            transform: translateX(4px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        .nav-item.open .dropdown-arrow { transform: rotate(180deg); }
+
+        /* Logo Area */
+        .logo-area {
+            padding: 24px 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.15);
         }
 
-        .sidebar-item-hover:hover::before {
-            transform: scaleY(1);
-        }
-
-        .sidebar-item-hover:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            transform: translateX(4px);
-        }
-
-        .active-nav-item {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
-            color: #7c2d12 !important;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
-        }
-
-        .active-nav-item i, .active-nav-item span {
-            color: #7c2d12 !important;
-            font-weight: 600;
-        }
-
-        /* Modern Logo Container */
-        .logo-container {
-            background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
-            border-radius: 50%;
-            padding: 0.75rem;
-            margin: 1.5rem auto;
-            box-shadow:
-                0 8px 32px rgba(0, 0, 0, 0.1),
-                inset 0 2px 8px rgba(255, 255, 255, 0.9);
-            width: 100px;
-            height: 100px;
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: white;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             overflow: hidden;
-            position: relative;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .logo-container::before {
-            content: '';
-            position: absolute;
-            inset: -2px;
-            background: linear-gradient(45deg, #FF7A30, #FFB366, #FF7A30);
-            border-radius: 50%;
-            z-index: -1;
-            animation: rotate 4s linear infinite;
+        .logo-icon img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
         }
 
-        @keyframes rotate {
-            100% { transform: rotate(360deg); }
+        .logo-text {
+            margin-left: 12px;
         }
 
-        .logo-container img {
-            width: 100%;
-            height: auto;
-            object-fit: cover;
-            position: relative;
-            z-index: 1;
+        .logo-text h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+            line-height: 1.2;
         }
 
-        .logo-container:hover {
-            transform: scale(1.05) rotate(5deg);
-            box-shadow:
-                0 12px 40px rgba(255, 122, 48, 0.3),
-                inset 0 2px 8px rgba(255, 255, 255, 0.9);
+        .logo-text span {
+            font-size: 11px;
+            color: rgba(255,255,255,0.7);
         }
 
-        /* Dropdown Menus */
-        .dropdown-menu {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            background: rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            margin-top: 4px;
+        /* User Area */
+        .user-area {
+            padding: 16px;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            margin-top: auto;
         }
 
-        .dropdown-menu.open {
-            max-height: 500px;
-        }
-
-        .dropdown-toggle {
-            cursor: pointer;
-            position: relative;
-        }
-
-        .dropdown-toggle i.fa-chevron-down {
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            font-size: 0.75rem;
-        }
-
-        .dropdown-toggle.open i.fa-chevron-down {
-            transform: rotate(180deg);
-        }
-
-        .dropdown-toggle:hover {
-            background: rgba(255, 255, 255, 0.12);
-        }
-
-        /* Submenu Items */
-        .dropdown-menu a {
-            padding-left: 3rem;
-            position: relative;
-        }
-
-        .dropdown-menu a::before {
-            content: '';
-            position: absolute;
-            left: 1.5rem;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 6px;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            transition: all 0.3s ease;
-        }
-
-        .dropdown-menu a:hover::before {
-            background: #fff;
-            transform: translateY(-50%) scale(1.5);
-            box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
-        }
-
-        /* Sidebar Text */
-        .sidebar-text {
-            transition: opacity 0.3s ease, transform 0.3s ease;
-            font-weight: 500;
-            letter-spacing: 0.3px;
-        }
-
-        .collapsed .sidebar-text {
-            opacity: 0;
-            display: none;
-            transform: translateX(-10px);
-        }
-
-        .collapsed .logo-container {
-            width: 50px;
-            height: 50px;
-            margin: 1rem auto;
-        }
-
-        /* Icons */
-        .sidebar i {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        /* Scrollbar */
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
+        .user-info {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: rgba(0,0,0,0.15);
             border-radius: 10px;
         }
 
-        .sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
+        .user-avatar {
+            width: 38px;
+            height: 38px;
+            background: white;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #FF7A30;
+            font-size: 15px;
+        }
+
+        .user-details {
+            margin-left: 12px;
+            flex: 1;
+        }
+
+        .user-details h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .user-details span {
+            font-size: 11px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        /* Header */
+        .top-header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0 24px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .breadcrumb a { color: #64748b; }
+        .breadcrumb a:hover { color: #FF7A30; }
+        .breadcrumb .current { color: #1e293b; font-weight: 600; }
+
+        /* Header Actions */
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-btn {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            color: #64748b;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .header-btn:hover {
+            background: #fff7ed;
+            color: #FF7A30;
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 8px;
+            height: 8px;
+            background: #ef4444;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        /* Content Area */
+        .content-area {
+            padding: 24px;
+        }
+
+        /* Quick Stats in Sidebar */
+        .sidebar-stats {
+            padding: 14px;
+            background: rgba(0,0,0,0.15);
+            margin: 12px;
             border-radius: 10px;
         }
 
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
+        .sidebar-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
-        /* Header Enhancement */
-        header {
-            backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.95) !important;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-        }
+        .sidebar-stat:last-child { border-bottom: none; }
+
+        .sidebar-stat-label { color: rgba(255,255,255,0.7); }
+        .sidebar-stat-value { color: white; font-weight: 700; }
 
         /* Responsive */
         @media (max-width: 768px) {
-            .sidebar {
-                width: 75px;
-            }
-            .main-content {
-                margin-left: 75px;
-            }
-            .sidebar-text {
-                display: none;
-            }
-            .logo-container {
-                width: 45px;
-                height: 45px;
-            }
-        }
-
-        /* Notification Dot */
-        .notification-dot {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #EF4444, #DC2626);
-            border: 2px solid white;
-            box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
-            animation: pulse-dot 2s infinite;
-        }
-
-        @keyframes pulse-dot {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
+            .sidebar { width: 72px; }
+            .main-content { margin-left: 72px; }
+            .sidebar-text, .section-title, .logo-text, .dropdown-arrow { display: none; }
+            .sidebar-nav { padding: 0 10px; }
+            .nav-item { justify-content: center; padding: 12px; }
+            .nav-item i { margin-right: 0; }
+            .submenu { display: none !important; }
+            .user-details { display: none; }
+            .sidebar-stats { display: none; }
         }
     </style>
 </head>
-<body class="font-poppins bg-secondary flex">
-    <div class="sidebar fixed h-full shadow-md z-10">
-        <div class="flex flex-col items-center py-4">
-            <div class="logo-container">
-                <img src="/assets/hot-bando-logo.png" alt="HotBando Logo">
+<body class="font-inter bg-gray-50">
+    <div class="flex">
+        <!-- Sidebar -->
+        <aside class="sidebar fixed h-full z-20 flex flex-col">
+            <!-- Logo -->
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <img src="/assets/hot-bando-logo.png" alt="HotBando" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-wifi text-primary-500 text-xl\\'></i>'">
+                </div>
+                <div class="logo-text">
+                    <h1>HotBando</h1>
+                    <span>Station Management</span>
+                </div>
             </div>
-        </div>
-        <div class="p-4 overflow-y-auto" style="max-height: calc(100vh - 200px);">
-            <ul class="space-y-1">
+
+            <!-- Navigation -->
+            <nav class="sidebar-nav flex-1 p-3 overflow-y-auto">
                 <!-- Dashboard -->
-                <li>
-                    <a href="/admin/dashboard" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'dashboard' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-home text-white"></i>
-                        <span class="ml-3 sidebar-text">Dashibodi</span>
-                    </a>
-                </li>
+                <a href="/admin/dashboard" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'dashboard' ? 'active' : '' %>">
+                    <i class="fas fa-th-large"></i>
+                    <span class="sidebar-text">Dashboard</span>
+                </a>
 
-                <!-- Campaigns & Marketing -->
-                <li>
-                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('campaigns-menu', this)">
-                        <div class="flex items-center">
-                            <i class="fas fa-bullhorn text-white"></i>
-                            <span class="ml-3 sidebar-text">Kampeni & Masoko</span>
-                        </div>
-                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
-                    </div>
-                    <ul id="campaigns-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
-                        <li>
-                            <a href="/admin/campaigns" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'campaigns' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-list text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Kampeni Zote</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/leads" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'leads' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-users text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Wateja Wapya</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/my-ads" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'my-ads' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-ad text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Matangazo Yangu</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/upload-video" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'upload-video' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-upload text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Pakia Video</span>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
+                <!-- HOTSPOT SECTION -->
+                <div class="section-title">Hotspot Management</div>
 
-                <!-- Finance & Billing -->
-                <li>
-                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('finance-menu', this)">
-                        <div class="flex items-center">
-                            <i class="fas fa-wallet text-white"></i>
-                            <span class="ml-3 sidebar-text">Fedha & Malipo</span>
-                        </div>
-                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
-                    </div>
-                    <ul id="finance-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
-                        <li>
-                            <a href="/admin/wallet" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'wallet' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-money-bill-wave text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Pesa Yangu</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/generate-vouchers" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'generate-vouchers' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-ticket-alt text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Undaa Vouchers</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/revenue-share" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'revenue-share' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-hand-holding-usd text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Mgawanyo</span>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
+                <a href="/admin/locations" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'locations' ? 'active' : '' %>">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <span class="sidebar-text">Maeneo & Ramani</span>
+                </a>
 
-                <!-- Locations & Users -->
-                <li>
-                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('users-menu', this)">
-                        <div class="flex items-center">
-                            <i class="fas fa-users-cog text-white"></i>
-                            <span class="ml-3 sidebar-text">Watumiaji & Maeneo</span>
-                        </div>
-                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
-                    </div>
-                    <ul id="users-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
-                        <li>
-                            <a href="/admin/users" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'users' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-user-tie text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Watumiaji</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/locations" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'locations' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-map-marker-alt text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Maeneo</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/approve-content" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'approve-content' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-check-circle text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Idhini Maudhui</span>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
+                <a href="/admin/routers" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'routers' ? 'active' : '' %>">
+                    <i class="fas fa-server"></i>
+                    <span class="sidebar-text">Routers</span>
+                </a>
 
-                <!-- Analytics & Reports -->
-                <li>
-                    <div class="dropdown-toggle flex items-center justify-between p-3 text-white rounded-lg sidebar-item-hover" onclick="toggleDropdown('reports-menu', this)">
-                        <div class="flex items-center">
-                            <i class="fas fa-chart-bar text-white"></i>
-                            <span class="ml-3 sidebar-text">Takwimu & Ripoti</span>
-                        </div>
-                        <i class="fas fa-chevron-down text-white sidebar-text"></i>
-                    </div>
-                    <ul id="reports-menu" class="dropdown-menu ml-4 mt-1 space-y-1">
-                        <li>
-                            <a href="/admin/analytics" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'analytics' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-chart-line text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Takwimu</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/admin/reports" class="flex items-center p-2 text-white text-sm rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'reports' ? 'active-nav-item' : '' %>">
-                                <i class="fas fa-chart-pie text-white text-xs"></i>
-                                <span class="ml-2 sidebar-text">Ripoti</span>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
+                <!-- USERS SECTION -->
+                <div class="section-title">Usimamizi wa Watumiaji</div>
 
-                <!-- Settings -->
-                <li>
-                    <a href="/admin/settings" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover <%= typeof activePage !== 'undefined' && activePage === 'settings' ? 'active-nav-item' : '' %>">
-                        <i class="fas fa-cog text-white"></i>
-                        <span class="ml-3 sidebar-text">Mipangilio</span>
-                    </a>
-                </li>
-            </ul>
-        </div>
-        <div class="absolute bottom-0 w-full p-4 border-t border-white border-opacity-20">
-            <a href="/admin/logout" class="flex items-center p-3 text-white rounded-lg sidebar-item-hover" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
-                <i class="fas fa-sign-out-alt text-white"></i>
-                <span class="ml-3 sidebar-text">Toka</span>
-            </a>
-            <form id="logout-form" action="/admin/logout" method="POST" style="display: none;">
-                <input type="hidden" name="_token" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-            </form>
-        </div>
-    </div>
-    <div class="main-content w-full min-h-screen">
-        <header class="bg-white shadow-sm">
-            <div class="flex items-center justify-between p-4">
-                <div class="flex items-center">
-                    <button id="sidebar-toggle" class="p-2 rounded-lg hover:bg-gray-100 mr-2">
-                        <i class="fas fa-bars text-gray-700"></i>
-                    </button>
-                    <h1 class="text-xl font-semibold"><%= typeof title !== 'undefined' ? title : 'Dashibodi' %></h1>
+                <a href="/admin/users" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'users' ? 'active' : '' %>">
+                    <i class="fas fa-users"></i>
+                    <span class="sidebar-text">Watumiaji Wote</span>
+                </a>
+
+                <!-- CAMPAIGNS SECTION -->
+                <div class="section-title">Kampeni & Masoko</div>
+
+                <div class="nav-item" onclick="toggleSubmenu('campaigns-sub', this)">
+                    <i class="fas fa-bullhorn"></i>
+                    <span class="sidebar-text">Kampeni</span>
+                    <i class="fas fa-chevron-down dropdown-arrow"></i>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <div class="relative">
-                        <button class="p-2 rounded-lg hover:bg-gray-100">
-                            <i class="fas fa-bell text-gray-700"></i>
-                            <span class="notification-dot"></span>
-                        </button>
-                    </div>
-                    <div class="flex items-center">
-                        <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white">
-                            <i class="fas fa-user"></i>
-                        </div>
-                        <div class="ml-2">
-                            <p class="text-sm font-medium"><%= typeof userName !== 'undefined' ? userName : 'Mtumiaji' %></p>
-                            <p class="text-xs text-gray-500">Msimamizi</p>
-                        </div>
-                    </div>
+                <div id="campaigns-sub" class="submenu <%= ['campaigns', 'leads', 'my-ads', 'upload-video'].includes(typeof activePage !== 'undefined' ? activePage : '') ? 'open' : '' %>">
+                    <a href="/admin/campaigns" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'campaigns' ? 'active' : '' %>">
+                        <span class="sidebar-text">Kampeni Zote</span>
+                    </a>
+                    <a href="/admin/leads" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'leads' ? 'active' : '' %>">
+                        <span class="sidebar-text">Wateja Wapya (Leads)</span>
+                    </a>
+                    <a href="/admin/my-ads" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'my-ads' ? 'active' : '' %>">
+                        <span class="sidebar-text">Matangazo Yangu</span>
+                    </a>
+                    <a href="/admin/upload-video" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'upload-video' ? 'active' : '' %>">
+                        <span class="sidebar-text">Pakia Video</span>
+                    </a>
+                </div>
+
+                <!-- FINANCE SECTION -->
+                <div class="section-title">Fedha & Malipo</div>
+
+                <div class="nav-item" onclick="toggleSubmenu('finance-sub', this)">
+                    <i class="fas fa-wallet"></i>
+                    <span class="sidebar-text">Fedha</span>
+                    <i class="fas fa-chevron-down dropdown-arrow"></i>
+                </div>
+                <div id="finance-sub" class="submenu <%= ['wallet', 'generate-vouchers', 'vouchers', 'revenue-share'].includes(typeof activePage !== 'undefined' ? activePage : '') ? 'open' : '' %>">
+                    <a href="/admin/wallet" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'wallet' ? 'active' : '' %>">
+                        <span class="sidebar-text">Wallet</span>
+                    </a>
+                    <a href="/admin/generate-vouchers" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'generate-vouchers' ? 'active' : '' %>">
+                        <span class="sidebar-text">Vouchers</span>
+                    </a>
+                    <a href="/admin/revenue-share" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'revenue-share' ? 'active' : '' %>">
+                        <span class="sidebar-text">Revenue Share</span>
+                    </a>
+                </div>
+
+                <!-- REPORTS SECTION -->
+                <div class="section-title">Takwimu & Ripoti</div>
+
+                <a href="/admin/analytics" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'analytics' ? 'active' : '' %>">
+                    <i class="fas fa-chart-line"></i>
+                    <span class="sidebar-text">Analytics</span>
+                </a>
+
+                <a href="/admin/reports" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'reports' ? 'active' : '' %>">
+                    <i class="fas fa-chart-pie"></i>
+                    <span class="sidebar-text">Ripoti</span>
+                </a>
+
+                <!-- SETTINGS SECTION -->
+                <div class="section-title">Mfumo</div>
+
+                <a href="/admin/settings" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'settings' ? 'active' : '' %>">
+                    <i class="fas fa-cog"></i>
+                    <span class="sidebar-text">Mipangilio</span>
+                </a>
+
+                <a href="/admin/approve-content" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'approve-content' ? 'active' : '' %>">
+                    <i class="fas fa-check-double"></i>
+                    <span class="sidebar-text">Idhini Maudhui</span>
+                </a>
+            </nav>
+
+            <!-- Quick Stats -->
+            <div class="sidebar-stats">
+                <div class="sidebar-stat">
+                    <span class="sidebar-stat-label"><i class="fas fa-wifi mr-2"></i>Routers Online</span>
+                    <span class="sidebar-stat-value" id="stat-routers">--</span>
+                </div>
+                <div class="sidebar-stat">
+                    <span class="sidebar-stat-label"><i class="fas fa-users mr-2"></i>Users Sasa</span>
+                    <span class="sidebar-stat-value" id="stat-users">--</span>
                 </div>
             </div>
-        </header>
-        <div class="p-6">
-            <%- body %>
-        </div>
+
+            <!-- User Area -->
+            <div class="user-area">
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <h4><%= typeof userName !== 'undefined' ? userName : 'Admin' %></h4>
+                        <span><%= typeof userRole !== 'undefined' ? userRole : 'Administrator' %></span>
+                    </div>
+                    <a href="#" onclick="event.preventDefault(); document.getElementById('logout-form').submit();" class="ml-2 text-white/70 hover:text-white" title="Toka">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
+                </div>
+                <form id="logout-form" action="/admin/logout" method="POST" style="display: none;">
+                    <input type="hidden" name="_token" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                </form>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content flex-1">
+            <!-- Top Header -->
+            <header class="top-header">
+                <div class="flex items-center">
+                    <button id="sidebar-toggle" class="header-btn mr-3">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div class="breadcrumb">
+                        <a href="/admin/dashboard"><i class="fas fa-home"></i></a>
+                        <i class="fas fa-chevron-right text-xs"></i>
+                        <span class="current"><%= typeof title !== 'undefined' ? title : 'Dashboard' %></span>
+                    </div>
+                </div>
+
+                <div class="header-actions">
+                    <button class="header-btn" title="Tafuta">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="header-btn" title="Arifa">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge"></span>
+                    </button>
+                    <button class="header-btn" title="Msaada">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                    <div class="w-px h-6 bg-gray-200 mx-2"></div>
+                    <a href="/hotspot" target="_blank" class="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition">
+                        <i class="fas fa-external-link-alt mr-2"></i>
+                        <span>Hotspot Portal</span>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="content-area">
+                <%- body %>
+            </div>
+        </main>
     </div>
+
     <script>
+        // Sidebar Toggle
         const sidebarToggle = document.getElementById('sidebar-toggle');
-        const body = document.body;
+        const bodyEl = document.body;
+
         if (localStorage.getItem('sidebarCollapsed') === 'true') {
-            body.classList.add('collapsed');
+            bodyEl.classList.add('collapsed');
         }
+
         sidebarToggle.addEventListener('click', () => {
-            body.classList.toggle('collapsed');
-            localStorage.setItem('sidebarCollapsed', body.classList.contains('collapsed'));
-        });
-        if (window.innerWidth < 768) {
-            body.classList.add('collapsed');
-        }
-        window.addEventListener('resize', () => {
-            if (window.innerWidth < 768) {
-                body.classList.add('collapsed');
-            } else {
-                if (localStorage.getItem('sidebarCollapsed') !== 'true') {
-                    body.classList.remove('collapsed');
-                }
-            }
+            bodyEl.classList.toggle('collapsed');
+            localStorage.setItem('sidebarCollapsed', bodyEl.classList.contains('collapsed'));
         });
 
-        // Dropdown toggle function
-        function toggleDropdown(menuId, toggleElement) {
+        // Submenu Toggle
+        function toggleSubmenu(menuId, toggleElement) {
             const menu = document.getElementById(menuId);
+            const isOpen = menu.classList.contains('open');
+
+            // Toggle clicked menu
             menu.classList.toggle('open');
             toggleElement.classList.toggle('open');
 
-            // Save state to localStorage
-            localStorage.setItem('dropdown_' + menuId, menu.classList.contains('open'));
+            localStorage.setItem('submenu_' + menuId, menu.classList.contains('open'));
         }
 
-        // Restore dropdown states on page load
+        // Restore submenu states and open if child is active
         document.addEventListener('DOMContentLoaded', () => {
-            ['campaigns-menu', 'finance-menu', 'users-menu', 'reports-menu'].forEach(menuId => {
-                const isOpen = localStorage.getItem('dropdown_' + menuId) === 'true';
-                if (isOpen) {
-                    const menu = document.getElementById(menuId);
-                    const toggle = menu.previousElementSibling;
-                    menu.classList.add('open');
-                    toggle.classList.add('open');
+            // Open submenus with active children
+            document.querySelectorAll('.submenu').forEach(submenu => {
+                const hasActiveChild = submenu.querySelector('.nav-item.active');
+                if (hasActiveChild) {
+                    submenu.classList.add('open');
+                    const toggle = submenu.previousElementSibling;
+                    if (toggle) toggle.classList.add('open');
                 }
             });
+
+            // Load quick stats
+            loadQuickStats();
+        });
+
+        // Load quick stats for sidebar
+        async function loadQuickStats() {
+            try {
+                const response = await fetch('/admin/dashboard-stats');
+                const data = await response.json();
+                if (data.success || data.total_users !== undefined) {
+                    document.getElementById('stat-routers').textContent = data.online_routers || '0';
+                    document.getElementById('stat-users').textContent = data.active_users || data.online_users || '0';
+                }
+            } catch (e) {
+                console.log('Could not load quick stats');
+            }
+        }
+
+        // Responsive handling
+        if (window.innerWidth < 768) {
+            bodyEl.classList.add('collapsed');
+        }
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth < 768) {
+                bodyEl.classList.add('collapsed');
+            }
         });
     </script>
     <%- typeof scripts !== 'undefined' ? scripts : '' %>

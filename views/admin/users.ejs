@@ -1,5 +1,121 @@
 <%
 const usersContent = `
+<style>
+  .stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  }
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .stat-label {
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .data-table th {
+    background: #f9fafb;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .data-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 14px;
+  }
+  .data-table tr:hover {
+    background: #f9fafb;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .badge-success { background: #dcfce7; color: #16a34a; }
+  .badge-warning { background: #fef3c7; color: #d97706; }
+  .badge-danger { background: #fee2e2; color: #dc2626; }
+
+  /* Analytics Tabs */
+  .analytics-tabs {
+    display: flex;
+    gap: 4px;
+    background: #f3f4f6;
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  .analytics-tab {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .analytics-tab.active {
+    background: white;
+    color: #1f2937;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .analytics-tab:hover:not(.active) {
+    color: #1f2937;
+  }
+  .tab-panel {
+    display: none;
+  }
+  .tab-panel.active {
+    display: block;
+  }
+  .chart-container {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .table-container {
+    overflow-x: auto;
+    border-radius: 8px;
+  }
+</style>
+
 <div class="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6 border border-gray-100">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-semibold text-gray-800">Usimamizi wa Watumiaji na Routers</h2>
@@ -17,40 +133,70 @@ const usersContent = `
     
     <!-- Statistics Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
-            <div class="text-orange-600 font-semibold text-lg" id="total-users-count">0</div>
-            <div class="text-orange-800 text-sm">Watumiaji Wote</div>
+        <!-- Total Users -->
+        <div class="stat-card">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="stat-label">Watumiaji Wote</p>
+                    <p class="stat-value text-blue-600" id="total-users-count">0</p>
+                </div>
+                <div class="stat-icon bg-blue-100">
+                    <i class="fas fa-users text-blue-600 text-xl"></i>
+                </div>
+            </div>
         </div>
-        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
-            <div class="text-orange-600 font-semibold text-lg" id="online-users-count">0</div>
-            <div class="text-orange-800 text-sm">Wanaotumia Sasa</div>
+
+        <!-- Online Users -->
+        <div class="stat-card">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="stat-label">Wanaotumia Sasa</p>
+                    <p class="stat-value text-green-600" id="online-users-count">0</p>
+                </div>
+                <div class="stat-icon bg-green-100">
+                    <i class="fas fa-wifi text-green-600 text-xl"></i>
+                </div>
+            </div>
         </div>
-        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
-            <div class="text-orange-600 font-semibold text-lg" id="active-routers-count">0</div>
-            <div class="text-orange-800 text-sm">Routers Zilizo Online</div>
+
+        <!-- Active Routers -->
+        <div class="stat-card">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="stat-label">Routers Zilizo Online</p>
+                    <p class="stat-value text-purple-600" id="active-routers-count">0</p>
+                </div>
+                <div class="stat-icon bg-purple-100">
+                    <i class="fas fa-router text-purple-600 text-xl"></i>
+                </div>
+            </div>
         </div>
-        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200 shadow-sm">
-            <div class="text-orange-600 font-semibold text-lg" id="total-sessions">0</div>
-            <div class="text-orange-800 text-sm">Mikondo ya Leo</div>
+
+        <!-- Sessions Today -->
+        <div class="stat-card">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="stat-label">Mikondo ya Leo</p>
+                    <p class="stat-value text-orange-600" id="total-sessions">0</p>
+                </div>
+                <div class="stat-icon bg-orange-100">
+                    <i class="fas fa-chart-line text-orange-600 text-xl"></i>
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Tabs Navigation -->
-    <div class="border-b border-gray-200 mb-6">
-        <nav class="-mb-px flex space-x-8">
-            <button id="users-tab" class="tab-button active py-4 px-1 border-b-2 border-primary font-medium text-sm text-primary transition-all duration-300">
-                <i class="fas fa-users mr-2"></i>
-                Watumiaji Wote
-            </button>
-            <button id="online-tab" class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all duration-300">
-                <i class="fas fa-wifi mr-2"></i>
-                Watumiaji Wenye Mtandao
-            </button>
-            <button id="routers-tab" class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all duration-300">
-                <i class="fas fa-router mr-2"></i>
-                Routers Zilizo Online
-            </button>
-        </nav>
+    <div class="analytics-tabs">
+        <button class="analytics-tab active" onclick="switchUserTab('users')">
+            <i class="fas fa-users mr-2"></i>Watumiaji Wote
+        </button>
+        <button class="analytics-tab" onclick="switchUserTab('online')">
+            <i class="fas fa-wifi mr-2"></i>Watumiaji Wenye Mtandao
+        </button>
+        <button class="analytics-tab" onclick="switchUserTab('routers')">
+            <i class="fas fa-router mr-2"></i>Routers Zilizo Online
+        </button>
     </div>
 
     <!-- Search and Filters -->
@@ -84,11 +230,11 @@ const usersContent = `
     </div>
 
     <!-- Tab Content - Watumiaji Wote -->
-    <div id="users-content" class="tab-content active">
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+    <div id="users-content" class="tab-panel active">
+        <div class="chart-container">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
                         <tr>
                             <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Mtumiaji</th>
                             <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Mawasiliano</th>
@@ -123,11 +269,11 @@ const usersContent = `
     </div>
 
     <!-- Tab Content - Watumiaji Wenye Mtandao -->
-    <div id="online-content" class="tab-content hidden">
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gradient-to-r from-green-50 to-green-100">
+    <div id="online-content" class="tab-panel">
+        <div class="chart-container">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
                         <tr>
                             <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Mtumiaji</th>
                             <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Namba ya Simu</th>
@@ -159,11 +305,11 @@ const usersContent = `
     </div>
 
     <!-- Tab Content - Routers Zilizo Online -->
-    <div id="routers-content" class="tab-content hidden">
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gradient-to-r from-orange-50 to-orange-100">
+    <div id="routers-content" class="tab-panel">
+        <div class="chart-container">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
                         <tr>
                             <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Jina la Router</th>
                             <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Eneo</th>
@@ -468,15 +614,31 @@ const usersContent = `
             loadUsers(currentPage, searchInput.value);
         });
 
-        // Load dashboard statistics
+        // Load dashboard statistics from real API
         function loadDashboardStats() {
-            // Simulate API calls - replace with actual endpoints
-            setTimeout(() => {
-                document.getElementById('total-users-count').textContent = '1,247';
-                document.getElementById('online-users-count').textContent = '89';
-                document.getElementById('active-routers-count').textContent = '23';
-                document.getElementById('total-sessions').textContent = '456';
-            }, 1000);
+            fetch('/admin/dashboard-stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('total-users-count').textContent = formatNumber(data.stats.totalUsers || 0);
+                        document.getElementById('online-users-count').textContent = formatNumber(data.stats.onlineUsers || 0);
+                        document.getElementById('active-routers-count').textContent = formatNumber(data.stats.activeRouters || 0);
+                        document.getElementById('total-sessions').textContent = formatNumber(data.stats.todaySessions || 0);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading stats:', error);
+                    // Fallback to demo data if API fails
+                    document.getElementById('total-users-count').textContent = '0';
+                    document.getElementById('online-users-count').textContent = '0';
+                    document.getElementById('active-routers-count').textContent = '0';
+                    document.getElementById('total-sessions').textContent = '0';
+                });
+        }
+
+        // Format number with commas
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
         // Load users function
@@ -1028,6 +1190,14 @@ const usersContent = `
             }
         };
     });
+
+    // Tab switching function
+    function switchUserTab(tab) {
+        document.querySelectorAll('.analytics-tab').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById(tab + '-content').classList.add('active');
+    }
 </script>
 `;
 %>

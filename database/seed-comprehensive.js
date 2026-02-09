@@ -35,29 +35,60 @@ async function seedComprehensive() {
         }
 
         // ========================================
-        // 2. MIKROTIKS - Routers
+        // 2. LOCATIONS - With Coordinates for Map
+        // ========================================
+        console.log('\n📍 Seeding locations...');
+        const locations = [
+            { name: 'Dar es Salaam - Mlimani City', city: 'Dar es Salaam', region: 'Dar es Salaam', latitude: -6.7694, longitude: 39.2396, type: 'mall', is_active: 1 },
+            { name: 'Dar es Salaam - Kariakoo', city: 'Dar es Salaam', region: 'Dar es Salaam', latitude: -6.8161, longitude: 39.2803, type: 'market', is_active: 1 },
+            { name: 'UDSM - Main Campus', city: 'Dar es Salaam', region: 'Dar es Salaam', latitude: -6.7785, longitude: 39.2081, type: 'university', is_active: 1 },
+            { name: 'Mwanza - Rock City Mall', city: 'Mwanza', region: 'Mwanza', latitude: -2.5164, longitude: 32.9175, type: 'mall', is_active: 1 },
+            { name: 'Arusha - Clock Tower', city: 'Arusha', region: 'Arusha', latitude: -3.3731, longitude: 36.6948, type: 'city_center', is_active: 1 },
+            { name: 'Dodoma - Univ of Dodoma', city: 'Dodoma', region: 'Dodoma', latitude: -6.1630, longitude: 35.7516, type: 'university', is_active: 1 }
+        ];
+
+        const locationIds = {}; // Map name to ID
+
+        for (const loc of locations) {
+            const [existing] = await db.execute('SELECT id FROM locations WHERE name = ?', [loc.name]);
+            if (existing.length === 0) {
+                const [result] = await db.execute(
+                    `INSERT INTO locations (name, city, region, latitude, longitude, location_type, is_active, created_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+                    [loc.name, loc.city, loc.region, loc.latitude, loc.longitude, loc.type, loc.is_active]
+                );
+                locationIds[loc.name] = result.insertId;
+                console.log(`  ✅ Created location: ${loc.name}`);
+            } else {
+                locationIds[loc.name] = existing[0].id;
+            }
+        }
+
+        // ========================================
+        // 3. MIKROTIKS - Routers
         // ========================================
         console.log('\n🔌 Seeding mikrotiks...');
         const routers = [
-            { router_id: 'ROUTER_DAR_001', router_name: 'Dar es Salaam - Mlimani', host: '192.168.1.1', port: 8728, user: 'admin', password: 'admin123', location: 'Mlimani City Mall', ssid: 'HotBando-Mlimani', status: 'online' },
-            { router_id: 'ROUTER_MWANZA_001', router_name: 'Mwanza - City Center', host: '192.168.2.1', port: 8728, user: 'admin', password: 'admin123', location: 'Mwanza', ssid: 'HotBando-Mwanza', status: 'online' },
-            { router_id: 'ROUTER_ARUSHA_001', router_name: 'Arusha - Safari', host: '192.168.3.1', port: 8728, user: 'admin', password: 'admin123', location: 'Safari Hostel', ssid: 'HotBando-Arusha', status: 'online' },
-            { router_id: 'ROUTER_DODOMA_001', router_name: 'Dodoma - Central', host: '192.168.4.1', port: 8728, user: 'admin', password: 'admin123', location: 'Dodoma', ssid: 'HotBando-Dodoma', status: 'offline' }
+            { router_id: 'ROUTER_DAR_001', router_name: 'Dar es Salaam - Mlimani', host: '192.168.1.1', port: 8728, user: 'admin', password: 'admin123', location_name: 'Dar es Salaam - Mlimani City', ssid: 'HotBando-Mlimani', status: 'online' },
+            { router_id: 'ROUTER_MWANZA_001', router_name: 'Mwanza - City Center', host: '192.168.2.1', port: 8728, user: 'admin', password: 'admin123', location_name: 'Mwanza - Rock City Mall', ssid: 'HotBando-Mwanza', status: 'online' },
+            { router_id: 'ROUTER_ARUSHA_001', router_name: 'Arusha - Safari', host: '192.168.3.1', port: 8728, user: 'admin', password: 'admin123', location_name: 'Arusha - Clock Tower', ssid: 'HotBando-Arusha', status: 'online' },
+            { router_id: 'ROUTER_DODOMA_001', router_name: 'Dodoma - Central', host: '192.168.4.1', port: 8728, user: 'admin', password: 'admin123', location_name: 'Dodoma - Univ of Dodoma', ssid: 'HotBando-Dodoma', status: 'offline' }
         ];
 
         for (const router of routers) {
             const [existing] = await db.execute('SELECT id FROM mikrotiks WHERE router_id = ?', [router.router_id]);
+            const locationId = locationIds[router.location_name] || null;
             if (existing.length === 0) {
                 await db.execute(
-                    'INSERT INTO mikrotiks (router_id, router_name, host, port, user, password, location, ssid, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-                    [router.router_id, router.router_name, router.host, router.port, router.user, router.password, router.location, router.ssid, router.status]
+                    'INSERT INTO mikrotiks (router_id, router_name, host, port, user, password, location, location_id, ssid, status, is_active, active_users, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())',
+                    [router.router_id, router.router_name, router.host, router.port, router.user, router.password, router.location_name, locationId, router.ssid, router.status, Math.floor(Math.random() * 50)]
                 );
                 console.log(`  ✅ Created router: ${router.router_name}`);
             }
         }
 
         // ========================================
-        // 3. USERS - Add more diverse users
+        // 4. USERS - Add more diverse users
         // ========================================
         console.log('\n👥 Seeding additional users...');
         const additionalUsers = [
@@ -94,7 +125,7 @@ async function seedComprehensive() {
         }
 
         // ========================================
-        // 4. ADS - Video Advertisements
+        // 5. ADS - Video Advertisements
         // ========================================
         console.log('\n📺 Seeding ads...');
         const [sponsors] = await db.execute("SELECT id FROM users WHERE role = 'sponsor' LIMIT 5");
@@ -150,7 +181,7 @@ async function seedComprehensive() {
         }
 
         // ========================================
-        // 5. VOUCHERS - Voucher codes
+        // 6. VOUCHERS - Voucher codes
         // ========================================
         console.log('\n🎫 Seeding vouchers...');
         const [pkgs] = await db.execute('SELECT id, name, price FROM packages');
@@ -173,7 +204,7 @@ async function seedComprehensive() {
         }
 
         // ========================================
-        // 6. PAYMENTS - Payment records
+        // 7. PAYMENTS - Payment records
         // ========================================
         console.log('\n💳 Seeding payments...');
         const [allUsers] = await db.execute("SELECT id FROM users WHERE role = 'customer' LIMIT 10");
@@ -199,7 +230,7 @@ async function seedComprehensive() {
         }
 
         // ========================================
-        // 7. NOTIFICATIONS
+        // 8. NOTIFICATIONS
         // ========================================
         console.log('\n🔔 Seeding notifications...');
         if (allUsers.length > 0) {
@@ -229,7 +260,7 @@ async function seedComprehensive() {
         }
 
         // ========================================
-        // 8. SYSTEM SETTINGS
+        // 9. SYSTEM SETTINGS
         // ========================================
         console.log('\n⚙️  Seeding system settings...');
         const settings = [
@@ -254,6 +285,7 @@ async function seedComprehensive() {
         console.log('\n✅ Comprehensive seeding completed successfully!\n');
         console.log('📊 Summary:');
         console.log('   ✅ Packages ready');
+        console.log('   ✅ Locations created');
         console.log('   ✅ Routers ready');
         console.log('   ✅ Users expanded');
         console.log('   ✅ Ads created with views');

@@ -1,0 +1,1378 @@
+<%
+  const routersContent = `
+    <style>
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-card.clickable:hover {
+        border-color: #FF7A30;
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .stat-change {
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 20px;
+        margin-top: 8px;
+      }
+      .stat-change.positive {
+        background: #dcfce7;
+        color: #16a34a;
+      }
+      .stat-change.negative {
+        background: #fee2e2;
+        color: #dc2626;
+      }
+      .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .chart-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+      .chart-subtitle {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .period-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .period-btn.active {
+        background: #FF7A30;
+        color: white;
+      }
+      .period-btn:not(.active) {
+        background: #f3f4f6;
+        color: #6b7280;
+      }
+      .period-btn:hover:not(.active) {
+        background: #e5e7eb;
+      }
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: #f9fafb;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        transition: background 0.2s;
+      }
+      .metric-row:hover {
+        background: #f3f4f6;
+      }
+      .metric-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .progress-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+      }
+      .table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .badge-success { background: #dcfce7; color: #16a34a; }
+      .badge-warning { background: #fef3c7; color: #d97706; }
+      .badge-danger { background: #fee2e2; color: #dc2626; }
+      .badge-info { background: #dbeafe; color: #2563eb; }
+      .badge-primary { background: #fff7ed; color: #ea580c; }
+
+      /* Tab System */
+      .analytics-tabs {
+        display: flex;
+        gap: 4px;
+        background: #f3f4f6;
+        padding: 4px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        overflow-x: auto;
+      }
+      .analytics-tab {
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.2s;
+      }
+      .analytics-tab.active {
+        background: white;
+        color: #1f2937;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .analytics-tab:hover:not(.active) {
+        color: #1f2937;
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* Router specific styles */
+      .router-card {
+        transition: all 0.3s ease;
+      }
+      .router-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      }
+      .status-online {
+        background: #22c55e;
+      }
+      .status-offline {
+        background: #ef4444;
+      }
+      @keyframes statusPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .status-pulse {
+        animation: statusPulse 2s infinite;
+      }
+    </style>
+
+    <div class="container mx-auto px-4 py-8">
+      <!-- Page Header -->
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-broadcast-tower mr-2 text-primary"></i>
+            Router Technical Panel
+          </h1>
+          <p class="text-gray-600 text-sm mt-1">Simamia na configure routers zako za MikroTik</p>
+        </div>
+        <button onclick="openAddRouterModal()" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center">
+          <i class="fas fa-plus mr-2"></i>
+          Ongeza Router
+        </button>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Jumla Routers</p>
+              <p class="stat-value text-blue-600" id="stat-total">0</p>
+            </div>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-server text-blue-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Online</p>
+              <p class="stat-value text-green-600" id="stat-online">0</p>
+            </div>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-check-circle text-green-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Offline</p>
+              <p class="stat-value text-red-600" id="stat-offline">0</p>
+            </div>
+            <div class="stat-icon bg-red-100">
+              <i class="fas fa-times-circle text-red-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Watumiaji</p>
+              <p class="stat-value text-purple-600" id="stat-users">0</p>
+            </div>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-users text-purple-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">WireGuard</p>
+              <p class="stat-value text-orange-600" id="stat-wireguard">0</p>
+            </div>
+            <div class="stat-icon bg-orange-100">
+              <i class="fas fa-shield-alt text-orange-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="analytics-tabs">
+        <button class="analytics-tab active" onclick="switchTab('list')">
+          <i class="fas fa-list mr-2"></i>Routers List
+        </button>
+        <button class="analytics-tab" onclick="switchTab('config')">
+          <i class="fas fa-cogs mr-2"></i>Configurations
+        </button>
+        <button class="analytics-tab" onclick="switchTab('wireguard')">
+          <i class="fas fa-shield-alt mr-2"></i>WireGuard Setup
+        </button>
+        <button class="analytics-tab" onclick="switchTab('diagnostics')">
+          <i class="fas fa-stethoscope mr-2"></i>Diagnostics
+        </button>
+      </div>
+
+      <!-- Tab Content: Routers List -->
+      <div id="content-list" class="tab-panel active">
+        <!-- Search & Filters -->
+        <div class="flex flex-wrap gap-4 mb-4">
+          <div class="flex-1 min-w-64">
+            <div class="relative">
+              <input type="text" id="searchInput" placeholder="Tafuta router..."
+                     class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                     onkeyup="filterRouters()">
+              <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+            </div>
+          </div>
+          <select id="statusFilter" onchange="filterRouters()" class="px-4 py-2 border border-gray-300 rounded-lg">
+            <option value="">Status Zote</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
+          <select id="locationFilter" onchange="filterRouters()" class="px-4 py-2 border border-gray-300 rounded-lg">
+            <option value="">Maeneo Yote</option>
+          </select>
+          <button onclick="refreshRouters()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <i class="fas fa-sync-alt mr-1"></i> Refresh
+          </button>
+        </div>
+
+        <!-- Routers Grid -->
+        <div id="routersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <!-- Routers will be loaded here -->
+          <div class="col-span-full text-center py-12">
+            <i class="fas fa-spinner fa-spin text-4xl text-gray-300 mb-3"></i>
+            <p class="text-gray-500">Inapakia routers...</p>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="flex justify-center items-center space-x-2">
+          <!-- Pagination will be generated here -->
+        </div>
+      </div>
+
+      <!-- Tab Content: Configurations -->
+      <div id="content-config" class="tab-panel">
+        <div class="chart-container">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">
+            <i class="fas fa-cogs mr-2 text-primary"></i>
+            Router Configuration Templates
+          </h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Hotspot Configuration -->
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-wifi mr-2 text-blue-500"></i>
+                Hotspot Configuration
+              </h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-500">Default SSID Pattern</label>
+                  <input type="text" value="HotBando-{LOCATION}" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Session Timeout (dakika)</label>
+                  <input type="number" value="1440" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Idle Timeout (dakika)</label>
+                  <input type="number" value="30" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div class="flex items-center">
+                  <input type="checkbox" id="macAuth" checked class="mr-2">
+                  <label for="macAuth" class="text-sm text-gray-600">Enable MAC Authentication</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bandwidth Limits -->
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-tachometer-alt mr-2 text-green-500"></i>
+                Bandwidth Limits (Default)
+              </h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-500">Download Limit (Mbps)</label>
+                  <input type="number" value="10" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Upload Limit (Mbps)</label>
+                  <input type="number" value="5" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Burst Limit (%)</label>
+                  <input type="number" value="150" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+              </div>
+            </div>
+
+            <!-- API Configuration -->
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-plug mr-2 text-purple-500"></i>
+                RouterOS API Settings
+              </h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-500">API Port</label>
+                  <input type="number" value="8728" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">API SSL Port</label>
+                  <input type="number" value="8729" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Connection Timeout (sec)</label>
+                  <input type="number" value="10" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+              </div>
+            </div>
+
+            <!-- Captive Portal -->
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-browser mr-2 text-orange-500"></i>
+                Captive Portal
+              </h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-500">Login Page URL</label>
+                  <input type="text" value="https://hotbando.co.tz/hotspot" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Redirect After Login</label>
+                  <input type="text" value="https://hotbando.co.tz/success" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div class="flex items-center">
+                  <input type="checkbox" id="httpsRedirect" checked class="mr-2">
+                  <label for="httpsRedirect" class="text-sm text-gray-600">Force HTTPS Redirect</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 flex justify-end">
+            <button class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
+              <i class="fas fa-save mr-2"></i>
+              Hifadhi Configurations
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content: WireGuard Setup -->
+      <div id="content-wireguard" class="tab-panel">
+        <div class="chart-container">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-bold text-gray-800">
+              <i class="fas fa-shield-alt mr-2 text-orange-500"></i>
+              WireGuard VPN Configuration
+            </h3>
+            <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+              <i class="fas fa-check-circle mr-1"></i> VPS Connected
+            </span>
+          </div>
+
+          <!-- VPS Server Info -->
+          <div class="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-6 text-white mb-6">
+            <h4 class="font-medium mb-4">
+              <i class="fas fa-server mr-2"></i>
+              VPS Server (HotBando Central)
+            </h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p class="text-gray-400 text-xs">Public IP</p>
+                <p class="font-mono text-sm" id="vps-ip">196.192.xxx.xxx</p>
+              </div>
+              <div>
+                <p class="text-gray-400 text-xs">WireGuard Port</p>
+                <p class="font-mono text-sm">51820</p>
+              </div>
+              <div>
+                <p class="text-gray-400 text-xs">Network</p>
+                <p class="font-mono text-sm">10.7.0.0/24</p>
+              </div>
+              <div>
+                <p class="text-gray-400 text-xs">Connected Peers</p>
+                <p class="font-mono text-sm" id="wg-peers">0</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Router WireGuard Config Generator -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h4 class="font-medium text-gray-700 mb-4">
+                <i class="fas fa-plus-circle mr-2 text-blue-500"></i>
+                Generate Router Config
+              </h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-500">Router ID</label>
+                  <select id="wg-router-select" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                    <option value="">-- Chagua Router --</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500">Assigned IP</label>
+                  <input type="text" id="wg-assigned-ip" placeholder="10.7.0.x" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                </div>
+                <button onclick="generateWireGuardConfig()" class="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+                  <i class="fas fa-key mr-2"></i>
+                  Generate Keys & Config
+                </button>
+              </div>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h4 class="font-medium text-gray-700 mb-4">
+                <i class="fas fa-terminal mr-2 text-green-500"></i>
+                MikroTik Commands
+              </h4>
+              <div class="bg-gray-900 rounded-lg p-4 text-green-400 font-mono text-xs overflow-x-auto" id="wg-commands">
+                <p class="text-gray-500"># Chagua router kupata commands...</p>
+              </div>
+              <button onclick="copyWgCommands()" class="mt-3 px-4 py-2 bg-gray-700 text-white rounded text-sm hover:bg-gray-600">
+                <i class="fas fa-copy mr-1"></i> Copy Commands
+              </button>
+            </div>
+          </div>
+
+          <!-- Connected Routers via WireGuard -->
+          <div class="mt-6">
+            <h4 class="font-medium text-gray-700 mb-4">
+              <i class="fas fa-network-wired mr-2"></i>
+              Routers Connected via WireGuard
+            </h4>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Router</th>
+                    <th>WG IP</th>
+                    <th>Public IP</th>
+                    <th>Last Handshake</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="wg-peers-table">
+                  <tr>
+                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                      <i class="fas fa-spinner fa-spin mr-2"></i> Inapakia...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content: Diagnostics -->
+      <div id="content-diagnostics" class="tab-panel">
+        <div class="chart-container">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">
+            <i class="fas fa-stethoscope mr-2 text-red-500"></i>
+            Router Diagnostics
+          </h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Connectivity Test -->
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-satellite-dish mr-2 text-blue-500"></i>
+                Connectivity Test
+              </h4>
+              <div class="space-y-3">
+                <select id="diag-router-select" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                  <option value="">-- Chagua Router --</option>
+                </select>
+                <div class="flex gap-2">
+                  <button onclick="testPing()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                    <i class="fas fa-exchange-alt mr-1"></i> Ping
+                  </button>
+                  <button onclick="testApi()" class="flex-1 px-4 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700">
+                    <i class="fas fa-plug mr-1"></i> API Test
+                  </button>
+                </div>
+                <div id="diag-result" class="bg-gray-100 rounded p-3 text-sm">
+                  <p class="text-gray-500">Chagua router na bonyeza test...</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- System Info -->
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-info-circle mr-2 text-green-500"></i>
+                System Information
+              </h4>
+              <div id="system-info" class="space-y-2 text-sm">
+                <p class="text-gray-500">Chagua router kuona system info...</p>
+              </div>
+            </div>
+
+            <!-- Recent Logs -->
+            <div class="border border-gray-200 rounded-lg p-4 md:col-span-2">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-file-alt mr-2 text-orange-500"></i>
+                Recent Logs
+              </h4>
+              <div id="router-logs" class="bg-gray-900 rounded-lg p-4 text-green-400 font-mono text-xs h-48 overflow-y-auto">
+                <p class="text-gray-500"># Chagua router kuona logs...</p>
+              </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="border border-gray-200 rounded-lg p-4 md:col-span-2">
+              <h4 class="font-medium text-gray-700 mb-3">
+                <i class="fas fa-bolt mr-2 text-yellow-500"></i>
+                Quick Actions
+              </h4>
+              <div class="flex flex-wrap gap-2">
+                <button onclick="rebootRouter()" class="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
+                  <i class="fas fa-redo mr-1"></i> Reboot Router
+                </button>
+                <button onclick="clearHotspotUsers()" class="px-4 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700">
+                  <i class="fas fa-users-slash mr-1"></i> Clear All Sessions
+                </button>
+                <button onclick="syncTime()" class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                  <i class="fas fa-clock mr-1"></i> Sync Time
+                </button>
+                <button onclick="backupConfig()" class="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700">
+                  <i class="fas fa-download mr-1"></i> Backup Config
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Router Modal -->
+    <div id="addRouterModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800">Ongeza Router Mpya</h3>
+            <button onclick="closeAddRouterModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <form id="addRouterForm" onsubmit="submitRouter(event)">
+            <div class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Router ID *</label>
+                  <input type="text" name="router_id" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="RT-001">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Jina la Router *</label>
+                  <input type="text" name="router_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="UDSM Main Router">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Host/IP *</label>
+                  <input type="text" name="host" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="10.7.0.10">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                  <input type="number" name="port" value="8728" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                  <input type="text" name="user" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="admin">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <input type="password" name="password" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Eneo</label>
+                <select name="location_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg" id="router-location-select">
+                  <option value="">-- Chagua Eneo --</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">SSID</label>
+                <input type="text" name="ssid" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="HotBando-WiFi">
+              </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 mt-6">
+              <button type="button" onclick="closeAddRouterModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                Ghairi
+              </button>
+              <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
+                <i class="fas fa-save mr-2"></i>
+                Hifadhi Router
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Router Details Modal -->
+    <div id="routerDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800" id="router-details-title">Router Details</h3>
+            <button onclick="closeRouterDetailsModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-6" id="routerDetailsContent">
+          <!-- Content will be loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let allRouters = [];
+      let filteredRouters = [];
+      let allLocations = [];
+      let currentPage = 1;
+      const routersPerPage = 9;
+
+      // Initialize
+      document.addEventListener('DOMContentLoaded', () => {
+        loadRouters();
+        loadLocations();
+      });
+
+      // Tab switching
+      function switchTab(tab) {
+        document.querySelectorAll('.analytics-tab').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+
+        event.target.classList.add('active');
+        document.getElementById('content-' + tab).classList.add('active');
+
+        // Load data for specific tabs
+        if (tab === 'wireguard') {
+          loadWireGuardPeers();
+        }
+      }
+
+      // Load routers
+      async function loadRouters() {
+        try {
+          const response = await fetch('/api/routers/');
+          const data = await response.json();
+
+          if (data.success) {
+            allRouters = data.routers || [];
+            filteredRouters = [...allRouters];
+            updateStats();
+            renderRouters();
+            populateRouterSelects();
+          }
+        } catch (error) {
+          console.error('Error loading routers:', error);
+        }
+      }
+
+      // Load locations
+      async function loadLocations() {
+        try {
+          const response = await fetch('/api/locations/');
+          const data = await response.json();
+
+          if (data.success) {
+            allLocations = data.locations || [];
+            populateLocationFilter();
+          }
+        } catch (error) {
+          console.error('Error loading locations:', error);
+        }
+      }
+
+      // Update stats
+      function updateStats() {
+        const online = allRouters.filter(r => r.status === 'online').length;
+        const offline = allRouters.filter(r => r.status === 'offline').length;
+        const wireguard = allRouters.filter(r => r.host && r.host.startsWith('10.7.')).length;
+
+        document.getElementById('stat-total').textContent = allRouters.length;
+        document.getElementById('stat-online').textContent = online;
+        document.getElementById('stat-offline').textContent = offline;
+        document.getElementById('stat-wireguard').textContent = wireguard;
+        document.getElementById('wg-peers').textContent = wireguard;
+      }
+
+      // Populate location filter
+      function populateLocationFilter() {
+        const select = document.getElementById('locationFilter');
+        const routerSelect = document.getElementById('router-location-select');
+
+        allLocations.forEach(loc => {
+          const option = document.createElement('option');
+          option.value = loc.id;
+          option.textContent = loc.name || loc.location_name;
+          select.appendChild(option.cloneNode(true));
+          if (routerSelect) routerSelect.appendChild(option);
+        });
+      }
+
+      // Populate router selects
+      function populateRouterSelects() {
+        const selects = ['wg-router-select', 'diag-router-select'];
+        selects.forEach(id => {
+          const select = document.getElementById(id);
+          if (select) {
+            select.innerHTML = '<option value="">-- Chagua Router --</option>';
+            allRouters.forEach(router => {
+              const option = document.createElement('option');
+              option.value = router.router_id;
+              option.textContent = router.router_name + ' (' + router.host + ')';
+              select.appendChild(option);
+            });
+          }
+        });
+      }
+
+      // Filter routers
+      function filterRouters() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value;
+        const locationId = document.getElementById('locationFilter').value;
+
+        filteredRouters = allRouters.filter(router => {
+          const matchSearch = !search ||
+            router.router_name.toLowerCase().includes(search) ||
+            router.router_id.toLowerCase().includes(search) ||
+            (router.host && router.host.includes(search));
+          const matchStatus = !status || router.status === status;
+          const matchLocation = !locationId || router.location_id == locationId;
+
+          return matchSearch && matchStatus && matchLocation;
+        });
+
+        currentPage = 1;
+        renderRouters();
+      }
+
+      // Render routers with pagination
+      function renderRouters() {
+        const grid = document.getElementById('routersGrid');
+        const totalPages = Math.ceil(filteredRouters.length / routersPerPage);
+        const start = (currentPage - 1) * routersPerPage;
+        const end = start + routersPerPage;
+        const pageRouters = filteredRouters.slice(start, end);
+
+        if (pageRouters.length === 0) {
+          grid.innerHTML = \`
+            <div class="col-span-full text-center py-12">
+              <i class="fas fa-server text-5xl text-gray-300 mb-3"></i>
+              <p class="text-gray-500">Hakuna routers zilizopatikana</p>
+            </div>
+          \`;
+        } else {
+          grid.innerHTML = pageRouters.map(router => {
+            const isOnline = router.status === 'online';
+            const location = allLocations.find(l => l.id === router.location_id);
+
+            return \`
+              <div class="router-card bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div class="\${isOnline ? 'status-online' : 'status-offline'} px-4 py-3 text-white">
+                  <div class="flex justify-between items-center">
+                    <div class="flex items-center">
+                      <i class="fas fa-broadcast-tower mr-2 \${isOnline ? 'status-pulse' : ''}"></i>
+                      <span class="font-medium">\${escapeHtml(router.router_name)}</span>
+                    </div>
+                    <span class="text-xs px-2 py-1 bg-white bg-opacity-20 rounded">\${isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                  </div>
+                </div>
+                <div class="p-4">
+                  <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                      <span class="text-gray-500">ID:</span>
+                      <span class="font-mono text-gray-700">\${escapeHtml(router.router_id)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-gray-500">Host:</span>
+                      <span class="font-mono text-gray-700">\${escapeHtml(router.host)}:\${router.port || 8728}</span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-gray-500">SSID:</span>
+                      <span class="text-gray-700">\${escapeHtml(router.ssid || 'N/A')}</span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-gray-500">Eneo:</span>
+                      <span class="text-gray-700">\${location ? escapeHtml(location.name || location.location_name) : 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div class="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+                    <button onclick="viewRouterDetails('\${router.router_id}')" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">
+                      <i class="fas fa-eye mr-1"></i> Details
+                    </button>
+                    <button onclick="editRouter('\${router.id}')" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">
+                      <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="deleteRouter('\${router.id}')" class="px-3 py-2 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            \`;
+          }).join('');
+        }
+
+        // Render pagination
+        renderPagination(totalPages);
+      }
+
+      // Render pagination
+      function renderPagination(totalPages) {
+        const pagination = document.getElementById('pagination');
+
+        if (totalPages <= 1) {
+          pagination.innerHTML = '';
+          return;
+        }
+
+        let html = '';
+
+        // Previous button
+        html += \`<button onclick="goToPage(\${currentPage - 1})" class="px-3 py-2 rounded border \${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" \${currentPage === 1 ? 'disabled' : ''}>
+          <i class="fas fa-chevron-left"></i>
+        </button>\`;
+
+        // Page numbers
+        for (let i = 1; i <= totalPages; i++) {
+          if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+            html += \`<button onclick="goToPage(\${i})" class="px-3 py-2 rounded border \${i === currentPage ? 'bg-primary text-white' : 'bg-white hover:bg-gray-50'}">\${i}</button>\`;
+          } else if (i === currentPage - 2 || i === currentPage + 2) {
+            html += \`<span class="px-2">...</span>\`;
+          }
+        }
+
+        // Next button
+        html += \`<button onclick="goToPage(\${currentPage + 1})" class="px-3 py-2 rounded border \${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" \${currentPage === totalPages ? 'disabled' : ''}>
+          <i class="fas fa-chevron-right"></i>
+        </button>\`;
+
+        pagination.innerHTML = html;
+      }
+
+      function goToPage(page) {
+        const totalPages = Math.ceil(filteredRouters.length / routersPerPage);
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        renderRouters();
+      }
+
+      function refreshRouters() {
+        loadRouters();
+      }
+
+      // View router details
+      async function viewRouterDetails(routerId) {
+        try {
+          const modal = document.getElementById('routerDetailsModal');
+          const content = document.getElementById('routerDetailsContent');
+
+          content.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i></div>';
+          modal.classList.remove('hidden');
+
+          const response = await fetch(\`/api/routers/\${routerId}/active-users\`);
+          const data = await response.json();
+
+          if (data.success) {
+            const router = data.router;
+            const users = data.activeUsers;
+            const stats = data.stats;
+
+            document.getElementById('router-details-title').textContent = router.router_name;
+
+            content.innerHTML = \`
+              <div class="space-y-6">
+                <!-- Router Info -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div class="bg-gray-50 rounded-lg p-3">
+                    <p class="text-xs text-gray-500">Status</p>
+                    <p class="font-medium \${router.status === 'online' ? 'text-green-600' : 'text-red-600'}">
+                      <i class="fas fa-circle text-xs mr-1"></i> \${router.status === 'online' ? 'Online' : 'Offline'}
+                    </p>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-3">
+                    <p class="text-xs text-gray-500">Host</p>
+                    <p class="font-medium font-mono">\${escapeHtml(router.host)}:\${router.port || 8728}</p>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-3">
+                    <p class="text-xs text-gray-500">SSID</p>
+                    <p class="font-medium">\${escapeHtml(router.ssid || 'N/A')}</p>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-3">
+                    <p class="text-xs text-gray-500">Eneo</p>
+                    <p class="font-medium">\${escapeHtml(router.location_name || router.location || 'N/A')}</p>
+                  </div>
+                </div>
+
+                \${router.owner_name ? \`
+                  <div class="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <p class="text-xs text-purple-600 mb-1">Mmiliki wa Eneo</p>
+                    <p class="font-medium text-gray-800">\${escapeHtml(router.owner_name)}</p>
+                    <p class="text-sm text-gray-600">\${escapeHtml(router.owner_phone || '')}</p>
+                  </div>
+                \` : ''}
+
+                <!-- Stats -->
+                <div class="grid grid-cols-4 gap-4">
+                  <div class="text-center p-3 bg-blue-50 rounded-lg">
+                    <p class="text-2xl font-bold text-blue-600">\${stats.totalUsers}</p>
+                    <p class="text-xs text-gray-500">Watumiaji Hai</p>
+                  </div>
+                  <div class="text-center p-3 bg-green-50 rounded-lg">
+                    <p class="text-2xl font-bold text-green-600">\${stats.paidUsers}</p>
+                    <p class="text-xs text-gray-500">Paid</p>
+                  </div>
+                  <div class="text-center p-3 bg-purple-50 rounded-lg">
+                    <p class="text-2xl font-bold text-purple-600">\${stats.adsUsers}</p>
+                    <p class="text-xs text-gray-500">Ads</p>
+                  </div>
+                  <div class="text-center p-3 bg-orange-50 rounded-lg">
+                    <p class="text-xl font-bold text-orange-600">TZS \${formatMoney(stats.totalRevenue)}</p>
+                    <p class="text-xs text-gray-500">Mapato</p>
+                  </div>
+                </div>
+
+                <!-- Active Users -->
+                <div>
+                  <h4 class="font-medium text-gray-700 mb-3">Watumiaji wa Sasa (\${users.length})</h4>
+                  <div class="max-h-64 overflow-y-auto">
+                    \${users.length === 0 ? '<p class="text-gray-500 text-center py-4">Hakuna watumiaji kwa sasa</p>' : users.map(user => \`
+                      <div class="flex justify-between items-center p-2 bg-gray-50 rounded mb-2">
+                        <div>
+                          <p class="font-medium text-sm">\${escapeHtml(user.name || 'Mgeni')}</p>
+                          <p class="text-xs text-gray-500">\${escapeHtml(user.phone_number || '')}</p>
+                        </div>
+                        <span class="px-2 py-1 rounded text-xs \${user.subscription_type === 'paid' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">
+                          \${user.subscription_type === 'paid' ? 'Paid' : 'Ads'}
+                        </span>
+                      </div>
+                    \`).join('')}
+                  </div>
+                </div>
+              </div>
+            \`;
+          }
+        } catch (error) {
+          console.error('Error loading router details:', error);
+        }
+      }
+
+      function closeRouterDetailsModal() {
+        document.getElementById('routerDetailsModal').classList.add('hidden');
+      }
+
+      function openAddRouterModal() {
+        document.getElementById('addRouterModal').classList.remove('hidden');
+      }
+
+      function closeAddRouterModal() {
+        document.getElementById('addRouterModal').classList.add('hidden');
+        document.getElementById('addRouterForm').reset();
+      }
+
+      async function submitRouter(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+
+        const routerData = {
+          router_id: formData.get('router_id'),
+          router_name: formData.get('router_name'),
+          host: formData.get('host'),
+          port: parseInt(formData.get('port')) || 8728,
+          user: formData.get('user'),
+          password: formData.get('password'),
+          location_id: formData.get('location_id') || null,
+          ssid: formData.get('ssid') || null
+        };
+
+        try {
+          const response = await fetch('/api/routers/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(routerData)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            alert('Router imeongezwa kikamilifu!');
+            closeAddRouterModal();
+            loadRouters();
+          } else {
+            alert(data.message || 'Imeshindwa kuongeza router');
+          }
+        } catch (error) {
+          alert('Hitilafu imetokea');
+          console.error(error);
+        }
+      }
+
+      async function deleteRouter(id) {
+        if (!confirm('Una uhakika unataka kufuta router hii?')) return;
+
+        try {
+          const response = await fetch(\`/api/routers/\${id}\`, { method: 'DELETE' });
+          const data = await response.json();
+
+          if (data.success) {
+            alert('Router imefutwa');
+            loadRouters();
+          } else {
+            alert(data.message || 'Imeshindwa kufuta');
+          }
+        } catch (error) {
+          alert('Hitilafu imetokea');
+        }
+      }
+
+      function editRouter(id) {
+        alert('Edit function - coming soon');
+      }
+
+      // WireGuard functions
+      async function generateWireGuardConfig() {
+        const routerId = document.getElementById('wg-router-select').value;
+
+        if (!routerId) {
+          alert('Tafadhali chagua router');
+          return;
+        }
+
+        const commandsDiv = document.getElementById('wg-commands');
+        commandsDiv.innerHTML = '<p class="text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i> Inatengeneza config...</p>';
+
+        try {
+          const response = await fetch(\`/api/routers/wireguard/generate/\${routerId}\`, { method: 'POST' });
+          const data = await response.json();
+
+          if (data.success) {
+            // Update assigned IP field
+            document.getElementById('wg-assigned-ip').value = data.wireguard.assignedIp;
+
+            // Show MikroTik commands
+            commandsDiv.innerHTML = \`<pre style="white-space: pre-wrap;">\${escapeHtml(data.mikrotikCommands)}</pre>\`;
+
+            // Update VPS info
+            document.getElementById('vps-ip').textContent = data.serverInfo.publicIp;
+
+            // Show success message
+            alert(\`WireGuard config imtengenezwa!\\n\\nRouter IP: \${data.wireguard.assignedIp}\\nPublic Key: \${data.wireguard.publicKey.substring(0, 20)}...\\n\\nCopy commands na run kwenye MikroTik.\`);
+          } else {
+            commandsDiv.innerHTML = \`<p class="text-red-400"># Error: \${data.message || 'Imeshindwa'}</p>\`;
+            alert(data.message || 'Imeshindwa kutengeneza config');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          commandsDiv.innerHTML = '<p class="text-red-400"># Hitilafu imetokea</p>';
+          alert('Hitilafu imetokea');
+        }
+      }
+
+      function copyWgCommands() {
+        const text = document.getElementById('wg-commands').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          alert('Commands zimekopiwa!');
+        }).catch(() => {
+          // Fallback for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          alert('Commands zimekopiwa!');
+        });
+      }
+
+      // Load WireGuard peers on tab switch
+      async function loadWireGuardPeers() {
+        try {
+          const response = await fetch('/api/routers/wireguard/peers');
+          const data = await response.json();
+
+          if (data.success && data.peers) {
+            const tableBody = document.getElementById('wg-peers-table');
+            document.getElementById('wg-peers').textContent = data.peers.length;
+
+            if (data.peers.length === 0) {
+              tableBody.innerHTML = \`
+                <tr>
+                  <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-shield-alt text-4xl text-gray-300 mb-2"></i>
+                    <p>Hakuna routers zilizo configured na WireGuard</p>
+                  </td>
+                </tr>
+              \`;
+            } else {
+              tableBody.innerHTML = data.peers.map(peer => \`
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-2 font-medium">\${escapeHtml(peer.name)}</td>
+                  <td class="px-4 py-2 font-mono text-sm">\${escapeHtml(peer.wgIp || 'N/A')}</td>
+                  <td class="px-4 py-2 font-mono text-sm">\${escapeHtml(peer.publicKey?.substring(0, 20) + '...' || 'N/A')}</td>
+                  <td class="px-4 py-2 text-sm text-gray-500">\${peer.lastSeen ? new Date(peer.lastSeen).toLocaleString() : 'N/A'}</td>
+                  <td class="px-4 py-2">
+                    <span class="px-2 py-1 rounded text-xs \${peer.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                      \${peer.status === 'online' ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </td>
+                </tr>
+              \`).join('');
+            }
+          }
+        } catch (error) {
+          console.error('Error loading WireGuard peers:', error);
+        }
+      }
+
+      // Load VPS setup guide
+      async function loadVpsGuide() {
+        try {
+          const response = await fetch('/api/routers/wireguard/vps-guide');
+          const data = await response.json();
+          if (data.success) {
+            // Guide available for display when needed
+            console.log('VPS guide loaded');
+          }
+        } catch (error) {
+          console.error('Error loading VPS guide:', error);
+        }
+      }
+
+      // Diagnostics functions
+      async function testPing() {
+        const routerId = document.getElementById('diag-router-select').value;
+        if (!routerId) { alert('Chagua router kwanza'); return; }
+
+        const result = document.getElementById('diag-result');
+        result.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Testing...';
+
+        try {
+          const response = await fetch(\`/api/routers/\${routerId}/status\`);
+          const data = await response.json();
+
+          if (data.success) {
+            result.innerHTML = \`
+              <div class="text-green-600">
+                <i class="fas fa-check-circle mr-2"></i> Router reachable!
+                <p class="text-xs text-gray-500 mt-1">Response time: \${data.responseTime || 'N/A'}ms</p>
+              </div>
+            \`;
+          } else {
+            result.innerHTML = \`
+              <div class="text-red-600">
+                <i class="fas fa-times-circle mr-2"></i> Router unreachable
+                <p class="text-xs text-gray-500 mt-1">\${data.message || ''}</p>
+              </div>
+            \`;
+          }
+        } catch (error) {
+          result.innerHTML = '<div class="text-red-600"><i class="fas fa-times-circle mr-2"></i> Test failed</div>';
+        }
+      }
+
+      async function testApi() {
+        const routerId = document.getElementById('diag-router-select').value;
+        if (!routerId) { alert('Chagua router kwanza'); return; }
+
+        const result = document.getElementById('diag-result');
+        result.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Testing API...';
+
+        try {
+          const response = await fetch(\`/api/routers/\${routerId}/status\`);
+          const data = await response.json();
+
+          result.innerHTML = data.success ?
+            '<div class="text-green-600"><i class="fas fa-check-circle mr-2"></i> API connection successful!</div>' :
+            '<div class="text-red-600"><i class="fas fa-times-circle mr-2"></i> API connection failed</div>';
+
+          // Load system info
+          if (data.success && data.health) {
+            document.getElementById('system-info').innerHTML = \`
+              <div class="space-y-1">
+                <p><span class="text-gray-500">Model:</span> \${data.health.model || 'N/A'}</p>
+                <p><span class="text-gray-500">Version:</span> \${data.health.version || 'N/A'}</p>
+                <p><span class="text-gray-500">Uptime:</span> \${data.health.uptime || 'N/A'}</p>
+                <p><span class="text-gray-500">CPU:</span> \${data.health.cpuLoad || 'N/A'}%</p>
+                <p><span class="text-gray-500">Memory:</span> \${data.health.memoryUsed || 'N/A'}%</p>
+              </div>
+            \`;
+          }
+        } catch (error) {
+          result.innerHTML = '<div class="text-red-600"><i class="fas fa-times-circle mr-2"></i> Test failed</div>';
+        }
+      }
+
+      async function rebootRouter() {
+        const routerId = document.getElementById('diag-router-select').value;
+        if (!routerId) { alert('Chagua router kwanza'); return; }
+        if (!confirm('Una uhakika unataka ku-reboot router hii?')) return;
+
+        try {
+          const response = await fetch(\`/api/routers/\${routerId}/reboot\`, { method: 'POST' });
+          const data = await response.json();
+          alert(data.success ? 'Router inareboot...' : 'Imeshindwa ku-reboot');
+        } catch (error) {
+          alert('Hitilafu imetokea');
+        }
+      }
+
+      function clearHotspotUsers() {
+        alert('Clear sessions - coming soon');
+      }
+
+      function syncTime() {
+        alert('Sync time - coming soon');
+      }
+
+      function backupConfig() {
+        alert('Backup config - coming soon');
+      }
+
+      function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function formatMoney(amount) {
+        return Number(amount || 0).toLocaleString();
+      }
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Router Technical Panel',
+    activePage: 'routers',
+    body: routersContent
+}) %>

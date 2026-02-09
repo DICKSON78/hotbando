@@ -383,6 +383,85 @@ const locationController = {
             console.error('Error getting location stats:', error);
             res.status(500).json({ error: error.message });
         }
+    },
+
+    /**
+     * Get detailed location statistics with revenue and user counts
+     */
+    async getLocationDetailedStats(req, res) {
+        try {
+            const user = req.session.admin_user;
+
+            if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+                return res.status(403).json({ error: 'Admin access required' });
+            }
+
+            // Get all locations with their user counts, revenue, and router info
+            const [locationStats] = await db.execute(`
+                SELECT
+                    l.id,
+                    l.name,
+                    l.location_name,
+                    l.city,
+                    l.region,
+                    l.location_type,
+                    l.latitude,
+                    l.longitude,
+                    l.is_active,
+                    fo.name as owner_name,
+                    fo.phone_number as owner_phone,
+                    (SELECT COUNT(*) FROM mikrotiks WHERE location_id = l.id) as router_count,
+                    (SELECT COUNT(*) FROM mikrotiks WHERE location_id = l.id AND status = 'online') as online_routers,
+                    (SELECT COUNT(DISTINCT u.id) FROM users u
+                     JOIN mikrotiks m ON u.last_router_id = m.router_id
+                     WHERE m.location_id = l.id AND u.role = 'customer') as total_users,
+                    (SELECT COUNT(DISTINCT u.id) FROM users u
+                     JOIN mikrotiks m ON u.last_router_id = m.router_id
+                     WHERE m.location_id = l.id AND u.usage_until > NOW() AND u.role = 'customer') as active_users,
+                    (SELECT COALESCE(SUM(u.moneyspent), 0) FROM users u
+                     JOIN mikrotiks m ON u.last_router_id = m.router_id
+                     WHERE m.location_id = l.id AND u.role = 'customer') as total_revenue,
+                    (SELECT COUNT(DISTINCT u.id) FROM users u
+                     JOIN mikrotiks m ON u.last_router_id = m.router_id
+                     WHERE m.location_id = l.id AND u.moneyspent > 0 AND u.role = 'customer') as paid_users,
+                    (SELECT COUNT(DISTINCT u.id) FROM users u
+                     JOIN mikrotiks m ON u.last_router_id = m.router_id
+                     WHERE m.location_id = l.id AND (u.moneyspent = 0 OR u.moneyspent IS NULL) AND u.role = 'customer') as ads_users
+                FROM locations l
+                LEFT JOIN users fo ON l.franchise_owner_id = fo.id
+                ORDER BY total_revenue DESC
+            `);
+
+            // Get summary stats
+            const totalLocations = locationStats.length;
+            const totalRevenue = locationStats.reduce((sum, l) => sum + (parseFloat(l.total_revenue) || 0), 0);
+            const totalUsers = locationStats.reduce((sum, l) => sum + (parseInt(l.total_users) || 0), 0);
+            const totalActiveUsers = locationStats.reduce((sum, l) => sum + (parseInt(l.active_users) || 0), 0);
+            const totalRouters = locationStats.reduce((sum, l) => sum + (parseInt(l.router_count) || 0), 0);
+
+            // Top 5 by revenue
+            const topByRevenue = locationStats.slice(0, 5);
+
+            // Top 5 by active users
+            const topByActiveUsers = [...locationStats].sort((a, b) => b.active_users - a.active_users).slice(0, 5);
+
+            res.json({
+                success: true,
+                summary: {
+                    totalLocations,
+                    totalRevenue,
+                    totalUsers,
+                    totalActiveUsers,
+                    totalRouters
+                },
+                locations: locationStats,
+                topByRevenue,
+                topByActiveUsers
+            });
+        } catch (error) {
+            console.error('Error getting detailed location stats:', error);
+            res.status(500).json({ error: error.message });
+        }
     }
 };
 

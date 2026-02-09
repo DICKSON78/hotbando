@@ -1,5 +1,300 @@
 <%
   const locationsContent = `
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+      /* Stat Cards - Match Analytics Design */
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+
+      /* Chart Container - Match Analytics Design */
+      .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+
+      /* Data Table - Match Analytics Design */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+
+      /* Map Styles */
+      #locations-map {
+        height: 400px;
+        width: 100%;
+        border-radius: 12px;
+        z-index: 1;
+      }
+      .leaflet-popup-content-wrapper {
+        border-radius: 8px;
+      }
+      .location-popup {
+        min-width: 200px;
+      }
+      .location-popup h4 {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #1f2937;
+      }
+      .location-popup .stats {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .location-popup .stat {
+        background: #f3f4f6;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .view-toggle-btn {
+        transition: all 0.3s ease;
+      }
+      .view-toggle-btn.active {
+        background-color: #FF7A30;
+        color: white;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.2); }
+      }
+      @keyframes wave {
+        0% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.8); opacity: 0.3; }
+        100% { transform: scale(2.5); opacity: 0; }
+      }
+      @keyframes ripple {
+        0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); }
+        70% { box-shadow: 0 0 0 15px rgba(34, 197, 94, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+      }
+      .router-marker {
+        z-index: 1000 !important;
+      }
+      .router-online-wave {
+        position: relative;
+      }
+      .router-online-wave::before,
+      .router-online-wave::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(34, 197, 94, 0.4);
+        animation: wave 2s ease-out infinite;
+      }
+      .router-online-wave::after {
+        animation-delay: 1s;
+      }
+      .animate-pulse {
+        animation: pulse 2s infinite;
+      }
+      .animate-ripple {
+        animation: ripple 1.5s infinite;
+      }
+      /* Layer control styling */
+      .leaflet-control-layers {
+        border-radius: 8px !important;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15) !important;
+        border: none !important;
+      }
+      .leaflet-control-layers-base label {
+        padding: 5px 10px;
+        margin: 2px 0;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .leaflet-control-layers-base label:hover {
+        background: #f3f4f6;
+      }
+      .leaflet-control-layers-selector:checked + span {
+        font-weight: 600;
+        color: #FF7A30;
+      }
+      /* Fullscreen map styles */
+      .map-fullscreen {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 9999 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+        background: white;
+      }
+      .map-fullscreen #locations-map {
+        height: 100vh !important;
+        border-radius: 0 !important;
+      }
+      .map-fullscreen .map-legend {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        background: rgba(255,255,255,0.95);
+        padding: 12px 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        z-index: 10000;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+      }
+      .fullscreen-btn {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        background: white;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .fullscreen-btn:hover {
+        background: #f3f4f6;
+        transform: scale(1.02);
+      }
+      .fullscreen-close-btn {
+        position: fixed;
+        top: 20px;
+        right: 200px; /* Moved left to avoid covering layer selector */
+        z-index: 10001;
+        background: #ef4444;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        display: none;
+      }
+      .fullscreen-close-btn:hover {
+        background: #dc2626;
+      }
+      .map-fullscreen .fullscreen-close-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .map-fullscreen .fullscreen-btn {
+        display: none;
+      }
+      /* Fullscreen info panel */
+      .fullscreen-info-panel {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 10001;
+        background: rgba(255,255,255,0.95);
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        display: none;
+        max-width: 320px;
+      }
+      .map-fullscreen .fullscreen-info-panel {
+        display: block;
+      }
+      .fullscreen-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .fullscreen-stat {
+        background: #f3f4f6;
+        padding: 8px 12px;
+        border-radius: 8px;
+        text-align: center;
+      }
+      .fullscreen-stat .value {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1f2937;
+      }
+      .fullscreen-stat .label {
+        font-size: 11px;
+        color: #6b7280;
+      }
+      /* Fix modal z-index when in fullscreen */
+      .map-fullscreen ~ #routerUsersModal,
+      .map-fullscreen ~ #locationDetailsModal,
+      .map-fullscreen ~ #addLocationModal,
+      body.fullscreen-active #routerUsersModal,
+      body.fullscreen-active #locationDetailsModal,
+      body.fullscreen-active #addLocationModal {
+        z-index: 10002 !important;
+      }
+    </style>
+
     <div class="container mx-auto px-4 py-8">
       <!-- Page Header -->
       <div class="flex justify-between items-center mb-6">
@@ -15,62 +310,178 @@
 
       <!-- Stats Cards -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Jumla ya Maeneo</p>
-              <h2 class="text-3xl font-bold text-gray-800 mt-1" id="total-locations">0</h2>
+              <p class="stat-label">Jumla ya Maeneo</p>
+              <p class="stat-value text-blue-600" id="total-locations">0</p>
             </div>
-            <div class="p-3 bg-blue-100 rounded-full">
-              <i class="fas fa-map-marker-alt text-blue-600 text-2xl"></i>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-map-marker-alt text-blue-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Routers</p>
-              <h2 class="text-3xl font-bold text-green-600 mt-1" id="total-routers">0</h2>
+              <p class="stat-label">Routers</p>
+              <p class="stat-value text-green-600" id="total-routers">0</p>
             </div>
-            <div class="p-3 bg-green-100 rounded-full">
-              <i class="fas fa-wifi text-green-600 text-2xl"></i>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-wifi text-green-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Watumiaji Wote</p>
-              <h2 class="text-3xl font-bold text-purple-600 mt-1" id="total-users">0</h2>
+              <p class="stat-label">Watumiaji Wote</p>
+              <p class="stat-value text-purple-600" id="total-users">0</p>
             </div>
-            <div class="p-3 bg-purple-100 rounded-full">
-              <i class="fas fa-users text-purple-600 text-2xl"></i>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-users text-purple-600 text-xl"></i>
             </div>
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div class="flex items-center justify-between">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
             <div>
-              <p class="text-sm text-gray-500">Mapato ya Jumla</p>
-              <h2 class="text-3xl font-bold text-orange-600 mt-1" id="total-revenue">TZS 0</h2>
+              <p class="stat-label">Mapato ya Jumla</p>
+              <p class="stat-value text-orange-600" id="total-revenue">TZS 0</p>
             </div>
-            <div class="p-3 bg-orange-100 rounded-full">
-              <i class="fas fa-money-bill-wave text-orange-600 text-2xl"></i>
+            <div class="stat-icon bg-orange-100">
+              <i class="fas fa-money-bill-wave text-orange-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- View Toggle -->
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div class="flex bg-white rounded-lg border border-gray-200 p-1">
+          <button id="btn-map-view" onclick="toggleView('map')" class="view-toggle-btn px-4 py-2 rounded-md text-sm font-medium active">
+            <i class="fas fa-map mr-2"></i>
+            Ramani
+          </button>
+          <button id="btn-grid-view" onclick="toggleView('grid')" class="view-toggle-btn px-4 py-2 rounded-md text-sm font-medium">
+            <i class="fas fa-th-large mr-2"></i>
+            Routers List
+          </button>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="btn-toggle-routers" onclick="toggleRoutersOnMap()" class="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition">
+            <i class="fas fa-broadcast-tower mr-1"></i>
+            Ficha Routers
+          </button>
+          <button id="btn-toggle-coverage" onclick="toggleCoverageArea()" class="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition">
+            <i class="fas fa-circle mr-1"></i>
+            Ficha Coverage
+          </button>
+          <button onclick="showLocationStats()" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition">
+            <i class="fas fa-chart-bar mr-1"></i>
+            Takwimu
+          </button>
+          <div class="text-sm text-gray-500">
+            <span id="map-locations-count">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map View -->
+      <div id="map-container" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 relative">
+        <!-- Fullscreen Toggle Button -->
+        <button onclick="toggleFullscreenMap()" class="fullscreen-btn">
+          <i class="fas fa-expand mr-2"></i> Onyesha Ramani Kubwa
+        </button>
+
+        <!-- Fullscreen Close Button -->
+        <button onclick="toggleFullscreenMap()" class="fullscreen-close-btn">
+          <i class="fas fa-compress"></i> Funga Fullscreen
+        </button>
+
+        <!-- Fullscreen Info Panel -->
+        <div class="fullscreen-info-panel">
+          <h3 class="font-bold text-gray-800 text-lg mb-1">
+            <i class="fas fa-map-marked-alt mr-2 text-primary"></i>HotBando Network
+          </h3>
+          <p class="text-sm text-gray-500 mb-3">Ramani ya maeneo na routers zote</p>
+          <div class="fullscreen-stats">
+            <div class="fullscreen-stat">
+              <div class="value" id="fs-total-locations">0</div>
+              <div class="label">Maeneo</div>
+            </div>
+            <div class="fullscreen-stat">
+              <div class="value" id="fs-total-routers">0</div>
+              <div class="label">Routers</div>
+            </div>
+            <div class="fullscreen-stat" style="background: #dcfce7;">
+              <div class="value text-green-600" id="fs-online-routers">0</div>
+              <div class="label">Online</div>
+            </div>
+            <div class="fullscreen-stat" style="background: #fee2e2;">
+              <div class="value text-red-600" id="fs-offline-routers">0</div>
+              <div class="label">Offline</div>
+            </div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-gray-200">
+            <p class="text-xs text-gray-500 mb-2">Quick Actions:</p>
+            <div class="flex gap-2">
+              <button onclick="toggleRoutersOnMap()" class="flex-1 px-2 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700">
+                <i class="fas fa-broadcast-tower mr-1"></i> Routers
+              </button>
+              <button onclick="toggleCoverageArea()" class="flex-1 px-2 py-1.5 bg-purple-600 text-white rounded text-xs hover:bg-purple-700">
+                <i class="fas fa-circle mr-1"></i> Coverage
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="locations-map"></div>
+
+        <!-- Map Legend -->
+        <div class="map-legend mt-3 flex flex-wrap gap-3">
+          <div class="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full">
+            <span class="text-xs font-medium text-gray-600">Maeneo:</span>
+            <div class="flex items-center text-xs text-gray-500">
+              <span class="w-3 h-3 rounded-full bg-blue-500 mr-1"></span> Chuo
+            </div>
+            <div class="flex items-center text-xs text-gray-500">
+              <span class="w-3 h-3 rounded-full bg-purple-500 mr-1"></span> Hostel
+            </div>
+            <div class="flex items-center text-xs text-gray-500">
+              <span class="w-3 h-3 rounded-full bg-orange-500 mr-1"></span> Mall
+            </div>
+          </div>
+          <div class="flex items-center gap-2 px-3 py-1 bg-green-50 rounded-full border border-green-200">
+            <span class="text-xs font-medium text-gray-600">Routers:</span>
+            <div class="flex items-center text-xs text-gray-500">
+              <span class="w-3 h-3 rounded-full bg-green-500 mr-1 animate-pulse"></span> Online
+            </div>
+            <div class="flex items-center text-xs text-gray-500">
+              <span class="w-3 h-3 rounded-full bg-red-500 mr-1"></span> Offline
+            </div>
+          </div>
+          <div class="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-full border border-purple-200">
+            <span class="text-xs font-medium text-gray-600">Coverage:</span>
+            <div class="flex items-center text-xs text-gray-500">
+              <span class="w-4 h-4 rounded-full border-2 border-green-500 bg-green-100 mr-1" style="opacity:0.5"></span> ~150m radius
             </div>
           </div>
         </div>
       </div>
 
       <!-- Locations Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="locations-grid">
-        <!-- Loading state -->
-        <div class="col-span-full flex justify-center items-center py-12">
-          <div class="text-center">
-            <i class="fas fa-spinner fa-spin text-4xl mb-3 text-gray-300"></i>
-            <p class="text-gray-500">Inapakia maeneo...</p>
+      <div id="grid-container" class="hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="locations-grid">
+          <!-- Loading state -->
+          <div class="col-span-full flex justify-center items-center py-12">
+            <div class="text-center">
+              <i class="fas fa-spinner fa-spin text-4xl mb-3 text-gray-300"></i>
+              <p class="text-gray-500">Inapakia maeneo...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -113,12 +524,13 @@
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Latitude</label>
-                  <input type="text" name="latitude" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="-6.7924">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Latitude *</label>
+                  <input type="text" name="latitude" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="-6.7924">
+                  <p class="text-xs text-gray-500 mt-1">Inahitajika kwa ramani</p>
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Longitude</label>
-                  <input type="text" name="longitude" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="39.2083">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Longitude *</label>
+                  <input type="text" name="longitude" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="39.2083">
                 </div>
               </div>
 
@@ -141,7 +553,6 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Franchise Owner (Optional)</label>
                 <select name="owner_id" id="owner-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option value="">Chagua franchise owner</option>
-                  <!-- Will be populated dynamically -->
                 </select>
               </div>
 
@@ -193,9 +604,804 @@
       </div>
     </div>
 
+    <!-- Router Users Modal -->
+    <div id="routerUsersModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-bold text-gray-800">
+              <i class="fas fa-users mr-2 text-purple-600"></i>
+              Watumiaji wa Router
+            </h3>
+            <button onclick="closeRouterUsersModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+        <div class="p-4" id="routerUsersContent">
+          <!-- Content will be loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
     <script>
       let allLocations = [];
+      let allRouters = [];
       let franchiseOwners = [];
+      let map = null;
+      let locationMarkers = [];
+      let routerMarkers = [];
+      let coverageCircles = [];
+      let currentView = 'map';
+      let showRoutersOnMap = true;
+      let showCoverageArea = true;
+      let selectedLocation = null; // Track currently selected/focused location
+
+      // Initialize map
+      function initMap() {
+        // Center on Tanzania (Dar es Salaam area)
+        map = L.map('locations-map').setView([-6.7924, 39.2083], 12);
+
+        // Base layers
+        const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        });
+
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        });
+
+        const hybridLayer = L.layerGroup([
+          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19
+          }),
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            opacity: 0.4
+          })
+        ]);
+
+        // Add default layer (street)
+        streetLayer.addTo(map);
+
+        // Layer control
+        const baseLayers = {
+          '<i class="fas fa-road mr-1"></i> Kawaida': streetLayer,
+          '<i class="fas fa-satellite mr-1"></i> Satellite': satelliteLayer,
+          '<i class="fas fa-layer-group mr-1"></i> Hybrid': hybridLayer
+        };
+
+        L.control.layers(baseLayers, null, {
+          position: 'topright',
+          collapsed: false
+        }).addTo(map);
+      }
+
+      // Get marker color based on location type and status
+      function getMarkerColor(location) {
+        if (!location.is_active) return 'red';
+
+        const typeColors = {
+          'university': 'blue',
+          'college': 'blue',
+          'hostel': 'violet',
+          'mall': 'orange',
+          'restaurant': 'orange',
+          'hotel': 'cadetblue',
+          'office': 'gray',
+          'residential': 'green'
+        };
+
+        return typeColors[location.location_type] || 'green';
+      }
+
+      // Get marker icon
+      function getMarkerIcon(location) {
+        const color = getMarkerColor(location);
+
+        return L.divIcon({
+          className: 'custom-marker',
+          html: \`
+            <div style="
+              background-color: \${color === 'blue' ? '#3b82f6' :
+                             color === 'violet' ? '#8b5cf6' :
+                             color === 'orange' ? '#f97316' :
+                             color === 'red' ? '#ef4444' :
+                             color === 'cadetblue' ? '#5f9ea0' :
+                             color === 'gray' ? '#6b7280' : '#22c55e'};
+              width: 30px;
+              height: 30px;
+              border-radius: 50% 50% 50% 0;
+              transform: rotate(-45deg);
+              border: 2px solid white;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            ">
+              <i class="fas fa-wifi" style="
+                color: white;
+                font-size: 12px;
+                transform: rotate(45deg);
+              "></i>
+            </div>
+          \`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 30],
+          popupAnchor: [0, -30]
+        });
+      }
+
+      // Get router icon based on status with wave animation for online
+      function getRouterIcon(router) {
+        const isOnline = router.status === 'online';
+        const bgColor = isOnline ? '#22c55e' : '#ef4444';
+
+        return L.divIcon({
+          className: 'router-marker',
+          html: \`
+            <div style="position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+              \${isOnline ? \`
+                <div style="
+                  position: absolute;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  background: rgba(34, 197, 94, 0.3);
+                  animation: wave 2s ease-out infinite;
+                "></div>
+                <div style="
+                  position: absolute;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  background: rgba(34, 197, 94, 0.3);
+                  animation: wave 2s ease-out infinite 0.7s;
+                "></div>
+                <div style="
+                  position: absolute;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  background: rgba(34, 197, 94, 0.3);
+                  animation: wave 2s ease-out infinite 1.4s;
+                "></div>
+              \` : ''}
+              <div style="
+                background-color: \${bgColor};
+                width: 26px;
+                height: 26px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+                z-index: 10;
+              ">
+                <i class="fas fa-broadcast-tower" style="color: white; font-size: 11px;"></i>
+              </div>
+              <span style="
+                position: absolute;
+                bottom: 4px;
+                right: 4px;
+                width: 10px;
+                height: 10px;
+                background: \${isOnline ? '#22c55e' : '#ef4444'};
+                border: 2px solid white;
+                border-radius: 50%;
+                z-index: 11;
+                \${isOnline ? 'animation: ripple 1.5s infinite;' : ''}
+              "></span>
+            </div>
+          \`,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+          popupAnchor: [0, -20]
+        });
+      }
+
+      // Add markers to map (locations + routers)
+      function updateMapMarkers() {
+        // Clear existing location markers
+        locationMarkers.forEach(m => map.removeLayer(m));
+        locationMarkers = [];
+
+        // Clear existing router markers
+        routerMarkers.forEach(m => map.removeLayer(m));
+        routerMarkers = [];
+
+        // Clear coverage circles
+        coverageCircles.forEach(c => map.removeLayer(c));
+        coverageCircles = [];
+
+        let locationsWithCoords = 0;
+        let routersWithCoords = 0;
+        const bounds = [];
+
+        // Add location markers
+        allLocations.forEach(location => {
+          if (location.latitude && location.longitude) {
+            locationsWithCoords++;
+            const lat = parseFloat(location.latitude);
+            const lng = parseFloat(location.longitude);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+              bounds.push([lat, lng]);
+
+              const marker = L.marker([lat, lng], {
+                icon: getMarkerIcon(location)
+              }).addTo(map);
+
+              // Create popup content
+              const popupContent = \`
+                <div class="location-popup">
+                  <h4>\${escapeHtml(location.location_name || location.name)}</h4>
+                  <p class="text-sm text-gray-600">
+                    <i class="fas fa-map-marker-alt mr-1"></i>
+                    \${escapeHtml(location.city)}, \${escapeHtml(location.region)}
+                  </p>
+                  <p class="text-xs text-gray-500 mt-1">
+                    <span class="px-2 py-0.5 rounded-full \${location.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                      \${location.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    <span class="ml-1">\${getLocationTypeLabel(location.location_type)}</span>
+                  </p>
+                  <div class="stats">
+                    <span class="stat"><i class="fas fa-wifi mr-1"></i>\${location.router_count || 0} routers</span>
+                    <span class="stat"><i class="fas fa-users mr-1"></i>\${location.user_count || 0} users</span>
+                  </div>
+                  <div class="flex gap-2 mt-2">
+                    <button onclick="viewLocationDetails(\${location.id})" class="flex-1 px-3 py-1.5 bg-primary text-white rounded text-sm hover:bg-primary-dark">
+                      <i class="fas fa-info-circle mr-1"></i> Zaidi
+                    </button>
+                    <button onclick="openFullscreenForLocation(\${location.id})" class="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                      <i class="fas fa-expand mr-1"></i> Ramani
+                    </button>
+                  </div>
+                </div>
+              \`;
+
+              marker.bindPopup(popupContent);
+
+              // When marker is clicked, store the selected location
+              marker.on('click', () => {
+                selectedLocation = location;
+              });
+
+              locationMarkers.push(marker);
+            }
+          }
+        });
+
+        // Add router markers with coverage circles
+        if (showRoutersOnMap) {
+          allRouters.forEach((router, index) => {
+            // Get location coordinates for this router
+            const location = allLocations.find(l => l.id === router.location_id);
+            if (location && location.latitude && location.longitude) {
+              routersWithCoords++;
+              // Offset router markers slightly so they don't overlap with location marker
+              const offset = 0.0003 * (index % 5);
+              const lat = parseFloat(location.latitude) + offset;
+              const lng = parseFloat(location.longitude) + offset;
+
+              if (!isNaN(lat) && !isNaN(lng)) {
+                // Add coverage area circle (radius ~150m for WiFi coverage)
+                if (showCoverageArea && router.status === 'online') {
+                  const circle = L.circle([lat, lng], {
+                    color: '#22c55e',
+                    fillColor: '#22c55e',
+                    fillOpacity: 0.1,
+                    radius: 150, // 150 meters coverage radius
+                    weight: 1
+                  }).addTo(map);
+                  coverageCircles.push(circle);
+                }
+
+                const marker = L.marker([lat, lng], {
+                  icon: getRouterIcon(router)
+                }).addTo(map);
+
+                // Enhanced popup with active users button
+                const popupContent = \`
+                  <div class="router-popup" style="min-width: 260px;">
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                      <span style="
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 50%;
+                        background: \${router.status === 'online' ? '#22c55e' : '#ef4444'};
+                        margin-right: 8px;
+                      "></span>
+                      <strong>\${escapeHtml(router.router_name)}</strong>
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">
+                      <i class="fas fa-fingerprint" style="width: 16px;"></i> \${escapeHtml(router.router_id)}
+                    </p>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">
+                      <i class="fas fa-network-wired" style="width: 16px;"></i> \${escapeHtml(router.host)}:\${router.port || 8728}
+                    </p>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">
+                      <i class="fas fa-wifi" style="width: 16px;"></i> \${escapeHtml(router.ssid || 'N/A')}
+                    </p>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">
+                      <i class="fas fa-map-marker-alt" style="width: 16px;"></i> \${escapeHtml(location.name)}, \${escapeHtml(location.city)}
+                    </p>
+                    <div style="display: flex; gap: 4px; margin-top: 10px;">
+                      <span style="
+                        padding: 2px 8px;
+                        border-radius: 12px;
+                        font-size: 11px;
+                        background: \${router.status === 'online' ? '#dcfce7' : '#fee2e2'};
+                        color: \${router.status === 'online' ? '#166534' : '#991b1b'};
+                      ">\${router.status === 'online' ? 'Online' : 'Offline'}</span>
+                      <span style="
+                        padding: 2px 8px;
+                        border-radius: 12px;
+                        font-size: 11px;
+                        background: #e0e7ff;
+                        color: #3730a3;
+                      ">\${router.model || 'MikroTik'}</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 10px;">
+                      <button onclick="showRouterActiveUsers('\${router.router_id}')" style="
+                        flex: 1;
+                        padding: 6px 10px;
+                        background: #8b5cf6;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        font-size: 11px;
+                        cursor: pointer;
+                      "><i class="fas fa-users"></i> Watumiaji</button>
+                      <a href="/admin/routers" style="
+                        flex: 1;
+                        padding: 6px 10px;
+                        background: #f97316;
+                        color: white;
+                        text-align: center;
+                        border-radius: 6px;
+                        text-decoration: none;
+                        font-size: 11px;
+                      ">Simamia</a>
+                    </div>
+                  </div>
+                \`;
+
+                marker.bindPopup(popupContent);
+                routerMarkers.push(marker);
+              }
+            }
+          });
+        }
+
+        // Update counts
+        document.getElementById('map-locations-count').textContent = locationsWithCoords + ' maeneo, ' + routersWithCoords + ' routers';
+
+        // Fit map to markers if any
+        if (bounds.length > 0) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+      }
+
+      // Toggle coverage area visibility
+      function toggleCoverageArea() {
+        showCoverageArea = !showCoverageArea;
+        const btn = document.getElementById('btn-toggle-coverage');
+        if (btn) {
+          btn.innerHTML = showCoverageArea
+            ? '<i class="fas fa-circle mr-1"></i> Ficha Coverage'
+            : '<i class="fas fa-circle mr-1"></i> Onyesha Coverage';
+          btn.classList.toggle('bg-purple-600', showCoverageArea);
+          btn.classList.toggle('bg-gray-500', !showCoverageArea);
+        }
+        updateMapMarkers();
+      }
+
+      // Toggle fullscreen map
+      let isFullscreen = false;
+      function toggleFullscreenMap(focusLocation = null) {
+        const container = document.getElementById('map-container');
+        isFullscreen = !isFullscreen;
+
+        // Use the passed location, or the currently selected location
+        const locationToFocus = focusLocation || selectedLocation;
+
+        if (isFullscreen) {
+          container.classList.add('map-fullscreen');
+          document.body.style.overflow = 'hidden';
+        } else {
+          container.classList.remove('map-fullscreen');
+          document.body.style.overflow = '';
+        }
+
+        // Refresh map size after animation
+        setTimeout(() => {
+          map.invalidateSize();
+          if (isFullscreen) {
+            // If a specific location is selected/focused, zoom to that location
+            if (locationToFocus && locationToFocus.latitude && locationToFocus.longitude) {
+              const lat = parseFloat(locationToFocus.latitude);
+              const lng = parseFloat(locationToFocus.longitude);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                map.setView([lat, lng], 16); // Zoom level 16 for detailed view
+                // Update the info panel to show the selected location
+                updateFullscreenLocationInfo(locationToFocus);
+                return;
+              }
+            }
+            // Otherwise fit all markers and show general stats
+            updateFullscreenStats();
+            if (locationMarkers.length > 0) {
+              const allMarkerBounds = [];
+              locationMarkers.forEach(m => allMarkerBounds.push(m.getLatLng()));
+              routerMarkers.forEach(m => allMarkerBounds.push(m.getLatLng()));
+              if (allMarkerBounds.length > 0) {
+                map.fitBounds(allMarkerBounds, { padding: [80, 80] });
+              }
+            }
+          }
+        }, 100);
+      }
+
+      // Open fullscreen map centered on a specific location
+      function openFullscreenForLocation(locationId) {
+        const location = allLocations.find(l => l.id === locationId);
+        if (location) {
+          selectedLocation = location;
+          // If already in fullscreen, just pan to location
+          if (isFullscreen) {
+            const lat = parseFloat(location.latitude);
+            const lng = parseFloat(location.longitude);
+            if (!isNaN(lat) && !isNaN(lng)) {
+              map.setView([lat, lng], 16);
+              updateFullscreenLocationInfo(location);
+            }
+          } else {
+            toggleFullscreenMap(location);
+          }
+        }
+      }
+
+      // Update fullscreen info panel with selected location details
+      function updateFullscreenLocationInfo(location) {
+        const infoPanel = document.querySelector('.fullscreen-info-panel');
+        if (infoPanel && location) {
+          const locationRouters = allRouters.filter(r => r.location_id === location.id);
+          const onlineRouters = locationRouters.filter(r => r.status === 'online').length;
+
+          infoPanel.innerHTML = \`
+            <h3 class="font-bold text-gray-800 text-lg mb-1">
+              <i class="fas fa-map-marker-alt mr-2 text-primary"></i>\${escapeHtml(location.location_name || location.name)}
+            </h3>
+            <p class="text-sm text-gray-500 mb-3">
+              \${escapeHtml(location.city)}, \${escapeHtml(location.region)} - \${getLocationTypeLabel(location.location_type)}
+            </p>
+            <div class="fullscreen-stats">
+              <div class="fullscreen-stat" style="background: \${location.is_active ? '#dcfce7' : '#fee2e2'};">
+                <div class="value \${location.is_active ? 'text-green-600' : 'text-red-600'}">
+                  <i class="fas fa-\${location.is_active ? 'check-circle' : 'times-circle'}"></i>
+                </div>
+                <div class="label">\${location.is_active ? 'Active' : 'Inactive'}</div>
+              </div>
+              <div class="fullscreen-stat">
+                <div class="value">\${locationRouters.length}</div>
+                <div class="label">Routers</div>
+              </div>
+              <div class="fullscreen-stat" style="background: #dcfce7;">
+                <div class="value text-green-600">\${onlineRouters}</div>
+                <div class="label">Online</div>
+              </div>
+              <div class="fullscreen-stat">
+                <div class="value">\${location.user_count || 0}</div>
+                <div class="label">Users</div>
+              </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-gray-200">
+              <p class="text-xs text-gray-500 mb-2">Actions:</p>
+              <div class="flex gap-2">
+                <button onclick="viewLocationDetails(\${location.id})" class="flex-1 px-2 py-1.5 bg-primary text-white rounded text-xs hover:bg-primary-dark">
+                  <i class="fas fa-info-circle mr-1"></i> Details
+                </button>
+                <button onclick="showAllLocationsInFullscreen()" class="flex-1 px-2 py-1.5 bg-gray-600 text-white rounded text-xs hover:bg-gray-700">
+                  <i class="fas fa-globe mr-1"></i> All
+                </button>
+              </div>
+            </div>
+          \`;
+        }
+      }
+
+      // Show all locations in fullscreen (zoom out)
+      function showAllLocationsInFullscreen() {
+        selectedLocation = null;
+        updateFullscreenStats(); // Reset to general stats
+        if (locationMarkers.length > 0) {
+          const allMarkerBounds = [];
+          locationMarkers.forEach(m => allMarkerBounds.push(m.getLatLng()));
+          routerMarkers.forEach(m => allMarkerBounds.push(m.getLatLng()));
+          if (allMarkerBounds.length > 0) {
+            map.fitBounds(allMarkerBounds, { padding: [80, 80] });
+          }
+        }
+      }
+
+      // Update fullscreen stats panel
+      function updateFullscreenStats() {
+        const onlineRouters = allRouters.filter(r => r.status === 'online').length;
+        const offlineRouters = allRouters.length - onlineRouters;
+
+        // Reset the info panel to general stats
+        const infoPanel = document.querySelector('.fullscreen-info-panel');
+        if (infoPanel) {
+          infoPanel.innerHTML = \`
+            <h3 class="font-bold text-gray-800 text-lg mb-1">
+              <i class="fas fa-map-marked-alt mr-2 text-primary"></i>HotBando Network
+            </h3>
+            <p class="text-sm text-gray-500 mb-3">Ramani ya maeneo na routers zote</p>
+            <div class="fullscreen-stats">
+              <div class="fullscreen-stat">
+                <div class="value" id="fs-total-locations">\${allLocations.length}</div>
+                <div class="label">Maeneo</div>
+              </div>
+              <div class="fullscreen-stat">
+                <div class="value" id="fs-total-routers">\${allRouters.length}</div>
+                <div class="label">Routers</div>
+              </div>
+              <div class="fullscreen-stat" style="background: #dcfce7;">
+                <div class="value text-green-600" id="fs-online-routers">\${onlineRouters}</div>
+                <div class="label">Online</div>
+              </div>
+              <div class="fullscreen-stat" style="background: #fee2e2;">
+                <div class="value text-red-600" id="fs-offline-routers">\${offlineRouters}</div>
+                <div class="label">Offline</div>
+              </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-gray-200">
+              <p class="text-xs text-gray-500 mb-2">Quick Actions:</p>
+              <div class="flex gap-2">
+                <button onclick="toggleRoutersOnMap()" class="flex-1 px-2 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700">
+                  <i class="fas fa-broadcast-tower mr-1"></i> Routers
+                </button>
+                <button onclick="toggleCoverageArea()" class="flex-1 px-2 py-1.5 bg-purple-600 text-white rounded text-xs hover:bg-purple-700">
+                  <i class="fas fa-circle mr-1"></i> Coverage
+                </button>
+              </div>
+            </div>
+          \`;
+        }
+      }
+
+      // ESC key to exit fullscreen
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isFullscreen) {
+          toggleFullscreenMap();
+        }
+      });
+
+      // Show router active users modal
+      async function showRouterActiveUsers(routerId) {
+        try {
+          const modal = document.getElementById('routerUsersModal');
+          const content = document.getElementById('routerUsersContent');
+
+          content.innerHTML = \`
+            <div class="text-center py-8">
+              <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+              <p class="text-gray-500 mt-2">Inapakia watumiaji...</p>
+            </div>
+          \`;
+          modal.classList.remove('hidden');
+
+          const response = await fetch(\`/api/routers/\${routerId}/active-users\`);
+          const data = await response.json();
+
+          if (data.success) {
+            const router = data.router;
+            const users = data.activeUsers;
+            const stats = data.stats;
+
+            let usersHtml = '';
+            if (users.length === 0) {
+              usersHtml = \`
+                <div class="text-center py-8 text-gray-500">
+                  <i class="fas fa-users-slash text-4xl mb-3"></i>
+                  <p>Hakuna watumiaji wanaotumia router hii kwa sasa</p>
+                </div>
+              \`;
+            } else {
+              usersHtml = users.map(user => {
+                const progress = Math.min(100, Math.max(0, user.usage_progress_percent || 0));
+                const remaining = user.seconds_remaining > 0 ? formatTimeRemaining(user.seconds_remaining) : 'Imekwisha';
+                const isPaid = user.subscription_type === 'paid';
+
+                return \`
+                  <div class="bg-gray-50 rounded-lg p-3 mb-2">
+                    <div class="flex justify-between items-start mb-2">
+                      <div>
+                        <p class="font-medium text-gray-800">\${escapeHtml(user.name || 'Mgeni')}</p>
+                        <p class="text-xs text-gray-500">\${escapeHtml(user.phone_number || 'Hakuna namba')}</p>
+                      </div>
+                      <span class="px-2 py-1 rounded-full text-xs \${isPaid ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">
+                        <i class="fas \${isPaid ? 'fa-money-bill' : 'fa-ad'} mr-1"></i>
+                        \${isPaid ? 'Paid' : 'Ads'}
+                      </span>
+                    </div>
+                    <div class="mb-1">
+                      <p class="text-xs text-gray-600 mb-1">
+                        <i class="fas fa-box mr-1"></i> \${escapeHtml(user.package || 'Free')}
+                        <span class="ml-2"><i class="fas fa-clock mr-1"></i> \${remaining}</span>
+                      </p>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div class="h-2 rounded-full \${progress < 20 ? 'bg-red-500' : progress < 50 ? 'bg-yellow-500' : 'bg-green-500'}" style="width: \${progress}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1">\${progress.toFixed(0)}% imetumika</p>
+                  </div>
+                \`;
+              }).join('');
+            }
+
+            content.innerHTML = \`
+              <div>
+                <!-- Router Info -->
+                <div class="bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg p-4 mb-4">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <h4 class="font-bold text-lg">\${escapeHtml(router.router_name)}</h4>
+                      <p class="text-purple-100 text-sm">\${escapeHtml(router.location_name || router.location)}, \${escapeHtml(router.city)}</p>
+                    </div>
+                    <span class="px-2 py-1 rounded-full text-xs \${router.status === 'online' ? 'bg-green-400 text-green-900' : 'bg-red-400 text-red-900'}">
+                      \${router.status === 'online' ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  \${router.owner_name ? \`
+                    <div class="mt-3 pt-3 border-t border-purple-400">
+                      <p class="text-xs text-purple-200">Mmiliki</p>
+                      <p class="font-medium">\${escapeHtml(router.owner_name)}</p>
+                      <p class="text-sm text-purple-100">\${escapeHtml(router.owner_phone || '')}</p>
+                    </div>
+                  \` : ''}
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-4 gap-2 mb-4">
+                  <div class="text-center p-2 bg-blue-50 rounded-lg">
+                    <p class="text-xl font-bold text-blue-600">\${stats.totalUsers}</p>
+                    <p class="text-xs text-gray-500">Jumla</p>
+                  </div>
+                  <div class="text-center p-2 bg-green-50 rounded-lg">
+                    <p class="text-xl font-bold text-green-600">\${stats.paidUsers}</p>
+                    <p class="text-xs text-gray-500">Paid</p>
+                  </div>
+                  <div class="text-center p-2 bg-purple-50 rounded-lg">
+                    <p class="text-xl font-bold text-purple-600">\${stats.adsUsers}</p>
+                    <p class="text-xs text-gray-500">Ads</p>
+                  </div>
+                  <div class="text-center p-2 bg-orange-50 rounded-lg">
+                    <p class="text-lg font-bold text-orange-600">TZS \${formatMoney(stats.totalRevenue)}</p>
+                    <p class="text-xs text-gray-500">Mapato</p>
+                  </div>
+                </div>
+
+                <!-- Users List -->
+                <h5 class="font-medium text-gray-700 mb-2">
+                  <i class="fas fa-users mr-1"></i> Watumiaji wa Sasa (\${users.length})
+                </h5>
+                <div class="max-h-64 overflow-y-auto">
+                  \${usersHtml}
+                </div>
+              </div>
+            \`;
+          } else {
+            content.innerHTML = \`
+              <div class="text-center py-8 text-red-500">
+                <i class="fas fa-exclamation-triangle text-4xl mb-3"></i>
+                <p>\${data.message || 'Imeshindwa kupakia data'}</p>
+              </div>
+            \`;
+          }
+        } catch (error) {
+          console.error('Error loading router users:', error);
+          document.getElementById('routerUsersContent').innerHTML = \`
+            <div class="text-center py-8 text-red-500">
+              <i class="fas fa-exclamation-triangle text-4xl mb-3"></i>
+              <p>Hitilafu imetokea</p>
+            </div>
+          \`;
+        }
+      }
+
+      function closeRouterUsersModal() {
+        document.getElementById('routerUsersModal').classList.add('hidden');
+      }
+
+      function formatTimeRemaining(seconds) {
+        if (seconds <= 0) return 'Imekwisha';
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        if (hours > 24) {
+          const days = Math.floor(hours / 24);
+          return days + ' siku';
+        }
+        if (hours > 0) {
+          return hours + ' saa ' + minutes + ' dk';
+        }
+        return minutes + ' dakika';
+      }
+
+      // Load routers from API
+      async function loadRouters() {
+        try {
+          const response = await fetch('/api/routers/');
+          const data = await response.json();
+
+          if (data.success) {
+            allRouters = data.routers || [];
+            updateRouterStats();
+            updateMapMarkers();
+          }
+        } catch (error) {
+          console.error('Error loading routers:', error);
+        }
+      }
+
+      // Update router stats in stats cards
+      function updateRouterStats() {
+        const onlineRouters = allRouters.filter(r => r.status === 'online').length;
+        const totalRoutersEl = document.getElementById('total-routers');
+        if (totalRoutersEl) {
+          totalRoutersEl.textContent = allRouters.length;
+          totalRoutersEl.title = onlineRouters + ' online, ' + (allRouters.length - onlineRouters) + ' offline';
+        }
+        // Also update fullscreen stats if visible
+        if (isFullscreen) {
+          updateFullscreenStats();
+        }
+      }
+
+      // Toggle router visibility on map
+      function toggleRoutersOnMap() {
+        showRoutersOnMap = !showRoutersOnMap;
+        const btn = document.getElementById('btn-toggle-routers');
+        if (btn) {
+          btn.textContent = showRoutersOnMap ? 'Ficha Routers' : 'Onyesha Routers';
+          btn.classList.toggle('bg-green-600', showRoutersOnMap);
+          btn.classList.toggle('bg-gray-500', !showRoutersOnMap);
+        }
+        updateMapMarkers();
+      }
+
+      // Toggle between map and grid view
+      function toggleView(view) {
+        currentView = view;
+
+        const mapBtn = document.getElementById('btn-map-view');
+        const gridBtn = document.getElementById('btn-grid-view');
+        const mapContainer = document.getElementById('map-container');
+        const gridContainer = document.getElementById('grid-container');
+
+        if (view === 'map') {
+          mapBtn.classList.add('active');
+          gridBtn.classList.remove('active');
+          mapContainer.classList.remove('hidden');
+          gridContainer.classList.add('hidden');
+          // Refresh map size
+          setTimeout(() => map.invalidateSize(), 100);
+        } else {
+          mapBtn.classList.remove('active');
+          gridBtn.classList.add('active');
+          mapContainer.classList.add('hidden');
+          gridContainer.classList.remove('hidden');
+        }
+      }
 
       async function loadLocations() {
         try {
@@ -206,6 +1412,7 @@
             allLocations = data.locations || [];
             renderLocations();
             updateStats();
+            updateMapMarkers();
           } else {
             showError('Imeshindwa kupakia maeneo');
           }
@@ -217,7 +1424,6 @@
 
       async function loadFranchiseOwners() {
         try {
-          // Load users with franchise_owner role
           const response = await fetch('/admin/customers');
           const data = await response.json();
 
@@ -249,6 +1455,9 @@
         document.getElementById('total-routers').textContent = totalRouters;
         document.getElementById('total-users').textContent = totalUsers;
         document.getElementById('total-revenue').textContent = 'TZS ' + formatMoney(totalRevenue);
+
+        // Update fullscreen stats too
+        document.getElementById('fs-total-locations').textContent = allLocations.length;
       }
 
       function renderLocations() {
@@ -270,10 +1479,9 @@
         grid.innerHTML = allLocations.map(location => \`
           <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition">
             <div class="p-6">
-              <!-- Location Header -->
               <div class="flex justify-between items-start mb-4">
                 <div class="flex-1">
-                  <h3 class="text-lg font-semibold text-gray-800 mb-1">\${escapeHtml(location.location_name)}</h3>
+                  <h3 class="text-lg font-semibold text-gray-800 mb-1">\${escapeHtml(location.location_name || location.name)}</h3>
                   <p class="text-sm text-gray-500">
                     <i class="fas fa-map-marker-alt mr-1"></i>
                     \${escapeHtml(location.city)}, \${escapeHtml(location.region)}
@@ -284,15 +1492,24 @@
                 </span>
               </div>
 
-              <!-- Location Type Badge -->
               <div class="mb-4">
                 <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                   <i class="fas fa-tag mr-1"></i>
                   \${getLocationTypeLabel(location.location_type)}
                 </span>
+                \${location.latitude && location.longitude ? \`
+                  <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 ml-1">
+                    <i class="fas fa-globe mr-1"></i>
+                    GPS
+                  </span>
+                \` : \`
+                  <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 ml-1">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    No GPS
+                  </span>
+                \`}
               </div>
 
-              <!-- Stats -->
               <div class="grid grid-cols-3 gap-2 mb-4">
                 <div class="text-center p-2 bg-gray-50 rounded">
                   <p class="text-2xl font-bold text-gray-800">\${location.router_count || 0}</p>
@@ -308,7 +1525,6 @@
                 </div>
               </div>
 
-              <!-- Franchise Owner -->
               \${location.owner_name ? \`
                 <div class="mb-4 p-3 bg-purple-50 border border-purple-100 rounded-lg">
                   <p class="text-xs text-gray-500 mb-1">Franchise Owner:</p>
@@ -316,19 +1532,19 @@
                     <i class="fas fa-user mr-1"></i>
                     \${escapeHtml(location.owner_name)}
                   </p>
-                  \${location.commission_rate ? \`
-                    <p class="text-xs text-gray-500 mt-1">
-                      Commission: \${location.commission_rate}%
-                    </p>
-                  \` : ''}
                 </div>
               \` : ''}
 
-              <!-- Actions -->
               <div class="flex space-x-2 pt-4 border-t border-gray-200">
                 <button onclick="viewLocationDetails(\${location.id})" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
                   <i class="fas fa-eye mr-1"></i>
                   Angalia
+                </button>
+                <button onclick="focusOnMap(\${location.latitude}, \${location.longitude}, \${location.id})" class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm" title="Onyesha kwenye ramani" \${!location.latitude ? 'disabled style="opacity:0.5"' : ''}>
+                  <i class="fas fa-map"></i>
+                </button>
+                <button onclick="focusOnMapFullscreen(\${location.id})" class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm" title="Ramani kubwa" \${!location.latitude ? 'disabled style="opacity:0.5"' : ''}>
+                  <i class="fas fa-expand"></i>
                 </button>
                 <button onclick="deleteLocation(\${location.id})" class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
                   <i class="fas fa-trash"></i>
@@ -337,6 +1553,47 @@
             </div>
           </div>
         \`).join('');
+      }
+
+      // Focus map on a specific location
+      function focusOnMap(lat, lng, locationId = null) {
+        if (lat && lng) {
+          // If locationId is provided, set selectedLocation
+          if (locationId) {
+            const location = allLocations.find(l => l.id === locationId);
+            if (location) {
+              selectedLocation = location;
+            }
+          }
+
+          toggleView('map');
+          setTimeout(() => {
+            map.setView([lat, lng], 16);
+            // Find and open the popup for this location
+            locationMarkers.forEach(marker => {
+              const pos = marker.getLatLng();
+              if (Math.abs(pos.lat - lat) < 0.0001 && Math.abs(pos.lng - lng) < 0.0001) {
+                marker.openPopup();
+              }
+            });
+          }, 200);
+        }
+      }
+
+      // Focus on location and open fullscreen
+      function focusOnMapFullscreen(locationId) {
+        const location = allLocations.find(l => l.id === locationId);
+        if (location && location.latitude && location.longitude) {
+          selectedLocation = location;
+          if (!isFullscreen) {
+            toggleFullscreenMap(location);
+          } else {
+            const lat = parseFloat(location.latitude);
+            const lng = parseFloat(location.longitude);
+            map.setView([lat, lng], 16);
+            updateFullscreenLocationInfo(location);
+          }
+        }
       }
 
       function getLocationTypeLabel(type) {
@@ -378,15 +1635,14 @@
         const formData = new FormData(event.target);
 
         const locationData = {
-          location_name: formData.get('location_name'),
+          name: formData.get('location_name'),
           city: formData.get('city'),
           region: formData.get('region'),
           address: formData.get('address'),
           latitude: formData.get('latitude') || null,
           longitude: formData.get('longitude') || null,
           location_type: formData.get('location_type'),
-          owner_id: formData.get('owner_id') || null,
-          commission_rate: formData.get('commission_rate') || null,
+          franchise_owner_id: formData.get('owner_id') || null,
           notes: formData.get('notes'),
           is_active: formData.get('is_active') ? 1 : 0
         };
@@ -420,15 +1676,14 @@
 
           if (data.success) {
             const location = data.location;
-            document.getElementById('location-details-title').textContent = location.location_name;
+            document.getElementById('location-details-title').textContent = location.name || location.location_name;
 
             let detailsHTML = \`
               <div class="space-y-6">
-                <!-- Basic Info -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p class="text-sm text-gray-500">Jina la Eneo</p>
-                    <p class="font-medium">\${escapeHtml(location.location_name)}</p>
+                    <p class="font-medium">\${escapeHtml(location.name || location.location_name)}</p>
                   </div>
                   <div>
                     <p class="text-sm text-gray-500">Aina</p>
@@ -442,6 +1697,12 @@
                     <p class="text-sm text-gray-500">Mkoa</p>
                     <p class="font-medium">\${escapeHtml(location.region)}</p>
                   </div>
+                  \${location.latitude && location.longitude ? \`
+                    <div>
+                      <p class="text-sm text-gray-500">GPS Coordinates</p>
+                      <p class="font-medium">\${location.latitude}, \${location.longitude}</p>
+                    </div>
+                  \` : ''}
                   \${location.address ? \`
                     <div class="col-span-2">
                       <p class="text-sm text-gray-500">Anuani</p>
@@ -450,7 +1711,6 @@
                   \` : ''}
                 </div>
 
-                <!-- Stats -->
                 <div class="border-t border-gray-200 pt-4">
                   <h4 class="font-medium text-gray-800 mb-3">Takwimu</h4>
                   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -482,12 +1742,6 @@
                         <p class="text-sm text-gray-600 mt-1">
                           <i class="fas fa-phone mr-1"></i>
                           \${escapeHtml(location.owner_phone)}
-                        </p>
-                      \` : ''}
-                      \${location.commission_rate ? \`
-                        <p class="text-sm text-gray-600 mt-1">
-                          <i class="fas fa-percentage mr-1"></i>
-                          Commission: \${location.commission_rate}%
                         </p>
                       \` : ''}
                     </div>
@@ -548,7 +1802,9 @@
 
       // Initialize on page load
       document.addEventListener('DOMContentLoaded', () => {
+        initMap();
         loadLocations();
+        loadRouters();
         loadFranchiseOwners();
       });
     </script>
