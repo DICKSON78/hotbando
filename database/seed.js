@@ -4,6 +4,8 @@
  * Run: node database/seed.js
  */
 
+//os
+
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 
