@@ -47,7 +47,7 @@ services:
     environment:
       MYSQL_DATABASE: hotbando
       MYSQL_USER: hotbando
-      MYSQL_PASSWORD: hotbando_pass
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_pass}
     # Host port removed to avoid conflict — access via Docker network
     volumes:
