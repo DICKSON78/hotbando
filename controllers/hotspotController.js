@@ -42,7 +42,10 @@ function getRealClientMAC(req) {
 async function getRealLocation(routerID) {
     try {
         const [routers] = await db.execute(
-            'SELECT location FROM mikrotiks WHERE router_id = ?',
+            `SELECT COALESCE(l.name, m.router_name, 'Tanzania') AS location
+             FROM mikrotiks m
+             LEFT JOIN locations l ON m.location_id = l.id
+             WHERE m.router_id = ?`,
             [routerID]
         );
         
@@ -65,8 +68,8 @@ async function getRealLocation(routerID) {
 
 // Get real router ID
 function getRealRouterID(req) {
-    if (req.query.routerID) {
-        return req.query.routerID;
+    if (req.query.routerID || req.query.routerid || req.query.router_id) {
+        return req.query.routerID || req.query.routerid || req.query.router_id;
     }
     
     if (req.headers['x-router-id']) {
@@ -84,8 +87,8 @@ function getRealRouterID(req) {
 
 // Get real SSID
 function getRealSSID(req) {
-    if (req.query.ssidshow) {
-        return req.query.ssidshow;
+    if (req.query.ssidshow || req.query.ssid) {
+        return req.query.ssidshow || req.query.ssid;
     }
     
     if (req.headers['x-ssid']) {
@@ -93,6 +96,12 @@ function getRealSSID(req) {
     }
     
     return 'HotBando WiFi';
+}
+
+// Detect API/SPA requests (JSON) vs classic EJS form posts
+function isApiRequest(req) {
+    const accept = req.headers['accept'] || '';
+    return req.path.startsWith('/api/') || req.headers['x-requested-with'] === 'XMLHttpRequest' || accept.includes('application/json');
 }
 
 // Controller methods
@@ -176,6 +185,9 @@ const hotspotController = {
             }
             
             if (Object.keys(errors).length > 0) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ error: Object.values(errors)[0] });
+                }
                 return res.render('hotspot/login', { 
                     errors, 
                     formData: req.body,
@@ -191,6 +203,9 @@ const hotspotController = {
             );
             
             if (users.length === 0) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ error: 'Namba hii ya simu haijasajiliwa au imezuiwa.' });
+                }
                 errors.phone_number = 'Namba hii ya simu haijasajiliwa au imezuiwa.';
                 return res.render('hotspot/login', { 
                     errors, 
@@ -205,6 +220,9 @@ const hotspotController = {
             
             const isPasswordValid = await bcrypt.compare(password, user.password);
             if (!isPasswordValid) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ error: 'Umekosea neno la siri.' });
+                }
                 errors.password = 'Umekosea neno la siri.';
                 return res.render('hotspot/login', { 
                     errors, 
@@ -215,9 +233,9 @@ const hotspotController = {
                 });
             }
             
-            const currentMAC = req.session.mac;
-            const currentRouterID = req.session.routerID;
-            const currentLocation = req.session.location;
+            const currentMAC = req.session.mac || getRealClientMAC(req);
+            const currentRouterID = req.session.routerID || getRealRouterID(req);
+            const currentLocation = req.session.location || await getRealLocation(currentRouterID);
             const currentIP = req.ip;
             
             await db.execute(
@@ -260,10 +278,17 @@ const hotspotController = {
                 console.warn('⚠️ Router connection after login failed:', routerError.message);
             }
             
+            if (isApiRequest(req)) {
+                return res.json({ success: true });
+            }
+            
             res.redirect('/hotspot/dashboard');
             
         } catch (error) {
             console.error('❌ REAL Login error:', error);
+            if (isApiRequest(req)) {
+                return res.status(500).json({ error: 'Tatizo limetokea. Tafadhali jaribu tena.' });
+            }
             res.render('hotspot/login', { 
                 errors: { general: 'Tatizo limetokea. Tafadhali jaribu tena.' },
                 formData: req.body,
@@ -321,6 +346,9 @@ const hotspotController = {
             }
             
             if (Object.keys(errors).length > 0) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ error: Object.values(errors)[0] });
+                }
                 return res.render('hotspot/signup', { 
                     errors, 
                     formData: req.body,
@@ -336,6 +364,9 @@ const hotspotController = {
             );
             
             if (existingUsers.length > 0) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ error: 'Namba hii ya simu tayari imesajiliwa.' });
+                }
                 errors.phone_number = 'Namba hii ya simu tayari imesajiliwa.';
                 return res.render('hotspot/signup', { 
                     errors, 
@@ -348,10 +379,10 @@ const hotspotController = {
             
             const hashedPassword = await bcrypt.hash(password, 10);
             
-            const clientMAC = req.session.mac;
-            const location = req.session.location;
-            const routerID = req.session.routerID;
-            const clientIP = req.ip;
+            const clientMAC = req.session.mac || null;
+            const location = req.session.location || null;
+            const routerID = req.session.routerID || null;
+            const clientIP = req.ip || null;
             
             const [settings] = await db.execute(
                 'SELECT setting_value FROM system_settings WHERE setting_key = "free_data_per_user"'
@@ -362,7 +393,7 @@ const hotspotController = {
             const [result] = await db.execute(
                 `INSERT INTO users 
                 (name, phone_number, password, role, package, mac_address, location, last_router_id, ip_address, moneyspent, usage_start, usage_until, free_bytes, last_free_used, is_active, created_at, updated_at) 
-                VALUES (?, ?, ?, "customer", "KARIBU HOT BANDO", ?, ?, ?, ?, 0, ?, ?, ?, 0, 1, ?, ?)`,
+                VALUES (?, ?, ?, "customer", "KARIBU HOT BANDO", ?, ?, ?, ?, 0, ?, ?, ?, NULL, 1, ?, ?)`,
                 [name, phone_number, hashedPassword, clientMAC, location, routerID, clientIP, now, now, freeBytes, now, now]
             );
             
@@ -388,10 +419,17 @@ const hotspotController = {
                 console.warn('⚠️ Router connection after registration failed:', routerError.message);
             }
             
+            if (isApiRequest(req)) {
+                return res.json({ success: true });
+            }
+            
             res.redirect('/hotspot/dashboard');
             
         } catch (error) {
             console.error('❌ REAL Registration error:', error);
+            if (isApiRequest(req)) {
+                return res.status(500).json({ error: 'Tatizo limetokea wakati wa usajili. Tafadhali jaribu tena.' });
+            }
             res.render('hotspot/signup', { 
                 errors: { general: 'Tatizo limetokea wakati wa usajili. Tafadhali jaribu tena.' },
                 formData: req.body,
@@ -425,11 +463,11 @@ const hotspotController = {
         );
         const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
         
-        const routerStatus = await mikrotikService.checkRouterStatus(req.session.routerID);
+        const routerStatus = await mikrotikService.checkRouterStatus(req.session.routerID || 'router-default');
         
         let connectedUsers = 0;
         try {
-            const sessions = await mikrotikService.getActiveSessions(req.session.routerID);
+            const sessions = await mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
             connectedUsers = sessions.length;
         } catch (error) {
             console.warn('⚠️ Could not get connected users count:', error.message);
@@ -521,7 +559,7 @@ const hotspotController = {
             if (bytes > 0) {
                 await db.execute(
                     'UPDATE users SET last_free_used = ? WHERE id = ?',
-                    [Date.now(), user.id]
+                    [now, user.id]
                 );
             }
             
@@ -570,6 +608,8 @@ const hotspotController = {
             if (todayViews[0].count >= dailyAdLimit) {
                 return res.json({ 
                     success: false, 
+                    adsWatchedToday: todayViews[0].count,
+                    adsRemaining: 0,
                     message: 'Umeshazidi kiasi cha matangazo leo. Jaribu kesho tena.' 
                 });
             }
@@ -592,6 +632,8 @@ const hotspotController = {
             if (ads.length === 0) {
                 return res.json({ 
                     success: false, 
+                    adsWatchedToday: todayViews[0].count,
+                    adsRemaining: Math.max(0, dailyAdLimit - todayViews[0].count),
                     message: 'Hakuna matangazo yanayopatikana kwa sasa.' 
                 });
             }
@@ -601,6 +643,8 @@ const hotspotController = {
             
             res.json({ 
                 success: true, 
+                adsWatchedToday: todayViews[0].count,
+                adsRemaining: Math.max(0, dailyAdLimit - todayViews[0].count),
                 ad: {
                     id: ad.id,
                     title: ad.title,
@@ -833,6 +877,20 @@ const hotspotController = {
     async getUserInfo(req, res) {
         try {
             const { phone_number } = req.params;
+
+            // Only allow a customer to view their own info, or an admin to view any
+            const customer = req.session.hotbando_user;
+            const admin = req.session.admin_user;
+            const isOwnAccount = customer && customer.phone_number === phone_number;
+            const isAdmin = admin && (admin.role === 'admin' || admin.role === 'super_admin');
+
+            if (!isOwnAccount && !isAdmin) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Unauthorized: unajihitaji kuingia kwenye akaunti yako.'
+                });
+            }
+
             const [users] = await db.execute(
                 'SELECT id, name, phone_number, package, location, moneyspent, usage_start, usage_until, free_bytes FROM users WHERE phone_number = ? AND role = "customer"',
                 [phone_number]
@@ -896,8 +954,7 @@ const hotspotController = {
         params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
       }
       
-      query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
-      params.push(parseInt(limit), offset);
+      query += ` ORDER BY id DESC LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
       
       const [customers] = await db.execute(query, params);
 
@@ -1266,13 +1323,27 @@ const hotspotController = {
     // Voucher redemption
     async voucher(req, res) {
         try {
-            const { voucher } = req.body;
+            const { voucher_code, voucher } = req.body;
+            const voucherCode = voucher_code || voucher;
             const user = req.session.hotbando_user;
             
             if (!user) {
+                if (isApiRequest(req)) {
+                    return res.status(401).json({ success: 'error', message: 'Umelazimika kuingia kwenye akaunti yako.' });
+                }
                 return res.json({ 
                     success: 'error', 
                     message: 'Umelazimika kuingia kwenye akaunti yako.' 
+                });
+            }
+            
+            if (!voucherCode) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ success: 'error', message: 'Tafadhali ingiza namba ya vocha.' });
+                }
+                return res.json({ 
+                    success: 'error', 
+                    message: 'Tafadhali ingiza namba ya vocha.' 
                 });
             }
             
@@ -1280,10 +1351,13 @@ const hotspotController = {
             
             const [vouchers] = await db.execute(
                 'SELECT v.*, p.duration_hours FROM vouchers v JOIN packages p ON v.package_id = p.id WHERE v.voucher_code = ? AND v.is_used = 0 AND v.expires_at > NOW()',
-                [voucher]
+                [voucherCode]
             );
             
             if (vouchers.length === 0) {
+                if (isApiRequest(req)) {
+                    return res.status(400).json({ success: 'error', message: 'Voucher sio sahihi, imetumika, au imekwisha muda wake.' });
+                }
                 return res.json({ 
                     success: 'error', 
                     message: 'Voucher sio sahihi, imetumika, au imekwisha muda wake.' 
@@ -1307,6 +1381,11 @@ const hotspotController = {
             await db.execute(
                 'UPDATE vouchers SET is_used = 1, used_at = ?, used_by = ? WHERE id = ?',
                 [now, user.id, vouch.id]
+            );
+
+            await db.execute(
+                'INSERT INTO payments (user_id, amount, payment_method, status, created_at) VALUES (?, ?, "voucher", "completed", NOW())',
+                [user.id, vouch.price]
             );
             
             const [updatedUser] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
@@ -1405,7 +1484,7 @@ const hotspotController = {
             
             let connectedUsers = 0;
             try {
-                const sessions = await mikrotikService.getActiveSessions(req.session.routerID);
+                const sessions = await mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
                 connectedUsers = sessions.length;
             } catch (error) {
                 console.warn('⚠️ Could not get connected users count for health check');
@@ -1442,15 +1521,34 @@ const hotspotController = {
     // Password reset functionality
     async resetPassword(req, res) {
         try {
-            const { phone_number, new_password } = req.body;
-            
+            const { phone_number, old_password, new_password } = req.body;
+
+            // Require the caller to be the account owner (no unauthenticated resets)
+            const customer = req.session.hotbando_user;
+            const admin = req.session.admin_user;
+            const isAdmin = admin && (admin.role === 'admin' || admin.role === 'super_admin');
+            const isOwnAccount = customer && customer.phone_number === phone_number;
+
+            if (!isOwnAccount && !isAdmin) {
+                return res.status(401).json({ success: false, message: 'Unauthorized: neno siri hubadilishwa kutoka kwenye akaunti yako mwenyewe.' });
+            }
+
             const [users] = await db.execute(
-                'SELECT id FROM users WHERE phone_number = ? AND role = "customer"',
+                'SELECT id, password FROM users WHERE phone_number = ? AND role = "customer"',
                 [phone_number]
             );
             
             if (users.length === 0) {
                 return res.json({ success: false, message: 'Namba ya simu haijasajiliwa.' });
+            }
+
+            // Non-admin users must confirm their current password
+            if (!isAdmin) {
+                const currentPassword = users[0].password;
+                const passwordMatch = await bcrypt.compare(old_password || '', currentPassword);
+                if (!passwordMatch) {
+                    return res.json({ success: false, message: 'Neno siri la sasa si sahihi.' });
+                }
             }
             
             const hashedPassword = await bcrypt.hash(new_password, 10);
@@ -1488,7 +1586,7 @@ const hotspotController = {
 
             let isConnectedToRouter = false;
             try {
-                const sessions = await mikrotikService.getActiveSessions(req.session.routerID);
+                const sessions = await mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
                 isConnectedToRouter = sessions.some(session => session['mac-address'] === req.session.mac);
             } catch (error) {
                 console.warn('⚠️ Could not check router connection status');
@@ -1546,3 +1644,4 @@ const hotspotController = {
 };
 
 module.exports = hotspotController;
+module.exports.helpers = { getRealClientMAC, getRealRouterID, getRealSSID, getRealLocation, formatRemainingTime, isApiRequest };

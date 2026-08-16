@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HotBando - <%= typeof title !== 'undefined' ? title : 'Sponsor Portal' %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { inter: ['Inter', 'sans-serif'] },
+                    colors: {
+                        primary: {
+                            50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74',
+                            400: '#fb923c', 500: '#FF7A30', 600: '#ea580c', 700: '#c2410c',
+                            800: '#9a3412', 900: '#7c2d12'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body { background: #f1f5f9; }
+        .sidebar { width: 250px; background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); min-height: 100vh; position: fixed; top: 0; left: 0; z-index: 20; }
+        .main-content { margin-left: 250px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: rgba(255,255,255,0.7); transition: all 0.2s; font-size: 14px; }
+        .nav-item:hover { background: rgba(255,255,255,0.08); color: white; }
+        .nav-item.active { background: #FF7A30; color: white; font-weight: 600; }
+        .nav-item i { width: 20px; text-align: center; }
+        .logo-area { padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .logo-area h1 { font-size: 18px; font-weight: 800; color: white; }
+        .logo-area span { color: #FF7A30; }
+        .top-header { background: white; border-bottom: 1px solid #e2e8f0; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+        .breadcrumb { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 14px; }
+        .breadcrumb .current { color: #1e293b; font-weight: 600; }
+        .card { background: white; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .stat-icon { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        @media (max-width: 768px) {
+            .sidebar { width: 64px; }
+            .main-content { margin-left: 64px; }
+            .logo-text, .nav-item span, .sidebar-user span { display: none; }
+            .nav-item { justify-content: center; padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo-area">
+            <h1 class="logo-text">Hot<span>Bando</span> <span style="color:white;font-size:11px">Sponsor</span></h1>
+        </div>
+        <nav style="margin-top:8px">
+            <a href="/sponsor/dashboard" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'dashboard' ? 'active' : '' %>">
+                <i class="fas fa-home"></i><span>Dashboard</span>
+            </a>
+            <a href="/sponsor/my-ads" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'my-ads' ? 'active' : '' %>">
+                <i class="fas fa-photo-video"></i><span>Maudhui Yangu</span>
+            </a>
+            <a href="/sponsor/upload-video" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'upload-video' ? 'active' : '' %>">
+                <i class="fas fa-cloud-upload-alt"></i><span>Pakia Maudhui</span>
+            </a>
+            <a href="/sponsor/analytics" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'analytics' ? 'active' : '' %>">
+                <i class="fas fa-chart-line"></i><span>Takwimu</span>
+            </a>
+            <a href="/sponsor/settings" class="nav-item <%= typeof activePage !== 'undefined' && activePage === 'settings' ? 'active' : '' %>">
+                <i class="fas fa-cog"></i><span>Mipangilio</span>
+            </a>
+        </nav>
+        <div style="position:absolute;bottom:0;width:100%;border-top:1px solid rgba(255,255,255,0.1)">
+            <a href="/sponsor/logout" class="nav-item" style="color:#f87171">
+                <i class="fas fa-sign-out-alt"></i><span>Toka</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <header class="top-header">
+            <div class="breadcrumb">
+                <i class="fas fa-circle-notch" style="color:#FF7A30"></i>
+                <span><%= typeof title !== 'undefined' ? title : 'Sponsor Portal' %></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+                <div style="text-align:right">
+                    <div style="font-size:13px;font-weight:600;color:#1e293b"><%= sponsor ? (sponsor.name || sponsor.company_name || 'Sponsor') : 'Sponsor' %></div>
+                    <div style="font-size:11px;color:#64748b"><%= sponsor ? (sponsor.email || '') : '' %></div>
+                </div>
+                <div style="width:38px;height:38px;border-radius:10px;background:#fff7ed;display:flex;align-items:center;justify-content:center;color:#FF7A30;font-weight:700">
+                    <%= sponsor && sponsor.name ? sponsor.name.charAt(0).toUpperCase() : 'S' %>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-area" style="padding:24px">
+            <%- body %>
+        </div>
+    </div>
+</body>
+</html>

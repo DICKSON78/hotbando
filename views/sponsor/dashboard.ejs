@@ -1,0 +1,131 @@
+<%
+  const dashboardContent = `
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-800">Karibu, \${typeof sponsor !== 'undefined' && sponsor ? (sponsor.name || sponsor.company_name || 'Sponsor') : 'Sponsor'}</h2>
+            <p class="text-sm text-slate-500">Takwimu za maudhui na kampeni zako</p>
+        </div>
+        <a href="/sponsor/upload-video" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition">
+            <i class="fas fa-cloud-upload-alt mr-2"></i> Pakia Maudhui
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#fff7ed;color:#FF7A30"><i class="fas fa-photo-video"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="stat-ads">-</div>
+                    <div class="text-xs text-slate-500">Maudhui Yangu</div>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#ecfdf5;color:#059669"><i class="fas fa-eye"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="stat-views">-</div>
+                    <div class="text-xs text-slate-500">Matokeo (Views)</div>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fas fa-bullhorn"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="stat-campaigns">-</div>
+                    <div class="text-xs text-slate-500">Kampeni Zilizoidhinishwa</div>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#f5f3ff;color:#7c3aed"><i class="fas fa-wallet"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="stat-balance">-</div>
+                    <div class="text-xs text-slate-500">Salio la Wallet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card p-6">
+            <h3 class="text-base font-bold text-slate-800 mb-4"><i class="fas fa-photo-video mr-2 text-orange-500"></i>Maudhui Yangu</h3>
+            <div id="ads-list">
+                <p class="text-sm text-slate-400 text-center py-8">Inapakia...</p>
+            </div>
+        </div>
+        <div class="card p-6">
+            <h3 class="text-base font-bold text-slate-800 mb-4"><i class="fas fa-bullhorn mr-2 text-orange-500"></i>Kampeni Zangu</h3>
+            <div id="campaigns-list">
+                <p class="text-sm text-slate-400 text-center py-8">Inapakia...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function fetchStats() {
+            fetch('/sponsor/api/dashboard-stats').then(r => r.json()).then(data => {
+                if (!data.success) return;
+                document.getElementById('stat-ads').textContent = data.ads || 0;
+                document.getElementById('stat-views').textContent = data.views || 0;
+                document.getElementById('stat-campaigns').textContent = data.campaigns || 0;
+                document.getElementById('stat-balance').textContent = (data.balance != null ? data.balance : 0).toLocaleString();
+            }).catch(() => {});
+        }
+
+        function fetchAds() {
+            fetch('/sponsor/api/ads').then(r => r.json()).then(data => {
+                const el = document.getElementById('ads-list');
+                if (!data.success || !data.ads || data.ads.length === 0) {
+                    el.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Huna maudhui bado. <a href="/sponsor/upload-video" class="text-orange-500 font-semibold">Pakia sasa</a></p>';
+                    return;
+                }
+                el.innerHTML = data.ads.map(a => \`
+                    <div class="flex items-center gap-3 py-3 border-b border-slate-100 last:border-b-0">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold" style="background:\${a.approved ? '#059669' : '#f59e0b'}">
+                            <i class="fas \${a.video_url ? 'fa-video' : 'fa-image'}"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="text-sm font-semibold text-slate-800">\${a.title}</div>
+                            <div class="text-xs text-slate-500">\${a.views_count || 0} views · \${a.approved ? 'Imekubaliwa' : 'Inasubiri Idhini'}</div>
+                        </div>
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded-full \${a.approved ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">\${a.approved ? 'Active' : 'Pending'}</span>
+                    </div>
+                \`).join('');
+            }).catch(() => {});
+        }
+
+        function fetchCampaigns() {
+            fetch('/api/campaigns/my-campaigns').then(r => r.json()).then(data => {
+                const el = document.getElementById('campaigns-list');
+                const list = (data && data.campaigns) || (data && data.data) || [];
+                if (list.length === 0) {
+                    el.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Hujaanzisha kampeni bado.</p>';
+                    return;
+                }
+                el.innerHTML = list.map(c => \`
+                    <div class="flex items-center gap-3 py-3 border-b border-slate-100 last:border-b-0">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold" style="background:#2563eb">
+                            <i class="fas fa-bullhorn"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="text-sm font-semibold text-slate-800">\${c.campaign_name}</div>
+                            <div class="text-xs text-slate-500">\${c.campaign_type || ''} · Budget: \${c.total_budget || 0} TZS</div>
+                        </div>
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded-full \${c.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">\${c.is_active ? 'Active' : 'Inactive'}</span>
+                    </div>
+                \`).join('');
+            }).catch(() => {
+                el.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Hujaanzisha kampeni bado.</p>';
+            });
+        }
+
+        fetchStats();
+        fetchAds();
+        fetchCampaigns();
+    </script>
+  `;
+%>
+<%- include('layout', { title: 'Sponsor Dashboard', activePage: 'dashboard', body: dashboardContent, sponsor: typeof sponsor !== 'undefined' ? sponsor : null }) %>

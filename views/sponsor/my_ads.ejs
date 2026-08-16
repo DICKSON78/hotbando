@@ -1,0 +1,68 @@
+<%
+  const myAdsContent = `
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-800">Maudhui Yangu</h2>
+            <p class="text-sm text-slate-500">Video na picha zako za matangazo</p>
+        </div>
+        <a href="/sponsor/upload-video" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition">
+            <i class="fas fa-plus mr-2"></i> Pakia Mpya
+        </a>
+    </div>
+
+    <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr style="background:#f8fafc;color:#64748b">
+                        <th class="text-left px-5 py-3 font-semibold">Maudhui</th>
+                        <th class="text-left px-5 py-3 font-semibold">Muda</th>
+                        <th class="text-left px-5 py-3 font-semibold">Matokeo</th>
+                        <th class="text-left px-5 py-3 font-semibold">Hali</th>
+                        <th class="text-left px-5 py-3 font-semibold">Tarehe</th>
+                    </tr>
+                </thead>
+                <tbody id="ads-table">
+                    <tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">Inapakia...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        fetch('/sponsor/api/ads').then(r => r.json()).then(data => {
+            const tbody = document.getElementById('ads-table');
+            if (!data.success || !data.ads || data.ads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">Huna maudhui bado. Pakia sasa!</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.ads.map(a => \`
+                <tr style="border-top:1px solid #f1f5f9">
+                    <td class="px-5 py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-lg bg-orange-50 flex items-center justify-center text-orange-500">
+                                <i class="fas \${a.video_url ? 'fa-video' : 'fa-image'}"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-slate-800">\${a.title}</div>
+                                <div class="text-xs text-slate-500">\${a.video_url ? 'Video' : 'Picha'}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3 text-slate-600">\${a.duration || 60}s</td>
+                    <td class="px-5 py-3 text-slate-600">\${a.views_count || 0} views</td>
+                    <td class="px-5 py-3">
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded-full \${a.approved ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
+                            \${a.approved ? 'Imekubaliwa' : 'Inasubiri Idhini'}
+                        </span>
+                    </td>
+                    <td class="px-5 py-3 text-slate-500">\${a.created_at ? new Date(a.created_at).toLocaleDateString() : '-'}</td>
+                </tr>
+            \`).join('');
+        }).catch(() => {
+            document.getElementById('ads-table').innerHTML = '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">Hitilafu kupata maudhui</td></tr>';
+        });
+    </script>
+  `;
+%>
+<%- include('layout', { title: 'Maudhui Yangu', activePage: 'my-ads', body: myAdsContent, sponsor: typeof sponsor !== 'undefined' ? sponsor : null }) %>

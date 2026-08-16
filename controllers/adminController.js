@@ -442,7 +442,7 @@ class AdminController {
         if (quantity === 0 || !packageValues[pkg]) continue;
         console.log(`Generating ${quantity} vouchers for ${pkg}`);
         for (let i = 0; i < quantity; i++) {
-          const code = await this.generateUniqueVoucher();
+          const code = await adminController.generateUniqueVoucher();
           const packageInfo = packageValues[pkg];
           const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
           allVouchers.push([
@@ -535,8 +535,7 @@ class AdminController {
         query += ' AND DATE(vb.created_at) BETWEEN ? AND ?';
           params.push(startDate, endDate);
       }
-      query += ' ORDER BY v.created_at DESC LIMIT ?';
-      params.push(parseInt(limit));
+      query += ` ORDER BY v.created_at DESC LIMIT ${parseInt(limit)}`;
       const [vouchers] = await db.execute(query, params);
       return res.json({ success: true, data: vouchers, count: vouchers.length });
     } catch (error) {
@@ -1033,8 +1032,7 @@ async getAdViewsForAnalytics(req, res) {
         query += ' AND (phone_number LIKE ? OR name LIKE ? OR mac_address LIKE ? OR location LIKE ?)';
         params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
       }
-      query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
-      params.push(parseInt(limit), offset);
+      query += ` ORDER BY id DESC LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
       const [customers] = await db.execute(query, params);
 
       let countQuery = 'SELECT COUNT(*) as total FROM users WHERE role = "customer"';
@@ -1100,7 +1098,7 @@ async getAdViewsForAnalytics(req, res) {
 
       await db.execute(
         'INSERT INTO user_suspensions (user_id, reason, suspended_by, suspended_until, is_permanent) VALUES (?, ?, ?, ?, ?)',
-        [id, reason, req.session.admin_user.id, suspended_until, is_permanent || 0]
+        [id, reason || 'Imesimamishwa na msimamizi', req.session.admin_user.id, is_permanent ? null : (suspended_until || null), is_permanent || 0]
       );
       await db.execute(
         'UPDATE users SET usage_until = NOW(), is_active = 0 WHERE id = ?',
@@ -1334,7 +1332,7 @@ async getAdViewsForAnalytics(req, res) {
         LEFT JOIN locations l ON m.location_id = l.id
         ORDER BY m.id DESC
       `);
-      return res.json({ success: true, routers: routers, count: routers.length });
+      return res.json({ success: true, routers: routers, data: routers, count: routers.length });
     } catch (error) {
       console.error('Hitilafu katika kupata routers:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kupata routers', error: error.message });
@@ -1379,8 +1377,8 @@ async getAdViewsForAnalytics(req, res) {
         return res.status(404).json({ success: false, message: 'Router hakupatikana' });
       }
       await db.execute(
-        'UPDATE mikrotiks SET router_name = ?, host = ?, user = ?, password = ?, port = ?, location = ?, ssid = ?, status = ?, updated_at = NOW() WHERE id = ?',
-        [router_name, host, user, password, port, location, ssid, status, id]
+        'UPDATE mikrotiks SET router_name = ?, host = ?, user = ?, password = ?, port = ?, ssid = ?, status = ?, updated_at = NOW() WHERE id = ?',
+        [router_name, host, user, password, port, ssid, status, id]
       );
       return res.json({ success: true, message: 'Router imebadilishwa kikamilifu' });
     } catch (error) {
@@ -1744,8 +1742,7 @@ async getAdViewsForAnalytics(req, res) {
         query += ' AND DATE(av.created_at) BETWEEN ? AND ?';
         params.push(startDate, endDate);
       }
-      query += ' ORDER BY av.created_at DESC LIMIT ?';
-      params.push(parseInt(limit));
+      query += ` ORDER BY av.created_at DESC LIMIT ${parseInt(limit)}`;
       const [views] = await db.execute(query, params);
       return res.json({ success: true, data: views, count: views.length });
     } catch (error) {
@@ -1988,18 +1985,18 @@ async getAdViewsForAnalytics(req, res) {
 
       // 1. Recent user registrations
       const [users] = await db.execute(`
-        SELECT id, name, phone, role, created_at
+        SELECT id, name, phone_number, role, created_at
         FROM users
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
         ORDER BY created_at DESC
-        LIMIT ?
-      `, [limit]);
+        LIMIT ${limit}
+      `);
 
       users.forEach(user => {
         activities.push({
           created_at: user.created_at,
           description: 'Mtumiaji mpya amejiunga',
-          user_name: user.name || user.phone,
+          user_name: user.name || user.phone_number,
           status_text: user.role === 'sponsor' ? 'Sponsor' : user.role === 'agent' ? 'Agent' : 'Customer',
           status_class: user.role === 'sponsor' ? 'bg-purple-100 text-purple-800' :
                        user.role === 'agent' ? 'bg-blue-100 text-blue-800' :
@@ -2009,20 +2006,20 @@ async getAdViewsForAnalytics(req, res) {
 
       // 2. Recent ad views
       const [adViews] = await db.execute(`
-        SELECT av.created_at, u.name, u.phone, a.title
+        SELECT av.created_at, u.name, u.phone_number, a.title
         FROM ad_views av
         JOIN users u ON av.user_id = u.id
         JOIN ads a ON av.ad_id = a.id
         WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
         ORDER BY av.created_at DESC
-        LIMIT ?
-      `, [limit]);
+        LIMIT ${limit}
+      `);
 
       adViews.forEach(view => {
         activities.push({
           created_at: view.created_at,
           description: `Ameangalia tangazo: ${view.title}`,
-          user_name: view.name || view.phone,
+          user_name: view.name || view.phone_number,
           status_text: 'Ad View',
           status_class: 'bg-yellow-100 text-yellow-800'
         });
@@ -2030,19 +2027,19 @@ async getAdViewsForAnalytics(req, res) {
 
       // 3. Recent payments
       const [payments] = await db.execute(`
-        SELECT p.created_at, u.name, u.phone, p.amount, p.status
+        SELECT p.created_at, u.name, u.phone_number, p.amount, p.status
         FROM payments p
         JOIN users u ON p.user_id = u.id
         WHERE p.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
         ORDER BY p.created_at DESC
-        LIMIT ?
-      `, [limit]);
+        LIMIT ${limit}
+      `);
 
       payments.forEach(payment => {
         activities.push({
           created_at: payment.created_at,
           description: `Malipo: TZS ${payment.amount.toLocaleString()}`,
-          user_name: payment.name || payment.phone,
+          user_name: payment.name || payment.phone_number,
           status_text: payment.status === 'completed' ? 'Imekamilika' : payment.status === 'pending' ? 'Inasubiri' : 'Imefeli',
           status_class: payment.status === 'completed' ? 'bg-green-100 text-green-800' :
                        payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
@@ -2322,4 +2319,5 @@ async getAdViewsForAnalytics(req, res) {
 }
 
 // ==================== EXPORT INSTANCE ====================
-module.exports = new AdminController();
+const adminController = new AdminController();
+module.exports = adminController;

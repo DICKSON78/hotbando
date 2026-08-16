@@ -1,0 +1,143 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=db
+      - DB_NAME=hotbando
+      - REDIS_ENABLED=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TRUST_PROXY=true
+      - DB_PORT=3306
+      - DB_POOL_SIZE=50
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/public/uploads
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    networks:
+      - hotbando-net
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_DATABASE: hotbando
+      MYSQL_USER: hotbando
+      MYSQL_PASSWORD: hotbando_pass
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_pass}
+    # Host port removed to avoid conflict — access via Docker network
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    networks:
+      - hotbando-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Host port 6380 to avoid conflict — Docker network uses redis:6379
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    env_file:
+      - .env
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - hotbando-net
+
+  # FreeRADIUS for AAA (1M+ user authentication)
+  freeradius:
+    image: hotbando-freeradius:latest
+    restart: unless-stopped
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=hotbando
+      - DB_USER=hotbando
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    networks:
+      - hotbando-net
+
+  # Automated database backup
+  backup:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: db
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: hotbando
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - ./scripts/backup.sh:/backup.sh
+      - backup_data:/backups
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hotbando-net
+
+volumes:
+  mysql_data:
+  redis_data:
+  uploads:
+  backup_data:
+
+networks:
+  hotbando-net:
+    driver: bridge

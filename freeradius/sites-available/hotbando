@@ -1,0 +1,46 @@
+server hotbando {
+    listen {
+        type = auth
+        ipaddr = *
+        port = 1812
+    }
+
+    listen {
+        type = acct
+        ipaddr = *
+        port = 1813
+    }
+
+    authorize {
+        preprocess
+        perl
+        if (!ok) {
+            reject
+        }
+    }
+
+    authenticate {
+        Auth-Type PAP {
+            perl
+        }
+    }
+
+    preacct {
+        preprocess
+    }
+
+    accounting {
+        detail
+        sql
+    }
+
+    post-auth {
+        sql
+        Post-Auth-Type REJECT {
+            attr_filter.access_reject
+        }
+    }
+
+    pre-proxy {}
+    post-proxy {}
+}

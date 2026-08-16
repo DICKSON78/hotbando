@@ -1,0 +1,4 @@
+perl {
+    filename = ${modconfdir}/perl/hotbando_auth.pl
+    perl_flags = "-T"
+}

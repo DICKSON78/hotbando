@@ -30,9 +30,12 @@ class MikrotikService {
 
             // Get router details from database
             const db = require('../config/database');
+            const isNumericId = /^\d+$/.test(String(routerID));
             const [routers] = await db.execute(
-                'SELECT * FROM mikrotiks WHERE router_id = ? OR id = ?',
-                [routerID, routerID]
+                isNumericId
+                    ? 'SELECT * FROM mikrotiks WHERE id = ?'
+                    : 'SELECT * FROM mikrotiks WHERE router_id = ?',
+                [isNumericId ? parseInt(routerID) : routerID]
             );
 
             if (routers.length === 0) {
@@ -40,6 +43,8 @@ class MikrotikService {
             }
 
             const router = routers[0];
+            const dbWhere = isNumericId ? 'id = ?' : 'router_id = ?';
+            const dbValue = isNumericId ? parseInt(routerID) : routerID;
 
             // Create new connection (works via WireGuard if host is WG IP)
             const conn = new RouterOSAPI({
@@ -55,8 +60,8 @@ class MikrotikService {
 
             // Update router status
             await db.execute(
-                'UPDATE mikrotiks SET status = "online", last_seen = NOW() WHERE router_id = ? OR id = ?',
-                [routerID, routerID]
+                `UPDATE mikrotiks SET status = "online", last_seen = NOW() WHERE ${dbWhere}`,
+                [dbValue]
             );
 
             console.log(`✅ Connected to router ${router.router_name} (${router.host})`);
@@ -66,9 +71,12 @@ class MikrotikService {
 
             // Update router status to offline
             const db = require('../config/database');
+            const isNumericId = /^\d+$/.test(String(routerID));
             await db.execute(
-                'UPDATE mikrotiks SET status = "offline" WHERE router_id = ? OR id = ?',
-                [routerID, routerID]
+                isNumericId
+                    ? 'UPDATE mikrotiks SET status = "offline" WHERE id = ?'
+                    : 'UPDATE mikrotiks SET status = "offline" WHERE router_id = ?',
+                [isNumericId ? parseInt(routerID) : routerID]
             );
 
             throw error;
@@ -90,6 +98,18 @@ class MikrotikService {
         }
     }
 
+    async resolveRouterDbId(routerID) {
+        const db = require('../config/database');
+        if (/^\d+$/.test(String(routerID))) {
+            return parseInt(routerID);
+        }
+        const [routers] = await db.execute(
+            'SELECT id FROM mikrotiks WHERE router_id = ?',
+            [routerID]
+        );
+        return routers.length > 0 ? routers[0].id : null;
+    }
+
     async addUserToRouter(mac, routerID, uptime = 0, bytes = 0) {
         try {
             const conn = await this.getRouterConnection(routerID);
@@ -109,11 +129,16 @@ class MikrotikService {
             console.error(`❌ Add user to router error:`, error.message);
             
             // Log connection failure
-            const db = require('../config/database');
-            await db.execute(
-                'INSERT INTO user_connection_logs (mac_address, router_id, action, error_message) VALUES (?, ?, "connect_failed", ?)',
-                [mac, routerID, error.message]
-            );
+            try {
+                const db = require('../config/database');
+                const dbRouterId = await this.resolveRouterDbId(routerID);
+                await db.execute(
+                    'INSERT INTO user_connection_logs (mac_address, router_id, action, error_message) VALUES (?, ?, "connect_failed", ?)',
+                    [mac, dbRouterId, error.message]
+                );
+            } catch (logError) {
+                console.error('Failed to log connection failure:', logError.message);
+            }
 
             return false;
         }
@@ -137,11 +162,16 @@ class MikrotikService {
                 console.log(`✅ User ${mac} removed from router ${routerID}`);
                 
                 // Log successful disconnect
-                const db = require('../config/database');
-                await db.execute(
-                    'INSERT INTO user_connection_logs (mac_address, router_id, action) VALUES (?, ?, "disconnect")',
-                    [mac, routerID]
-                );
+                try {
+                    const db = require('../config/database');
+                    const dbRouterId = await this.resolveRouterDbId(routerID);
+                    await db.execute(
+                        'INSERT INTO user_connection_logs (mac_address, router_id, action) VALUES (?, ?, "disconnect")',
+                        [mac, dbRouterId]
+                    );
+                } catch (logError) {
+                    console.error('Failed to log disconnect:', logError.message);
+                }
             }
             
             return true;
@@ -186,6 +216,41 @@ class MikrotikService {
                 status: 'offline',
                 isOnline: false,
                 message: error.message
+            };
+        }
+    }
+
+    async testConnection(routerID) {
+        try {
+            const conn = await this.getRouterConnection(routerID);
+
+            const [resource] = await conn.write('/system/resource/print');
+            const [identity] = await conn.write('/system/identity/print');
+            const [board] = await conn.write('/system/routerboard/print');
+
+            return {
+                success: true,
+                message: 'Connection successful',
+                data: {
+                    identity: identity.name || 'Unknown',
+                    model: board['board-name'] || resource['board-name'] || 'Unknown',
+                    firmware: resource.version || 'Unknown',
+                    uptime: resource.uptime || '0s',
+                    cpuLoad: resource['cpu-load'] || 0,
+                    freeMemory: resource['free-memory'] || 0,
+                    totalMemory: resource['total-memory'] || 0,
+                    freeHdd: resource['free-hdd-space'] || 0,
+                    totalHdd: resource['total-hdd-space'] || 0,
+                    version: resource.version || 'Unknown',
+                    boardName: board['board-name'] || null,
+                    architectureName: board['architecture-name'] || null
+                }
+            };
+        } catch (error) {
+            return {
+                success: false,
+                message: error.message,
+                data: null
             };
         }
     }

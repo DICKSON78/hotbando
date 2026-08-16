@@ -174,6 +174,22 @@ const validators = {
     isValidDate: (date) => {
         const dateObj = new Date(date);
         return dateObj instanceof Date && !isNaN(dateObj);
+    },
+
+    // Validate MAC address
+    isValidMAC: (mac) => {
+        const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+        return macRegex.test(mac);
+    },
+
+    // Validate IP address
+    isValidIP: (ip) => {
+        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipRegex.test(ip)) return false;
+        return ip.split('.').every(octet => {
+            const num = parseInt(octet, 10);
+            return num >= 0 && num <= 255;
+        });
     }
 };
 

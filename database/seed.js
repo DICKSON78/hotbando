@@ -8,6 +8,7 @@
 
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
+require('dotenv').config();
 
 async function seedDatabase() {
     console.log('🌱 Starting database seeding...\n');
@@ -26,7 +27,7 @@ async function seedDatabase() {
 
         // 1. Create sample users (only new ones, don't duplicate)
         console.log('👤 Creating sample users...');
-        const hashedPassword = await bcrypt.hash('password123', 10);
+        const hashedPassword = await bcrypt.hash(process.env.SEED_PASSWORD || 'password123', 10);
 
         const users = [
             {

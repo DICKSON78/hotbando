@@ -2,9 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const adminAuthController = require('../controllers/adminAuthController');
 const { adminAuth } = require('../middleware/authMiddleware');
-const bcrypt = require('bcryptjs');
-const db = require('../config/database');
 
 // ==================== PUBLIC ROUTES (NO AUTH) ====================
 router.get('/login', (req, res) => {
@@ -17,74 +16,12 @@ router.get('/login', (req, res) => {
     });
 });
 
-router.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        
-        console.log('🔐 Login attempt:', { email });
-        
-        if (!email || !password) {
-            return res.render('admin/login', {
-                title: 'Ingia kama Admin - HotBando',
-                error: 'Tafadhali ingiza email na password'
-            });
-        }
+router.post('/login', (req, res) => adminAuthController.login(req, res));
+router.post('/logout', (req, res) => adminAuthController.logout(req, res));
 
-        const [users] = await db.execute(
-            'SELECT * FROM users WHERE email = ? AND role = "admin"',
-            [email]
-        );
-
-        if (users.length === 0) {
-            console.log('❌ Admin not found:', email);
-            return res.render('admin/login', {
-                title: 'Ingia kama Admin - HotBando',
-                error: 'Email au password si sahihi'
-            });
-        }
-
-        const user = users[0];
-        console.log('✅ Admin found:', user.name);
-
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            console.log('❌ Invalid password for:', email);
-            return res.render('admin/login', {
-                title: 'Ingia kama Admin - HotBando',
-                error: 'Email au password si sahihi'
-            });
-        }
-
-        req.session.admin_user = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            location: user.location,
-            login_time: new Date()
-        };
-
-        console.log(`✅ Admin ${user.name} logged in successfully`);
-        return res.redirect('/admin/dashboard');
-
-    } catch (error) {
-        console.error('❌ Admin login error:', error);
-        return res.render('admin/login', {
-            title: 'Ingia kama Admin - HotBando',
-            error: 'Hitilafu imetokea. Tafadhali jaribu tena.'
-        });
-    }
-});
-
-router.post('/logout', (req, res) => {
-    console.log('👋 Admin logging out');
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-        }
-        return res.redirect('/admin/login');
-    });
-});
+// Password change (session required but not full admin auth - redirects to login if no session)
+router.get('/change-password', (req, res) => adminAuthController.showChangePassword(req, res));
+router.post('/change-password', (req, res) => adminAuthController.changePassword(req, res));
 
 // ==================== PROTECTED ROUTES (WITH AUTH) ====================
 router.use(adminAuth);
@@ -172,6 +109,16 @@ router.get('/revenue-share', (req, res) => {
     });
 });
 
+router.get('/setup-wizard', (req, res) => {
+    res.render('admin/setup-wizard', {
+        title: 'Setup Wizard',
+        activePage: 'setup-wizard',
+        userName: req.session.admin_user?.name || 'Admin',
+        userRole: req.session.admin_user?.role || 'admin',
+        hotspotAdminPassword: process.env.HOTSPOT_ADMIN_PASSWORD || 'hotbando2024'
+    });
+});
+
 // ==================== API ROUTES (JSON RESPONSES) ====================
 
 // 📊 DASHBOARD & ANALYTICS API
@@ -207,7 +154,7 @@ router.post('/decline-ad/:id', adminController.declineAd);
 router.post('/create-ad', adminController.createAd);
 router.put('/update-ad/:id', adminController.updateAd);
 router.post('/upload-video', adminController.uploadVideo);
-router.get('/video-ads', adminController.getVideoAds);
+router.get('/api/video-ads', adminController.getVideoAds);
 
 // ⚙️ SYSTEM & SETTINGS API
 router.get('/system-settings', adminController.getSystemSettings);

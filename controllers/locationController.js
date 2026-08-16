@@ -238,9 +238,25 @@ const locationController = {
         try {
             const { id } = req.params;
             const { start_date, end_date } = req.query;
+            const user = req.session.franchise_user || req.session.admin_user;
+
+            if (!user) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
 
             if (!start_date || !end_date) {
                 return res.status(400).json({ error: 'Start date and end date required' });
+            }
+
+            // Franchise owners may only view performance of locations they own
+            if (user.role !== 'admin' && user.role !== 'super_admin') {
+                const [locations] = await db.query(
+                    'SELECT id FROM locations WHERE id = ? AND franchise_owner_id = ?',
+                    [id, user.id]
+                );
+                if (locations.length === 0) {
+                    return res.status(403).json({ error: 'Access denied' });
+                }
             }
 
             const performance = await Location.getLocationPerformance(id, start_date, end_date);
@@ -325,7 +341,7 @@ const locationController = {
 
             // Update router
             await db.query(
-                'UPDATE mikrotiks SET location_id = ? WHERE id = ?',
+                'UPDATE mikrotiks SET location_id = ? WHERE router_id = ?',
                 [location_id, router_id]
             );
 
@@ -401,7 +417,6 @@ const locationController = {
                 SELECT
                     l.id,
                     l.name,
-                    l.location_name,
                     l.city,
                     l.region,
                     l.location_type,

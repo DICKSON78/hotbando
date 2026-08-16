@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const hotspotController = require('../controllers/hotspotController');
+const paymentController = require('../controllers/paymentController');
 
 // ==================== PAGE ROUTES ====================
 router.get('/', hotspotController.index);
@@ -20,6 +21,7 @@ router.post('/disconnect', hotspotController.disconnect);
 router.get('/get-ad', hotspotController.getAd);
 router.post('/complete-ad', hotspotController.completeAd);
 router.post('/voucher', hotspotController.voucher);
+router.post('/voucher/redeem', hotspotController.voucher);
 router.post('/purchase-package', hotspotController.purchasePackage);
 router.get('/health-check', hotspotController.healthCheck);
 router.post('/reset-password', hotspotController.resetPassword);
@@ -31,5 +33,9 @@ router.post('/logout', hotspotController.logout);
 router.get('/ads/get-random', hotspotController.getAd);
 router.post('/ads/complete', hotspotController.completeAd);
 router.get('/advertise', hotspotController.advertise);
+
+// PesaPal payment routes (used by subscription page)
+router.post('/payment/direct', paymentController.initiatePayment);
+router.post('/payment/check-status', paymentController.checkPaymentStatus);
 
 module.exports = router;

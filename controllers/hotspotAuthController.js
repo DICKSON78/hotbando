@@ -159,14 +159,14 @@ class HotspotAuthController {
             const hashedPassword = await bcrypt.hash(password, 10);
             
             // Get device info from session
-            const clientMAC = req.session.mac;
-            const location = req.session.location;
-            const routerID = req.session.routerID;
+            const clientMAC = req.session.mac || null;
+            const location = req.session.location || null;
+            const routerID = req.session.routerID || null;
             
             // Insert new customer with 10MB free data
             const now = new Date();
             const [result] = await db.execute(
-                'INSERT INTO users (name, phone_number, password, role, mac_address, location, last_router_id, moneyspent, usage_start, usage_until, free_bytes, last_free_used, created_at, updated_at) VALUES (?, ?, ?, "customer", ?, ?, ?, 0, ?, ?, 10485760, 0, ?, ?)',
+                'INSERT INTO users (name, phone_number, password, role, mac_address, location, last_router_id, moneyspent, usage_start, usage_until, free_bytes, last_free_used, created_at, updated_at) VALUES (?, ?, ?, "customer", ?, ?, ?, 0, ?, ?, 10485760, NULL, ?, ?)',
                 [name, phone_number, hashedPassword, clientMAC, location, routerID, now, now, now, now]
             );
             

@@ -1,0 +1,111 @@
+<%
+  const analyticsContent = `
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-800">Takwimu za Maudhui</h2>
+            <p class="text-sm text-slate-500">Matokeo ya matangazo yako kwenye HotBando</p>
+        </div>
+        <select id="period" class="border border-slate-300 rounded-lg text-sm px-3 py-2" onchange="loadAnalytics()">
+            <option value="7">Siku 7</option>
+            <option value="30" selected>Siku 30</option>
+            <option value="90">Siku 90</option>
+        </select>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fas fa-eye"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="ana-views">-</div>
+                    <div class="text-xs text-slate-500">Jumla ya Matokeo</div>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#ecfdf5;color:#059669"><i class="fas fa-check-circle"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="ana-completions">-</div>
+                    <div class="text-xs text-slate-500">Kukamilika</div>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-4">
+                <div class="stat-icon" style="background:#fff7ed;color:#FF7A30"><i class="fas fa-flag"></i></div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-800" id="ana-leads">-</div>
+                    <div class="text-xs text-slate-500">Leads Zilizopatikana</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card p-6">
+            <h3 class="text-base font-bold text-slate-800 mb-4">Matokeo kwa Maudhui</h3>
+            <div id="ana-ads">
+                <p class="text-sm text-slate-400 text-center py-8">Inapakia...</p>
+            </div>
+        </div>
+        <div class="card p-6">
+            <h3 class="text-base font-bold text-slate-800 mb-4">Utendaji wa Kampeni</h3>
+            <div id="ana-campaigns">
+                <p class="text-sm text-slate-400 text-center py-8">Inapakia...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function loadAnalytics() {
+            const days = document.getElementById('period').value;
+            fetch('/sponsor/api/analytics?days=' + days).then(r => r.json()).then(data => {
+                if (!data.success) return;
+                document.getElementById('ana-views').textContent = data.views || 0;
+                document.getElementById('ana-completions').textContent = data.completions || 0;
+                document.getElementById('ana-leads').textContent = data.leads || 0;
+
+                const adsEl = document.getElementById('ana-ads');
+                if (data.ads && data.ads.length > 0) {
+                    adsEl.innerHTML = data.ads.map(a => {
+                        const max = Math.max(...data.ads.map(x => x.views || 0), 1);
+                        const pct = Math.round(((a.views || 0) / max) * 100);
+                        return \`
+                            <div class="mb-3">
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span class="font-semibold text-slate-700">\${a.title}</span>
+                                    <span class="text-slate-500">\${a.views || 0} views</span>
+                                </div>
+                                <div style="background:#f1f5f9;border-radius:6px;height:8px;overflow:hidden">
+                                    <div style="background:#FF7A30;height:100%;width:\${pct}%;border-radius:6px"></div>
+                                </div>
+                            </div>
+                        \`;
+                    }).join('');
+                } else {
+                    adsEl.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Hakuna takwimu bado.</p>';
+                }
+
+                const cmpEl = document.getElementById('ana-campaigns');
+                if (data.campaigns && data.campaigns.length > 0) {
+                    cmpEl.innerHTML = data.campaigns.map(c => \`
+                        <div class="flex items-center justify-between py-3 border-b border-slate-100 last:border-b-0">
+                            <div>
+                                <div class="text-sm font-semibold text-slate-800">\${c.campaign_name}</div>
+                                <div class="text-xs text-slate-500">\${c.completions || 0} completions</div>
+                            </div>
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full \${c.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">\${c.is_active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                    \`).join('');
+                } else {
+                    cmpEl.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Hakuna kampeni bado.</p>';
+                }
+            }).catch(() => {});
+        }
+
+        loadAnalytics();
+    </script>
+  `;
+%>
+<%- include('layout', { title: 'Takwimu', activePage: 'analytics', body: analyticsContent, sponsor: typeof sponsor !== 'undefined' ? sponsor : null }) %>

@@ -1,0 +1,11 @@
+node_modules/
+.env
+logs/
+*.log
+.DS_Store
+dist/
+frontend/dist/
+public/uploads/
+coverage/
+tmp/
+.qodo/

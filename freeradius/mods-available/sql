@@ -1,0 +1,67 @@
+# HotBando FreeRADIUS SQL Module Configuration
+# Place at: /etc/freeradius/3.0/mods-available/sql (or mods-enabled/sql)
+#
+# This connects FreeRADIUS to the existing HotBando MySQL database.
+# The SQL views (radius_radcheck, radius_radreply, etc.) map the HotBando schema
+# to FreeRADIUS-compatible format.
+#
+# For 1M users:
+#   - num_sql_socks: Increase from default 5 to 25 for connection pooling
+#   - lifetime: Keep connections alive longer to reduce reconnects
+#   - query_timeout: Increase for complex queries
+#   - mysql_option: Enable compression for large result sets
+
+sql {
+    driver = "rlm_sql_mysql"
+
+    # Dialect must be "mysql" for MySQL-specific query syntax
+    dialect = "mysql"
+
+    # Connection details — point to MySQL (host network or Docker service)
+    server = "db"
+    port = 3306
+    login = "hotbando"
+    password = "hotbando_pass"
+
+    # Database name (use the same hotbando database)
+    radius_db = "hotbando"
+
+    # Connection pooling for 1M users
+    num_sql_socks = 25
+    connect_failure_retry_delay = 10
+    lifetime = 0
+    max_queries = 10000
+
+    # Query timeout (seconds) — 1M users might have slow queries without indexes
+    query_timeout = 5
+
+    # NAS table (if mapping NAS-IP-Address to router names)
+    nas_table = "mikrotiks"
+
+    # ====================================================================
+    # Custom queries file — included into this module section so the
+    # accounting reference + type queries are picked up by rlm_sql 3.2.
+    # ====================================================================
+    $INCLUDE ${modconfdir}/${.:name}/main/mysql/queries.conf
+
+    # ====================================================================
+    # MySQL-specific options
+    # ====================================================================
+    mysql {
+        # Enable compression for large data transfers
+        compression = 1
+
+        # Use TLS if the DB is on a different host
+        # tls {
+        #     ca_file = /etc/ssl/certs/ca-certificates.crt
+        # }
+
+        # Auto-reconnect on connection loss
+        auto_reconnect = yes
+    }
+
+    # ====================================================================
+    # Safe characters configuration
+    # ====================================================================
+    safe_characters_range = "0-9a-zA-Z /@_.#,+-=&%"
+}

@@ -1,0 +1,1073 @@
+<%
+  const hotspotAdminPwd = typeof hotspotAdminPassword !== "undefined" ? hotspotAdminPassword : "hotbando2024";
+  const radiusSecret = process.env.RADIUS_SECRET || "";
+  const setupWizardContent = `
+    <style>
+      .wizard-container { max-width: 1000px; margin: 0 auto; }
+      .wizard-header { background: linear-gradient(135deg, #FF7A30 0%, #FF5500 100%); color: white; border-radius: 16px; padding: 30px; margin-bottom: 24px; }
+      .wizard-steps { display: flex; justify-content: space-between; margin-bottom: 30px; position: relative; }
+      .wizard-steps::before { content: ''; position: absolute; top: 20px; left: 40px; right: 40px; height: 3px; background: #e5e7eb; z-index: 0; }
+      .wizard-step { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 1; flex: 1; }
+      .step-circle { width: 42px; height: 42px; border-radius: 50%; background: #e5e7eb; color: #9ca3af; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; margin-bottom: 8px; transition: all 0.3s ease; }
+      .step-circle.active { background: #FF7A30; color: white; box-shadow: 0 0 0 4px rgba(255, 122, 48, 0.2); }
+      .step-circle.completed { background: #22c55e; color: white; }
+      .step-label { font-size: 11px; color: #6b7280; text-align: center; max-width: 70px; }
+      .step-label.active { color: #FF7A30; font-weight: 600; }
+      .wizard-card { background: white; border-radius: 16px; padding: 30px; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+      .wizard-card h2 { font-size: 20px; font-weight: 700; color: #1f2937; margin-bottom: 8px; }
+      .wizard-card p { color: #6b7280; margin-bottom: 20px; }
+      .step-content { display: none; }
+      .step-content.active { display: block; }
+      .instruction-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+      .instruction-box.warning { background: #fffbeb; border-color: #fcd34d; }
+      .instruction-box.success { background: #f0fdf4; border-color: #86efac; }
+      .instruction-box h3 { font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 10px; }
+      .instruction-box ul { margin: 0; padding-left: 20px; }
+      .instruction-box li { margin-bottom: 8px; color: #374151; }
+      .config-form { display: grid; gap: 16px; }
+      .form-group { display: flex; flex-direction: column; }
+      .form-group label { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+      .form-group input, .form-group select, .form-group textarea { padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; transition: border-color 0.2s; }
+      .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #FF7A30; box-shadow: 0 0 0 3px rgba(255, 122, 48, 0.1); }
+      .form-group .hint { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+      .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .btn { padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; display: inline-flex; align-items: center; gap: 8px; }
+      .btn-primary { background: #FF7A30; color: white; }
+      .btn-primary:hover { background: #ea580c; }
+      .btn-success { background: #22c55e; color: white; }
+      .btn-success:hover { background: #16a34a; }
+      .btn-secondary { background: #f3f4f6; color: #374151; }
+      .btn-secondary:hover { background: #e5e7eb; }
+      .btn-danger { background: #ef4444; color: white; }
+      .btn-danger:hover { background: #dc2626; }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-group { display: flex; gap: 12px; margin-top: 24px; }
+      .status-indicator { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; }
+      .status-indicator.online { background: #dcfce7; color: #16a34a; }
+      .status-indicator.offline { background: #fee2e2; color: #dc2626; }
+      .status-indicator.pending { background: #fef3c7; color: #d97706; }
+      .status-indicator .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+      .status-indicator .dot.pulse { animation: pulse 2s infinite; }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      .router-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+      .info-item { background: #f9fafb; padding: 16px; border-radius: 8px; }
+      .info-item label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+      .info-item value { display: block; font-size: 18px; font-weight: 600; color: #1f2937; margin-top: 4px; }
+      .checklist { list-style: none; padding: 0; }
+      .checklist li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #f9fafb; border-radius: 8px; margin-bottom: 8px; transition: all 0.2s; }
+      .checklist li:hover { background: #f3f4f6; }
+      .checklist li .check { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+      .checklist li .check.pending { background: #e5e7eb; color: #9ca3af; }
+      .checklist li .check.active { background: #fef3c7; color: #d97706; }
+      .checklist li .check.done { background: #dcfce7; color: #16a34a; }
+      .spinner { width: 20px; height: 20px; border: 3px solid #e5e7eb; border-top-color: #FF7A30; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .quick-setup-card { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 2px dashed #0ea5e9; border-radius: 16px; padding: 30px; text-align: center; margin-bottom: 24px; cursor: pointer; transition: all 0.3s; }
+      .quick-setup-card:hover { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); transform: translateY(-2px); }
+      .quick-setup-card h3 { font-size: 18px; font-weight: 700; color: #0369a1; margin-bottom: 8px; }
+      .quick-setup-card p { color: #0c4a6e; margin: 0; }
+      .detected-routers { margin-top: 20px; }
+      .detected-router { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: white; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 12px; transition: all 0.2s; }
+      .detected-router:hover { border-color: #FF7A30; box-shadow: 0 4px 12px rgba(255, 122, 48, 0.15); }
+      .detected-router .router-icon { width: 48px; height: 48px; background: #f3f4f6; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 16px; }
+      .detected-router .router-details { flex: 1; }
+      .detected-router .router-details h4 { font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 4px; }
+      .detected-router .router-details p { font-size: 13px; color: #6b7280; margin: 0; }
+      .detected-router .router-actions { display: flex; gap: 8px; }
+      .map-container { width: 100%; height: 400px; border-radius: 12px; border: 1px solid #e5e7eb; margin-bottom: 20px; position: relative; overflow: hidden; }
+      .map-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f9fafb; }
+      .map-placeholder i { font-size: 48px; color: #d1d5db; margin-bottom: 16px; }
+      .gps-btn { background: #22c55e; color: white; padding: 12px 24px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; }
+      .gps-btn:hover { background: #16a34a; }
+      .gps-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .gps-btn.loading { background: #d97706; }
+      .location-preview { background: #f0fdf4; border: 1px solid #86efac; border-radius: 12px; padding: 16px; margin-top: 16px; display: none; }
+      .location-preview.active { display: block; }
+      .location-preview h4 { font-size: 14px; font-weight: 600; color: #166534; margin-bottom: 8px; }
+      .location-preview .coords { font-family: monospace; font-size: 13px; color: #15803d; }
+      .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+    </style>
+
+    <div class="container mx-auto px-4 py-8 wizard-container">
+      <!-- Page Header -->
+      <div class="wizard-header">
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
+            <i class="fas fa-magic text-3xl"></i>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold">Setup Wizard</h1>
+            <p class="text-white/80">Chomeka MikroTik na uanze kutumia HotBando</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Setup Option -->
+      <div class="quick-setup-card" onclick="showQuickSetup()">
+        <i class="fas fa-bolt text-4xl text-blue-500 mb-4"></i>
+        <h3>Quick Setup</h3>
+        <p>Chomeka MikroTik, weka IP, na system itaconfigure automatically!</p>
+      </div>
+
+      <!-- Detected Routers -->
+      <div class="detected-routers" id="detected-routers">
+        <h3 class="text-lg font-bold mb-4">
+          <i class="fas fa-search mr-2 text-orange-500"></i>
+          Routers Zilizopatikana
+        </h3>
+        <div id="router-list">
+          <p class="text-gray-500 text-center py-8">
+            <i class="fas fa-loader fa-spin mr-2"></i>
+            Inatafuta routers...
+          </p>
+        </div>
+      </div>
+
+      <!-- Map View -->
+      <div class="wizard-card mt-8">
+        <h3 class="text-lg font-bold mb-4">
+          <i class="fas fa-map-marked-alt mr-2 text-orange-500"></i>
+          Ramani ya Routers
+        </h3>
+        <div class="map-container" id="map-container">
+          <div class="map-placeholder" id="map-placeholder">
+            <i class="fas fa-map-marked-alt"></i>
+            <p class="text-gray-500 mb-4">Inapakia ramani...</p>
+            <button class="btn btn-primary" onclick="loadMap()">
+              <i class="fas fa-sync"></i>
+              Pakia Ramani
+            </button>
+          </div>
+        </div>
+        <div id="router-map-list"></div>
+      </div>
+
+      <!-- Setup Wizard Modal -->
+      <div id="wizard-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <!-- Wizard Progress -->
+          <div class="p-6 border-b sticky top-0 bg-white z-10">
+            <div class="wizard-steps">
+              <div class="wizard-step" data-step="1">
+                <div class="step-circle" id="step-circle-1">1</div>
+                <div class="step-label">Register</div>
+              </div>
+              <div class="wizard-step" data-step="2">
+                <div class="step-circle" id="step-circle-2">2</div>
+                <div class="step-label">Connect</div>
+              </div>
+              <div class="wizard-step" data-step="3">
+                <div class="step-circle" id="step-circle-3">3</div>
+                <div class="step-label">Hotspot</div>
+              </div>
+              <div class="wizard-step" data-step="4">
+                <div class="step-circle" id="step-circle-4">4</div>
+                <div class="step-label">WiFi</div>
+              </div>
+              <div class="wizard-step" data-step="5">
+                <div class="step-circle" id="step-circle-5">5</div>
+                <div class="step-label">Location</div>
+              </div>
+              <div class="wizard-step" data-step="6">
+                <div class="step-circle" id="step-circle-6">6</div>
+                <div class="step-label">RADIUS</div>
+              </div>
+              <div class="wizard-step" data-step="7">
+                <div class="step-circle" id="step-circle-7">7</div>
+                <div class="step-label">Verify</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Wizard Steps Content -->
+          <div class="p-6">
+            <!-- Step 1: Register Router -->
+            <div class="step-content active" id="step-1">
+              <h2>🔌 Hatua ya 1: Ongeza Router</h2>
+              <p>Weka taarifa za router yako</p>
+              
+              <div class="instruction-box">
+                <h3>Maelekezo:</h3>
+                <ul>
+                  <li>Chomeka ethernet cable kwenye MikroTik port 1</li>
+                  <li>Weka IP ya router kwenye form hii</li>
+                  <li>Default credentials: admin/admin</li>
+                </ul>
+              </div>
+
+              <div class="config-form">
+                <div class="form-group">
+                  <label>Router ID (Jina la kuitambulisha)</label>
+                  <input type="text" id="cfg-router-id" placeholder="mfano: router-mwanza-001">
+                  <span class="hint">Jina la kipekee kwa router hii</span>
+                </div>
+                <div class="form-group">
+                  <label>Router Name (Jina la kuonekana)</label>
+                  <input type="text" id="cfg-router-name" placeholder="mfano: Mwanza Town Hotspot">
+                </div>
+                <div class="form-group">
+                  <label>Router IP Address</label>
+                  <input type="text" id="cfg-router-host" placeholder="mfano: 192.168.88.1" value="192.168.88.1">
+                  <span class="hint">IP ya MikroTik (default: 192.168.88.1)</span>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="cfg-router-user" value="admin">
+                  </div>
+                  <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="cfg-router-pass" value="admin">
+                  </div>
+                </div>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-primary" onclick="executeStep(1)">
+                  <i class="fas fa-arrow-right"></i>
+                  Endelea
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 2: Test Connection -->
+            <div class="step-content" id="step-2">
+              <h2>🔗 Hatua ya 2: Test Connection</h2>
+              <p>Server inajaribu kuconnect na router</p>
+              
+              <div class="instruction-box">
+                <h3>Inachofanya:</h3>
+                <ul>
+                  <li>Ina-connect na router kupitia API (port 8728)</li>
+                  <li>Ina-test kama router in响应</li>
+                  <li>Inaonyesha: model, firmware, uptime</li>
+                </ul>
+              </div>
+
+              <div id="connection-status" class="text-center py-8">
+                <div class="spinner mx-auto mb-4"></div>
+                <p>Inaconnect na router...</p>
+              </div>
+
+              <div id="connection-result" class="hidden">
+                <div class="router-info" id="router-info-display"></div>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-secondary" onclick="prevStep()">
+                  <i class="fas fa-arrow-left"></i>
+                  Rudi
+                </button>
+                <button class="btn btn-primary" onclick="executeStep(2)" id="btn-step2">
+                  <i class="fas fa-play"></i>
+                  Test Sasa
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 3: Configure Hotspot -->
+            <div class="step-content" id="step-3">
+              <h2>📡 Hatua ya 3: Configure Hotspot</h2>
+              <p>Inaweka hotspot server, DHCP, na captive portal</p>
+              
+              <div class="instruction-box">
+                <h3>Inachofanya:</h3>
+                <ul>
+                  <li>Ina-create hotspot server profile</li>
+                  <li>Inaweka DHCP server (auto-assign IPs)</li>
+                  <li>Inaweka DNS settings</li>
+                  <li>Inaweka firewall NAT rules</li>
+                  <li>Inaweka walled garden (allow login page)</li>
+                </ul>
+              </div>
+
+              <div class="config-form">
+                <div class="form-group">
+                  <label>Server IP (IP ya HotBando server)</label>
+                  <input type="text" id="cfg-server-ip" placeholder="mfano: 103.50.200.1">
+                  <span class="hint">IP ya server yako (public IP au WireGuard IP)</span>
+                </div>
+                <div class="form-group">
+                  <label>RADIUS Secret</label>
+                  <input type="text" id="cfg-radius-secret" value="\${radiusSecret}">
+                  <span class="hint">Sawa na RADIUS_SECRET kwenye .env</span>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>WiFi Interface</label>
+                    <select id="cfg-interface">
+                      <option value="wlan1">wlan1 (2.4GHz)</option>
+                      <option value="wlan2">wlan2 (5GHz)</option>
+                      <option value="ether2">ether2 (Ethernet)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Hotspot Gateway IP</label>
+                    <input type="text" id="cfg-hotspot-ip" value="10.5.50.1">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>WiFi SSID</label>
+                  <input type="text" id="cfg-ssid" value="HotBando-Free-WiFi">
+                  <span class="hint">Jina la WiFi linaloonekana kwa wateja</span>
+                </div>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-secondary" onclick="prevStep()">
+                  <i class="fas fa-arrow-left"></i>
+                  Rudi
+                </button>
+                <button class="btn btn-primary" onclick="executeStep(3)" id="btn-step3">
+                  <i class="fas fa-cog"></i>
+                  Configure Sasa
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 4: Configure WiFi -->
+            <div class="step-content" id="step-4">
+              <h2>📶 Hatua ya 4: Configure WiFi</h2>
+              <p>Inaweka WiFi SSID na wireless settings</p>
+              
+              <div class="instruction-box success">
+                <h3>✅ Hotspot Imeconfigure!</h3>
+                <p>Sasa tunaweka WiFi SSID na security settings.</p>
+              </div>
+
+              <div id="wifi-status" class="text-center py-8">
+                <div class="spinner mx-auto mb-4"></div>
+                <p>Inaweka WiFi settings...</p>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-secondary" onclick="prevStep()">
+                  <i class="fas fa-arrow-left"></i>
+                  Rudi
+                </button>
+                <button class="btn btn-primary" onclick="executeStep(4)" id="btn-step4">
+                  <i class="fas fa-play"></i>
+                  Endelea
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 5: Location (GPS) -->
+            <div class="step-content" id="step-5">
+              <h2>📍 Hatua ya 5: Eneo la Router</h2>
+              <p>Weka eneo la router kwa Ramani</p>
+              
+              <div class="instruction-box">
+                <h3>📍 Kwa nini tunahitaji eneo?</h3>
+                <ul>
+                  <li>Router inaonekana kwenye ramani</li>
+                  <li>Unaweza kuihamisha router kwenda eneo jingine</li>
+                  <li>Wateja wanajua wapi pa kupata WiFi</li>
+                </ul>
+              </div>
+
+              <div class="config-form">
+                <div class="form-group">
+                  <label>Jina la Eneo</label>
+                  <input type="text" id="cfg-location-name" placeholder="mfano: Mwanza Town Center">
+                  <span class="hint">Jina la eneo ambalo router iko</span>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Aina ya Eneo</label>
+                    <select id="cfg-location-type">
+                      <option value="university">Chuo Kikuu</option>
+                      <option value="hostel">Hostel</option>
+                      <option value="market">Soko</option>
+                      <option value="mall">Mall/Supermarket</option>
+                      <option value="office">Ofisi</option>
+                      <option value="home">Nyumbani</option>
+                      <option value="other">Nyingine</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Mji</label>
+                    <input type="text" id="cfg-location-city" placeholder="mfano: Mwanza">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>Anwani</label>
+                  <input type="text" id="cfg-location-address" placeholder="mfano: Karume Road, Mwanza">
+                </div>
+
+                <div class="form-group">
+                  <label>Mkoa</label>
+                  <input type="text" id="cfg-location-region" placeholder="mfano: Mwanza">
+                </div>
+
+                <!-- GPS Coordinates -->
+                <div class="instruction-box" style="background: #f0fdf4; border-color: #86efac;">
+                  <h3>📍 GPS Coordinates</h3>
+                  <p>Bonyeza button hapa chini kupata GPS coordinates za eneo la sasa</p>
+                  
+                  <div class="form-row mt-4">
+                    <div class="form-group">
+                      <label>Latitude</label>
+                      <input type="text" id="cfg-latitude" placeholder="mfano: -2.5164">
+                    </div>
+                    <div class="form-group">
+                      <label>Longitude</label>
+                      <input type="text" id="cfg-longitude" placeholder="mfano: 32.9175">
+                    </div>
+                  </div>
+
+                  <button type="button" class="gps-btn mt-4" onclick="getGPSLocation()" id="gps-btn">
+                    <i class="fas fa-crosshairs"></i>
+                    Pata GPS Location Sasa
+                  </button>
+
+                  <div class="location-preview" id="location-preview">
+                    <h4>✅ GPS Imepatikana!</h4>
+                    <p class="coords" id="gps-coords"></p>
+                  </div>
+                </div>
+
+                <!-- Manual Location Entry -->
+                <div class="instruction-box warning">
+                  <h3>✏️ Kama GPS Haifanyi?</h3>
+                  <p>Weka coordinates kwa mkono. Unaweza kupata kwenye Google Maps:</p>
+                  <ol>
+                    <li>Fungua Google Maps kwenye simu</li>
+                    <li>Bonyeza na ushikamie kwenye eneo</li>
+                    <li>Coordinates zitaonekana juu</li>
+                    <li>Ziweke kwenye form hii</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-secondary" onclick="prevStep()">
+                  <i class="fas fa-arrow-left"></i>
+                  Rudi
+                </button>
+                <button class="btn btn-primary" onclick="executeStep(5)" id="btn-step5">
+                  <i class="fas fa-save"></i>
+                  Hifadhi Eneo
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 6: Configure RADIUS -->
+            <div class="step-content" id="step-6">
+              <h2>🔐 Hatua ya 6: Configure RADIUS</h2>
+              <p>Inaweka RADIUS server kwa user authentication</p>
+              
+              <div class="instruction-box">
+                <h3>Inachofanya:</h3>
+                <ul>
+                  <li>Ina-add RADIUS server (FreeRADIUS)</li>
+                  <li>Ina-enable RADIUS kwenye hotspot</li>
+                  <li>Inaweka RADIUS secret</li>
+                  <li>Ina-enable accounting</li>
+                </ul>
+              </div>
+
+              <div id="radius-status" class="text-center py-8">
+                <div class="spinner mx-auto mb-4"></div>
+                <p>Inaweka RADIUS configuration...</p>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-secondary" onclick="prevStep()">
+                  <i class="fas fa-arrow-left"></i>
+                  Rudi
+                </button>
+                <button class="btn btn-primary" onclick="executeStep(6)" id="btn-step6">
+                  <i class="fas fa-play"></i>
+                  Endelea
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 7: Verify -->
+            <div class="step-content" id="step-7">
+              <h2>✅ Hatua ya 7: Test & Verify</h2>
+              <p>Thibitisha kila kitu kinafanya kazi</p>
+              
+              <div id="verify-checklist">
+                <ul class="checklist">
+                  <li id="check-hotspot">
+                    <span class="check pending"><i class="fas fa-circle"></i></span>
+                    <span>Hotspot Server</span>
+                    <span class="ml-auto text-gray-400" id="check-hotspot-status">Inasubiri...</span>
+                  </li>
+                  <li id="check-dhcp">
+                    <span class="check pending"><i class="fas fa-circle"></i></span>
+                    <span>DHCP Server</span>
+                    <span class="ml-auto text-gray-400" id="check-dhcp-status">Inasubiri...</span>
+                  </li>
+                  <li id="check-radius">
+                    <span class="check pending"><i class="fas fa-circle"></i></span>
+                    <span>RADIUS Server</span>
+                    <span class="ml-auto text-gray-400" id="check-radius-status">Inasubiri...</span>
+                  </li>
+                  <li id="check-location">
+                    <span class="check pending"><i class="fas fa-circle"></i></span>
+                    <span>Eneo/Location</span>
+                    <span class="ml-auto text-gray-400" id="check-location-status">Inasubiri...</span>
+                  </li>
+                  <li id="check-wifi">
+                    <span class="check pending"><i class="fas fa-circle"></i></span>
+                    <span>WiFi SSID</span>
+                    <span class="ml-auto text-gray-400" id="check-wifi-status">Inasubiri...</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div id="verify-result" class="hidden mt-6">
+                <div class="instruction-box success">
+                  <h3>🎉 Ukamilifu!</h3>
+                  <p>Router iko tayari kwa matumizi!</p>
+                  <ul>
+                    <li>WiFi SSID: <strong id="final-ssid">HotBando-Free-WiFi</strong></li>
+                    <li>Hotspot IP: <strong id="final-hotspot-ip">10.5.50.1</strong></li>
+                    <li>Eneo: <strong id="final-location">-</strong></li>
+                    <li>Login: <strong>admin / \${hotspotAdminPwd}</strong></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="btn-group">
+                <button class="btn btn-secondary" onclick="prevStep()">
+                  <i class="fas fa-arrow-left"></i>
+                  Rudi
+                </button>
+                <button class="btn btn-success" onclick="executeStep(7)" id="btn-step7">
+                  <i class="fas fa-check"></i>
+                  Thibitisha
+                </button>
+                <button class="btn btn-primary hidden" id="btn-finish" onclick="finishSetup()">
+                  <i class="fas fa-flag-checkered"></i>
+                  Maliza Setup
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Close button -->
+          <button onclick="closeWizard()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Setup Modal -->
+      <div id="quick-setup-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+          <h2 class="text-xl font-bold mb-4">⚡ Quick Setup</h2>
+          <p class="text-gray-600 mb-6">Weka taarifa chache na system itaconfigure yote automatically!</p>
+          
+          <div class="config-form">
+            <div class="form-group">
+              <label>Router IP Address</label>
+              <input type="text" id="quick-router-ip" placeholder="mfano: 192.168.88.1">
+              <span class="hint">IP ya MikroTik iliyochomeka</span>
+            </div>
+            <div class="form-group">
+              <label>Server IP (IP ya HotBando server)</label>
+              <input type="text" id="quick-server-ip" placeholder="mfano: 103.50.200.1">
+            </div>
+            <div class="form-group">
+              <label>WiFi SSID</label>
+              <input type="text" id="quick-ssid" value="HotBando-Free-WiFi">
+            </div>
+            
+            <!-- Quick Location -->
+            <div class="instruction-box" style="background: #f0fdf4; border-color: #86efac;">
+              <h3>📍 Eneo la Router</h3>
+              <div class="form-group mt-2">
+                <label>Jina la Eneo</label>
+                <input type="text" id="quick-location-name" placeholder="mfano: Mwanza Town">
+              </div>
+              <div class="form-row mt-2">
+                <div class="form-group">
+                  <label>Latitude</label>
+                  <input type="text" id="quick-latitude" placeholder="-2.5164">
+                </div>
+                <div class="form-group">
+                  <label>Longitude</label>
+                  <input type="text" id="quick-longitude" placeholder="32.9175">
+                </div>
+              </div>
+              <button type="button" class="gps-btn mt-3" onclick="getGPSLocationQuick()" id="gps-btn-quick">
+                <i class="fas fa-crosshairs"></i>
+                Pata GPS
+              </button>
+            </div>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="closeQuickSetup()">Ghairi</button>
+            <button class="btn btn-primary" onclick="executeQuickSetup()">
+              <i class="fas fa-bolt"></i>
+              Anza Quick Setup
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaflet CSS & JS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+      let currentStep = 1;
+      let currentRouterID = null;
+      let setupConfig = {};
+      let map = null;
+      let markers = [];
+
+      // Load detected routers on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        loadDetectedRouters();
+        loadMap();
+        // Auto-refresh every 10 seconds
+        setInterval(loadDetectedRouters, 10000);
+      });
+
+      async function loadDetectedRouters() {
+        try {
+          const response = await fetch('/api/routers');
+          const data = await response.json();
+          
+          const routerList = document.getElementById('router-list');
+          
+          if (!data.success || !data.data || data.data.length === 0) {
+            routerList.innerHTML = \`
+              <div class="text-center py-12">
+                <i class="fas fa-satellite-dish text-6xl text-gray-300 mb-4"></i>
+                <h3 class="text-lg font-semibold text-gray-600 mb-2">Hakuna Routers Zilizopatikana</h3>
+                <p class="text-gray-500 mb-4">Chomeka MikroTik na ui-connect kwenye network</p>
+                <p class="text-sm text-gray-400">Router itaji-register automatically pale inapofungua</p>
+              </div>
+            \`;
+            return;
+          }
+
+          const routers = data.data;
+          let html = '';
+          
+          for (const router of routers) {
+            const statusClass = router.status === 'online' ? 'online' : 'offline';
+            const setupStatus = router.setup_status || 'pending';
+            const statusLabel = setupStatus === 'configured' ? '✅ Imekamilika' : 
+                               setupStatus === 'configuring' ? '⚙️ Inaconfigure...' :
+                               setupStatus === 'failed' ? '❌ Imeshindwa' : '⏳ Inasubiri Setup';
+            const locationInfo = router.location_name ? \`📍 \${router.location_name}\` : '📍 Eneo halijajwa';
+            
+            html += \`
+              <div class="detected-router" onclick="openWizard('\${router.router_id}')">
+                <div class="router-icon">📡</div>
+                <div class="router-details">
+                  <h4>\${router.router_name || router.router_id}</h4>
+                  <p>
+                    <span class="status-indicator \${statusClass}">
+                      <span class="dot \${router.status === 'online' ? 'pulse' : ''}"></span>
+                      \${router.status === 'online' ? 'Online' : 'Offline'}
+                    </span>
+                    <span class="ml-2 text-sm">IP: \${router.host}</span>
+                    <span class="ml-2 text-sm">Model: \${router.model || 'Unknown'}</span>
+                  </p>
+                  <p class="text-sm mt-1">
+                    <span class="badge badge-\${setupStatus === 'configured' ? 'success' : setupStatus === 'failed' ? 'danger' : 'warning'}">
+                      \${statusLabel}
+                    </span>
+                    <span class="ml-2 text-sm text-gray-500">\${locationInfo}</span>
+                  </p>
+                </div>
+                <div class="router-actions">
+                  \${setupStatus !== 'configured' ? 
+                    \`<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openWizard('\${router.router_id}')">
+                      <i class="fas fa-cog mr-1"></i> Configure
+                    </button>\` : 
+                    \`
+                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editLocation('\${router.router_id}')">
+                      <i class="fas fa-map-marker-alt mr-1"></i> Eneo
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); viewRouter('\${router.router_id}')">
+                      <i class="fas fa-eye mr-1"></i> View
+                    </button>
+                    \`
+                  }
+                </div>
+              </div>
+            \`;
+          }
+          
+          routerList.innerHTML = html;
+        } catch (error) {
+          console.error('Error loading routers:', error);
+          document.getElementById('router-list').innerHTML = \`
+            <div class="text-center py-8 text-red-500">
+              <i class="fas fa-exclamation-circle text-4xl mb-4"></i>
+              <p>Hitilafu imetokea kupata routers</p>
+            </div>
+          \`;
+        }
+      }
+
+      function openWizard(routerID) {
+        currentRouterID = routerID;
+        currentStep = 1;
+        document.getElementById('wizard-modal').classList.remove('hidden');
+        document.getElementById('wizard-modal').classList.add('flex');
+        updateStepUI();
+        
+        // Pre-fill router ID
+        document.getElementById('cfg-router-id').value = routerID;
+        document.getElementById('cfg-router-name').value = routerID;
+      }
+
+      function closeWizard() {
+        document.getElementById('wizard-modal').classList.add('hidden');
+        document.getElementById('wizard-modal').classList.remove('flex');
+        loadDetectedRouters();
+        loadMap();
+      }
+
+      function showQuickSetup() {
+        document.getElementById('quick-setup-modal').classList.remove('hidden');
+        document.getElementById('quick-setup-modal').classList.add('flex');
+      }
+
+      function closeQuickSetup() {
+        document.getElementById('quick-setup-modal').classList.add('hidden');
+        document.getElementById('quick-setup-modal').classList.remove('flex');
+      }
+
+      function updateStepUI() {
+        // Update step circles
+        for (let i = 1; i <= 7; i++) {
+          const circle = document.getElementById('step-circle-' + i);
+          if (circle) {
+            circle.classList.remove('active', 'completed');
+            if (i < currentStep) {
+              circle.classList.add('completed');
+              circle.innerHTML = '<i class="fas fa-check"></i>';
+            } else if (i === currentStep) {
+              circle.classList.add('active');
+              circle.innerHTML = i;
+            } else {
+              circle.innerHTML = i;
+            }
+          }
+        }
+
+        // Update step content
+        document.querySelectorAll('.step-content').forEach((el, idx) => {
+          el.classList.remove('active');
+          if (idx + 1 === currentStep) {
+            el.classList.add('active');
+          }
+        });
+      }
+
+      function prevStep() {
+        if (currentStep > 1) {
+          currentStep--;
+          updateStepUI();
+        }
+      }
+
+      async function executeStep(step) {
+        const btn = document.getElementById('btn-step' + step);
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<div class="spinner"></div> Inafanya...';
+        }
+
+        let body = {};
+
+        switch(step) {
+          case 1:
+            body = {
+              host: document.getElementById('cfg-router-host').value,
+              user: document.getElementById('cfg-router-user').value,
+              password: document.getElementById('cfg-router-pass').value,
+              routerName: document.getElementById('cfg-router-name').value,
+              ssid: 'HotBando-Free-WiFi'
+            };
+            break;
+          case 3:
+            body = {
+              serverIP: document.getElementById('cfg-server-ip').value,
+              radiusSecret: document.getElementById('cfg-radius-secret').value,
+              hotspotInterface: document.getElementById('cfg-interface').value,
+              hotspotIP: document.getElementById('cfg-hotspot-ip').value,
+              ssid: document.getElementById('cfg-ssid').value
+            };
+            break;
+          case 5:
+            body = {
+              latitude: document.getElementById('cfg-latitude').value,
+              longitude: document.getElementById('cfg-longitude').value,
+              locationName: document.getElementById('cfg-location-name').value,
+              locationAddress: document.getElementById('cfg-location-address').value,
+              locationCity: document.getElementById('cfg-location-city').value,
+              locationRegion: document.getElementById('cfg-location-region').value,
+              locationType: document.getElementById('cfg-location-type').value
+            };
+            break;
+        }
+
+        try {
+          const response = await fetch(\`/api/setup-wizard/execute/\${currentRouterID}/\${step}\`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            currentStep = step + 1;
+            updateStepUI();
+            
+            if (step === 7) {
+              document.getElementById('btn-finish').classList.remove('hidden');
+              document.getElementById('verify-result').classList.remove('hidden');
+              // Show location in final result
+              const locName = document.getElementById('cfg-location-name').value || '-';
+              document.getElementById('final-location').textContent = locName;
+            }
+          } else {
+            alert('Hitilafu: ' + result.message);
+          }
+        } catch (error) {
+          alert('Hitilafu: ' + error.message);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            if (step === 3) btn.innerHTML = '<i class="fas fa-cog"></i> Configure Sasa';
+            else if (step === 5) btn.innerHTML = '<i class="fas fa-save"></i> Hifadhi Eneo';
+            else if (step === 7) btn.innerHTML = '<i class="fas fa-check"></i> Thibitisha';
+            else btn.innerHTML = '<i class="fas fa-play"></i> Endelea';
+          }
+        }
+      }
+
+      // GPS Location Functions
+      function getGPSLocation() {
+        const btn = document.getElementById('gps-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Inapata GPS...';
+        btn.classList.add('loading');
+
+        if (!navigator.geolocation) {
+          alert('Browser yako haioni GPS');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-crosshairs"></i> Pata GPS Location Sasa';
+          btn.classList.remove('loading');
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = position.coords.latitude.toFixed(6);
+            const lng = position.coords.longitude.toFixed(6);
+            
+            document.getElementById('cfg-latitude').value = lat;
+            document.getElementById('cfg-longitude').value = lng;
+            
+            document.getElementById('gps-coords').textContent = \`Lat: \${lat}, Lng: \${lng}\`;
+            document.getElementById('location-preview').classList.add('active');
+            
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> GPS Imepatikana!';
+            btn.classList.remove('loading');
+            
+            // Try to reverse geocode
+            reverseGeocode(lat, lng);
+          },
+          (error) => {
+            alert('Hitilafu ya GPS: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-crosshairs"></i> Pata GPS Location Sasa';
+            btn.classList.remove('loading');
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      }
+
+      function getGPSLocationQuick() {
+        const btn = document.getElementById('gps-btn-quick');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div>';
+
+        if (!navigator.geolocation) {
+          alert('Browser yako haioni GPS');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-crosshairs"></i> Pata GPS';
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            document.getElementById('quick-latitude').value = position.coords.latitude.toFixed(6);
+            document.getElementById('quick-longitude').value = position.coords.longitude.toFixed(6);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> Done!';
+          },
+          (error) => {
+            alert('Hitilafu ya GPS: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-crosshairs"></i> Pata GPS';
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }
+
+      async function reverseGeocode(lat, lng) {
+        try {
+          const response = await fetch(\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lng}\`);
+          const data = await response.json();
+          
+          if (data.address) {
+            const addr = data.address;
+            if (addr.city || addr.town || addr.village) {
+              document.getElementById('cfg-location-city').value = addr.city || addr.town || addr.village;
+            }
+            if (addr.state || addr.region) {
+              document.getElementById('cfg-location-region').value = addr.state || addr.region;
+            }
+            if (addr.road) {
+              document.getElementById('cfg-location-address').value = addr.road;
+            }
+          }
+        } catch (e) {
+          // Reverse geocode failed, user can enter manually
+        }
+      }
+
+      // Map Functions
+      async function loadMap() {
+        try {
+          const response = await fetch('/api/auto-detect/map-data');
+          const data = await response.json();
+          
+          if (!data.success || data.routers.length === 0) {
+            document.getElementById('map-placeholder').innerHTML = \`
+              <i class="fas fa-map-marked-alt text-6xl text-gray-300 mb-4"></i>
+              <p class="text-gray-500 mb-4">Hakuna routers zenye GPS coordinates</p>
+              <p class="text-sm text-gray-400">Weka GPS coordinates wakati wa configuration</p>
+            \`;
+            return;
+          }
+
+          // Initialize map centered on first router or Tanzania
+          const firstRouter = data.routers[0];
+          const centerLat = firstRouter.latitude || -6.7924;
+          const centerLng = firstRouter.longitude || 39.2083;
+
+          // Create map
+          map = L.map('map-container').setView([centerLat, centerLng], 12);
+          
+          // Add tile layer
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+          }).addTo(map);
+
+          // Add markers for each router
+          for (const router of data.routers) {
+            if (router.latitude && router.longitude) {
+              const marker = L.marker([router.latitude, router.longitude]).addTo(map);
+              marker.bindPopup(\`
+                <strong>\${router.router_name}</strong><br>
+                IP: \${router.host}<br>
+                Model: \${router.model || 'Unknown'}<br>
+                Status: \${router.status}<br>
+                Eneo: \${router.location_name || 'N/A'}
+              \`);
+              markers.push(marker);
+            }
+          }
+
+          // Fit bounds to show all markers
+          if (markers.length > 0) {
+            const group = new L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.1));
+          }
+
+          // Hide placeholder, show map
+          document.getElementById('map-placeholder').style.display = 'none';
+
+        } catch (error) {
+          console.error('Error loading map:', error);
+        }
+      }
+
+      async function executeQuickSetup() {
+        const ip = document.getElementById('quick-router-ip').value;
+        const serverIP = document.getElementById('quick-server-ip').value;
+        const ssid = document.getElementById('quick-ssid').value;
+        
+        if (!ip || !serverIP) {
+          alert('Weka IP ya router na server!');
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/auto-detect/quick-setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ip,
+              serverIP,
+              ssid,
+              radiusSecret: '\${radiusSecret}',
+              user: 'admin',
+              password: 'admin',
+              latitude: document.getElementById('quick-latitude').value || null,
+              longitude: document.getElementById('quick-longitude').value || null,
+              locationName: document.getElementById('quick-location-name').value || null
+            })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            alert('✅ Setup imekamilika! Router: ' + result.router.routerName);
+            closeQuickSetup();
+            loadDetectedRouters();
+            loadMap();
+          } else {
+            alert('Hitilafu: ' + result.message);
+          }
+        } catch (error) {
+          alert('Hitilafu: ' + error.message);
+        }
+      }
+
+      function editLocation(routerID) {
+        // Open wizard at step 5 (location)
+        currentRouterID = routerID;
+        currentStep = 5;
+        document.getElementById('wizard-modal').classList.remove('hidden');
+        document.getElementById('wizard-modal').classList.add('flex');
+        updateStepUI();
+      }
+
+      function finishSetup() {
+        alert('🎉 Setup imekamilika! Unaweza kuanza kutumia HotBando.');
+        closeWizard();
+        loadDetectedRouters();
+        loadMap();
+      }
+
+      function viewRouter(routerID) {
+        window.location.href = \`/admin/routers?highlight=\${routerID}\`;
+      }
+    </script>
+  `;
+%>
+
+<%- include('layout', { body: setupWizardContent }) %>

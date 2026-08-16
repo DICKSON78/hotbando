@@ -112,8 +112,7 @@ async function getPartnerApplications(req, res) {
             params.push(status);
         }
 
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        query += ` ORDER BY created_at DESC LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
 
         const [applications] = await db.execute(query, params);
 
@@ -156,8 +155,7 @@ async function getContactMessages(req, res) {
             params.push(status);
         }
 
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        query += ` ORDER BY created_at DESC LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
 
         const [messages] = await db.execute(query, params);
 
@@ -166,7 +164,7 @@ async function getContactMessages(req, res) {
             SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END) as unread,
-                SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END) as read,
+                SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END) as \`read\`,
                 SUM(CASE WHEN status = 'replied' THEN 1 ELSE 0 END) as replied
             FROM contact_messages
         `);

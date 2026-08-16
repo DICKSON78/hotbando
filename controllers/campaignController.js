@@ -464,6 +464,27 @@ const campaignController = {
                 return res.status(400).json({ error: 'Invalid status' });
             }
 
+            // Verify the lead belongs to a campaign owned by the requester
+            const [completions] = await db.query(
+                `SELECT cc.id, c.owner_id, c.campaign_type
+                 FROM campaign_completions cc
+                 JOIN campaigns c ON cc.campaign_id = c.id
+                 WHERE cc.id = ?`,
+                [completion_id]
+            );
+
+            if (completions.length === 0) {
+                return res.status(404).json({ error: 'Lead not found' });
+            }
+
+            const completion = completions[0];
+
+            // Bank partners may only update leads of campaigns they own.
+            // Advertisers (sponsors) never access leads; admins bypass the check.
+            if (user.role !== 'admin' && user.role !== 'super_admin' && completion.owner_id !== user.id) {
+                return res.status(403).json({ error: 'Access denied' });
+            }
+
             await Campaign.updateLeadStatus(completion_id, status, notes);
 
             res.json({

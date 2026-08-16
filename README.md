@@ -10,12 +10,24 @@
 2. [Features](#features)
 3. [System Architecture](#system-architecture)
 4. [Installation & Setup](#installation--setup)
-5. [User Roles](#user-roles)
-6. [API Documentation](#api-documentation)
-7. [Database Schema](#database-schema)
-8. [Configuration](#configuration)
-9. [Deployment](#deployment)
-10. [Troubleshooting](#troubleshooting)
+5. [Deploy to the Cloud (VPS)](#deploy-to-the-cloud-vps)
+6. [Connect a Fresh MikroTik Router](#connect-a-fresh-mikrotik-router)
+7. [User Roles](#user-roles)
+8. [API Documentation](#api-documentation)
+9. [Database Schema](#database-schema)
+10. [Configuration](#configuration)
+11. [Deployment](#deployment)
+12. [Troubleshooting](#troubleshooting)
+
+---
+
+## 📚 Developer Guides
+
+- **[Deploy to the Cloud (VPS)](docs/DEPLOYMENT.md)** — step-by-step: put the
+  platform on a public VPS with Docker (app, MySQL, FreeRADIUS, Redis, backups).
+- **[Connect a Fresh MikroTik Router](docs/ROUTER_ONBOARDING.md)** — step-by-step:
+  onboard a brand-new MikroTik router through the **Admin Portal**, from adding
+  the router to a working captive portal with RADIUS.
 
 ---
 
@@ -657,6 +669,36 @@ Configure commission rates:
 - Percentage or fixed amount
 - Minimum payout threshold
 - Payout frequency (daily/weekly/monthly)
+
+---
+
+## ☁️ Deploy to the Cloud (VPS)
+
+Put the platform on a public server so it is visible on the internet (admin
+portal, hotspot portal, and RADIUS) with one Docker stack: app, MySQL,
+FreeRADIUS, Redis, and automated backups.
+
+▶️ **Follow the full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+
+Quick start (on the VPS):
+
+```bash
+git clone https://github.com/DICKSON78/hotbando.git && cd hotbando
+cp .env.example .env   # set production values (see the guide)
+docker build -t hotbando-freeradius:latest freeradius/
+docker compose build app
+docker compose up -d
+curl -s http://localhost:3000/health
+```
+
+## 🌐 Connect a Fresh MikroTik Router
+
+Add a brand-new MikroTik router to the platform entirely from the **Admin
+Portal** (`/admin/routers` → **Ongeza Router**), then import one bootstrap
+script on the router to turn it into a working HotBando hotspot (captive
+portal + FreeRADIUS auth + accounting).
+
+▶️ **Follow the full guide: [docs/ROUTER_ONBOARDING.md](docs/ROUTER_ONBOARDING.md)**
 
 ---
 

@@ -1,0 +1,26 @@
+{
+    "name": "HotBando - Intaneti Bure",
+    "short_name": "HotBando",
+    "description": "Pata intaneti bure kwa kutazama matangazo au nunua kifurushi cha mtandao wa haraka",
+    "start_url": "/hotspot/login",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#F8FAFC",
+    "theme_color": "#FF7A30",
+    "categories": ["utilities", "networking"],
+    "icons": [
+        {
+            "src": "/assets/hot-bando-logo.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/assets/hot-bando-logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

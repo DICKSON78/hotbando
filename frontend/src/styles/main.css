@@ -1,0 +1,151 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Poppins', sans-serif;
+  background: #f9fafb;
+  color: #1f2937;
+}
+
+/* ===== Legacy Styles (admin, hotspot, reseller) ===== */
+.card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 1px solid #f3f4f6;
+  padding: 1.5rem;
+}
+
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #FF7A30; color: white; padding: 0.5rem 1rem;
+  border-radius: 0.5rem; font-weight: 500; border: none; cursor: pointer; transition: background 0.2s;
+}
+.btn-primary:hover { background: #ea6a24; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e5e7eb; color: #374151; padding: 0.5rem 1rem;
+  border-radius: 0.5rem; font-weight: 500; border: none; cursor: pointer; transition: background 0.2s;
+}
+.btn-secondary:hover { background: #d1d5db; }
+
+.btn-danger {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #ef4444; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem;
+  font-weight: 500; border: none; cursor: pointer;
+}
+.btn-danger:hover { background: #dc2626; }
+
+.input-field {
+  width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db;
+  border-radius: 0.5rem; font-size: 0.875rem; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-field:focus { border-color: #FF7A30; box-shadow: 0 0 0 3px rgba(255, 122, 48, 0.1); }
+
+.badge {
+  display: inline-flex; padding: 0.125rem 0.625rem;
+  font-size: 0.75rem; font-weight: 500; border-radius: 9999px;
+}
+.badge-success { background: #dcfce7; color: #166534; }
+.badge-danger { background: #fee2e2; color: #991b1b; }
+.badge-warning { background: #fef9c3; color: #854d0e; }
+
+/* ===== MBG Design System (Partner Portals) ===== */
+:root {
+  --primary: #FF7A30;
+  --primary-light: rgba(255, 122, 48, 0.08);
+  --primary-dark: #ea6a24;
+  --border: #e5e7eb;
+  --bg-muted: #f9fafb;
+  --text-muted: #6b7280;
+}
+
+/* Sidebar */
+.side-link {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px;
+  font-size: 13px; font-weight: 500; color: #374151; transition: all 0.15s;
+  text-decoration: none; position: relative;
+}
+.side-link i { width: 16px; text-align: center; font-size: 14px; color: #9ca3af; transition: color 0.15s; }
+.side-link:hover { background: var(--primary-light); color: var(--primary); }
+.side-link:hover i { color: var(--primary); }
+.side-link.active { background: var(--primary); color: white; }
+.side-link.active i { color: white; }
+.side-link.active::before {
+  content: ''; position: absolute; left: -16px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; background: var(--primary); border-radius: 0 3px 3px 0;
+}
+
+/* Table */
+.tbl-shadcn { width: 100%; border-collapse: collapse; }
+.tbl-shadcn th {
+  padding: 10px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-muted); background: var(--bg-muted);
+  text-align: left; border-bottom: 1px solid var(--border);
+}
+.tbl-shadcn td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #f3f4f6; }
+.tbl-shadcn tr:last-child td { border-bottom: none; }
+.tbl-shadcn tbody tr { transition: background 0.1s; }
+.tbl-shadcn tbody tr:hover { background: var(--bg-muted); }
+
+/* Metric icon */
+.metric-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+
+/* MBG Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px;
+  font-size: 13px; font-weight: 500; transition: all 0.12s; cursor: pointer; border: none; text-decoration: none;
+}
+.btn.btn-primary { background: var(--primary); color: white; }
+.btn.btn-primary:hover { background: var(--primary-dark); }
+.btn-ghost { background: transparent; color: #374151; }
+.btn-ghost:hover { background: var(--bg-muted); }
+.btn-outline { background: white; color: #374151; border: 1px solid var(--border); }
+.btn-outline:hover { background: var(--bg-muted); }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 5px; }
+.btn-xs { padding: 3px 8px; font-size: 11px; border-radius: 4px; }
+.btn-icon { width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+
+/* MBG Inputs */
+.input {
+  border: 1px solid var(--border); border-radius: 6px; padding: 7px 11px; font-size: 13px;
+  width: 100%; transition: all 0.12s; background: white;
+}
+.input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.input-label { display: block; font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 4px; }
+
+/* Section title */
+.section-title { font-size: 14px; font-weight: 600; color: #111827; }
+
+/* Separator */
+.sep { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* Avatar colors */
+.av { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.av-a, .av-m, .av-x { background: #d50000; }
+.av-b, .av-v { background: #e67c00; }
+.av-c, .av-y { background: #f9a825; color: #333; }
+.av-d, .av-w { background: #7cb342; }
+.av-e, .av-q { background: #0b8043; }
+.av-f { background: #009688; }
+.av-g, .av-r { background: #039be5; }
+.av-h, .av-s { background: #4285f4; }
+.av-i, .av-t { background: #3949ab; }
+.av-j, .av-z { background: #5e35b1; }
+.av-k, .av-u { background: #8e24aa; }
+.av-l { background: #d81b60; }
+.av-n { background: #f4511e; }
+.av-o { background: #f6bf26; color: #333; }
+.av-p { background: #33b679; }
+
+.leaflet-container { border-radius: 0.75rem; }
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+.pulse-online::after {
+  content: ''; position: absolute; width: 100%; height: 100%; border-radius: 50%;
+  background: rgba(34, 197, 94, 0.3); animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}

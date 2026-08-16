@@ -1,0 +1,24 @@
+# HotBando Custom RADIUS Dictionary
+# Place at: /etc/freeradius/3.0/dictionary.hotbando
+#
+# These attributes can be used for custom billing/integration logic.
+# Include this dictionary in /etc/freeradius/3.0/dictionary with:
+#   $INCLUDE dictionary.hotbando
+
+VENDOR  HotBando  12345
+
+BEGIN-VENDOR HotBando
+
+# Free bytes remaining for the user
+ATTRIBUTE HotBando-Free-Bytes      1  integer
+
+# Number of ads watched today
+ATTRIBUTE HotBando-Ad-Count        2  integer
+
+# User access type: voucher, free, premium
+ATTRIBUTE HotBando-Access-Type     3  string
+
+# Session quota in bytes (0 = unlimited)
+ATTRIBUTE HotBando-Quota-Bytes     4  integer
+
+END-VENDOR HotBando

@@ -53,7 +53,7 @@ class WireGuardService {
     try {
       // Get all assigned IPs
       const [rows] = await db.execute(`
-        SELECT wireguard_ip FROM routers
+        SELECT wireguard_ip FROM mikrotiks
         WHERE wireguard_ip IS NOT NULL
         ORDER BY wireguard_ip
       `);
@@ -182,7 +182,7 @@ ${peer.presharedKey ? `PresharedKey = ${peer.presharedKey}` : ''}
     try {
       // Get router info
       const [routers] = await db.execute(
-        'SELECT * FROM routers WHERE router_id = ?',
+        'SELECT * FROM mikrotiks WHERE router_id = ?',
         [routerId]
       );
 
@@ -219,7 +219,7 @@ ${peer.presharedKey ? `PresharedKey = ${peer.presharedKey}` : ''}
       // Save WireGuard config to router (try, but don't fail if columns don't exist)
       try {
         await db.execute(`
-          UPDATE routers SET
+          UPDATE mikrotiks SET
             wireguard_ip = ?,
             wireguard_public_key = ?,
             wireguard_private_key = ?,
@@ -274,7 +274,7 @@ ${peer.presharedKey ? `PresharedKey = ${peer.presharedKey}` : ''}
           wireguard_public_key,
           status,
           last_seen
-        FROM routers
+        FROM mikrotiks
         WHERE wireguard_configured = 1 OR wireguard_ip IS NOT NULL
         ORDER BY wireguard_ip
       `);

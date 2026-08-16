@@ -1,0 +1,190 @@
+<%
+  const dashboardContent = `
+    <style>
+      .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      }
+      .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .data-table th {
+        background: #f9fafb;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 14px;
+      }
+      .data-table tr:hover {
+        background: #f9fafb;
+      }
+      .table-container {
+        overflow-x: auto;
+      }
+      .badge-success { background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-warning { background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+      .badge-danger { background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    </style>
+
+    <div class="container mx-auto px-4 py-8">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-800">Usimamizi wa Vouchers</h2>
+          <p class="text-gray-600 mt-1">Muhtasari wa vouchers na batches zote</p>
+        </div>
+        <a href="/admin/generate-vouchers" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center">
+          <i class="fas fa-plus mr-2"></i>Generate Vouchers
+        </a>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Zimetumika Leo</p>
+              <p class="stat-value text-blue-600" id="used-today">0</p>
+            </div>
+            <div class="stat-icon bg-blue-100">
+              <i class="fas fa-check-circle text-blue-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Zinazopatikana</p>
+              <p class="stat-value text-green-600" id="available">0</p>
+            </div>
+            <div class="stat-icon bg-green-100">
+              <i class="fas fa-ticket-alt text-green-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Mauzo Leo (TZS)</p>
+              <p class="stat-value text-purple-600" id="today-sales">0</p>
+            </div>
+            <div class="stat-icon bg-purple-100">
+              <i class="fas fa-money-bill-wave text-purple-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="stat-label">Jumla ya Mapato (TZS)</p>
+              <p class="stat-value text-orange-600" id="total-revenue">0</p>
+            </div>
+            <div class="stat-icon bg-orange-100">
+              <i class="fas fa-chart-line text-orange-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-800">Voucher Batches</h3>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Batch Name</th>
+                <th>Imetolewa Kwa</th>
+                <th>Jumla ya Vouchers</th>
+                <th>Jumla ya Thamani</th>
+                <th>Tarehe</th>
+              </tr>
+            </thead>
+            <tbody id="batches-body">
+              <tr><td colspan="6" class="text-center py-6 text-gray-500">Inapakia...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', async () => {
+        const tbody = document.getElementById('batches-body');
+        try {
+          const [statsRes, salesRes, batchesRes] = await Promise.all([
+            fetch('/admin/voucher-stats', { headers: { 'Accept': 'application/json' } }),
+            fetch('/admin/sales-summary', { headers: { 'Accept': 'application/json' } }),
+            fetch('/admin/batches', { headers: { 'Accept': 'application/json' } })
+          ]);
+          const stats = await statsRes.json();
+          const sales = await salesRes.json();
+          const batches = await batchesRes.json();
+          const batchList = batches.data || [];
+
+          document.getElementById('used-today').textContent = stats.usedToday || 0;
+          document.getElementById('available').textContent = stats.availableVouchers || 0;
+          document.getElementById('today-sales').textContent = Number(sales.todaySales || 0).toLocaleString('sw-TZ');
+          document.getElementById('total-revenue').textContent = Number(sales.totalRevenue || 0).toLocaleString('sw-TZ');
+
+          if (batchList.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-gray-500">Hakuna batches bado</td></tr>';
+            return;
+          }
+          tbody.innerHTML = batchList.map((b, i) => \`<tr>
+            <td>\${i + 1}</td>
+            <td class="font-medium text-gray-800">\${b.batch_name || 'Batch'}</td>
+            <td>\${b.issued_to || b.created_by_name || '—'}</td>
+            <td>\${b.total_vouchers || 0}</td>
+            <td>TZS \${Number(b.total_value || 0).toLocaleString('sw-TZ')}</td>
+            <td>\${b.formatted_date || '—'}</td>
+          </tr>\`).join('');
+        } catch (err) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-red-500">Imeshindikana kupakia data</td></tr>';
+        }
+      });
+    </script>
+  `;
+%>
+
+<%- include('layout', {
+    title: 'Usimamizi wa Vouchers',
+    activePage: 'vouchers',
+    body: dashboardContent
+}) %>

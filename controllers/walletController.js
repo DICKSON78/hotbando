@@ -37,7 +37,7 @@ const walletController = {
      */
     async getBalance(req, res) {
         try {
-            const user = req.session.sponsor_user || req.session.bank_user;
+            const user = req.session.sponsor_user || req.session.bank_user || req.session.admin_user;
 
             if (!user) {
                 return res.status(401).json({ error: 'Unauthorized' });
@@ -60,7 +60,7 @@ const walletController = {
      */
     async requestDeposit(req, res) {
         try {
-            const user = req.session.sponsor_user || req.session.bank_user;
+            const user = req.session.sponsor_user || req.session.bank_user || req.session.admin_user;
 
             if (!user) {
                 return res.status(401).json({ error: 'Unauthorized' });
@@ -112,7 +112,7 @@ const walletController = {
     async checkPaymentStatus(req, res) {
         try {
             const { payment_request_id } = req.params;
-            const user = req.session.sponsor_user || req.session.bank_user;
+            const user = req.session.sponsor_user || req.session.bank_user || req.session.admin_user;
 
             if (!user) {
                 return res.status(401).json({ error: 'Unauthorized' });
@@ -201,7 +201,7 @@ const walletController = {
      */
     async requestWithdrawal(req, res) {
         try {
-            const user = req.session.sponsor_user || req.session.bank_user;
+            const user = req.session.sponsor_user || req.session.bank_user || req.session.admin_user;
 
             if (!user) {
                 return res.status(401).json({ error: 'Unauthorized' });
@@ -397,7 +397,7 @@ const walletController = {
      */
     async setLowBalanceThreshold(req, res) {
         try {
-            const user = req.session.sponsor_user || req.session.bank_user;
+            const user = req.session.sponsor_user || req.session.bank_user || req.session.admin_user;
 
             if (!user) {
                 return res.status(401).json({ error: 'Unauthorized' });

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `mac_address` VARCHAR(50) NULL,
   `location` VARCHAR(255) NULL,
   `location_id` INT(11) NULL,
-  `last_router_id` INT(11) NULL,
+  `last_router_id` VARCHAR(50) NULL,
   `ip_address` VARCHAR(50) NULL,
   `user_type` ENUM('student', 'trader', 'tenant', 'other') DEFAULT 'other',
 
@@ -159,6 +159,21 @@ CREATE TABLE IF NOT EXISTS `mikrotiks` (
   `firmware_version` VARCHAR(50) NULL,
   `model` VARCHAR(100) NULL,
   `serial_number` VARCHAR(100) NULL,
+  `latitude` DECIMAL(10, 6) NULL,
+  `longitude` DECIMAL(10, 6) NULL,
+  `location_name` VARCHAR(255) NULL,
+  `location_address` VARCHAR(255) NULL,
+  `location_city` VARCHAR(100) NULL,
+  `location_region` VARCHAR(100) NULL,
+  `location_type` VARCHAR(50) DEFAULT 'other',
+  `setup_status` VARCHAR(20) DEFAULT 'pending',
+  `setup_step` INT DEFAULT 0,
+  `setup_completed_at` DATETIME NULL,
+  `wireguard_ip` VARCHAR(50) NULL,
+  `wireguard_public_key` TEXT NULL,
+  `wireguard_private_key` TEXT NULL,
+  `wireguard_preshared_key` TEXT NULL,
+  `wireguard_configured` TINYINT(1) DEFAULT 0,
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -190,6 +205,20 @@ CREATE TABLE IF NOT EXISTS `user_connection_logs` (
   KEY `idx_timestamp` (`timestamp`),
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
   FOREIGN KEY (`router_id`) REFERENCES `mikrotiks`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Router location movement history (setup wizard / auto-detect)
+CREATE TABLE IF NOT EXISTS `router_location_history` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `router_id` VARCHAR(50) NOT NULL,
+  `latitude` DECIMAL(10, 6) NULL,
+  `longitude` DECIMAL(10, 6) NULL,
+  `location_name` VARCHAR(255) NULL,
+  `location_type` VARCHAR(50) DEFAULT 'other',
+  `moved_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_router_loc` (`router_id`),
+  KEY `idx_moved_at` (`moved_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -459,7 +488,7 @@ CREATE TABLE IF NOT EXISTS `payment_requests` (
 CREATE TABLE IF NOT EXISTS `invoices` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `user_id` INT(11) NOT NULL, -- Bank partner
-  `invoice_number` VARCHAR(50) NOT NULL UNIQUE,
+  `invoice_number` VARCHAR(50) NOT NULL,
   `billing_period_start` DATE NOT NULL,
   `billing_period_end` DATE NOT NULL,
   `subtotal` DECIMAL(10, 2) NOT NULL,
@@ -585,7 +614,7 @@ CREATE TABLE IF NOT EXISTS `voucher_batches` (
 -- Vouchers
 CREATE TABLE IF NOT EXISTS `vouchers` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `voucher_code` VARCHAR(50) NOT NULL UNIQUE,
+  `voucher_code` VARCHAR(50) NOT NULL,
   `package_id` INT(11) NOT NULL,
   `batch_id` INT(11) NULL,
   `price` DECIMAL(10, 2) NOT NULL,
@@ -604,6 +633,20 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   FOREIGN KEY (`used_by`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Payments (cash / pesapal / voucher sales)
+CREATE TABLE IF NOT EXISTS `payments` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `user_id` INT(11) NOT NULL,
+  `amount` DECIMAL(10, 2) NOT NULL,
+  `payment_method` VARCHAR(20) NULL DEFAULT 'cash',
+  `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user` (`user_id`),
+  KEY `idx_status` (`status`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================================
 -- SYSTEM CONFIGURATION & NOTIFICATIONS
 -- ============================================================================
@@ -611,7 +654,7 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
 -- System settings
 CREATE TABLE IF NOT EXISTS `system_settings` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `setting_key` VARCHAR(100) NOT NULL UNIQUE,
+  `setting_key` VARCHAR(100) NOT NULL,
   `setting_value` TEXT NULL,
   `setting_type` ENUM('string', 'number', 'boolean', 'json') DEFAULT 'string',
   `description` TEXT NULL,
@@ -707,7 +750,7 @@ ON DUPLICATE KEY UPDATE `setting_key` = VALUES(`setting_key`);
 -- Insert super admin (default password: Admin@123)
 -- Password hash for 'Admin@123' using bcrypt (10 rounds)
 INSERT INTO `users` (`name`, `phone_number`, `email`, `password`, `role`, `is_active`, `is_verified`) VALUES
-('Super Admin', '+255700000000', 'admin@hotbando.com', '$2a$10$XqZJ9xUjXW8h.P5yGvYiA.R4yK7W1qN5kF8hD9xL2mV3bC6tE7uHm', 'super_admin', 1, 1)
+('Super Admin', '+255700000000', 'admin@hotbando.com', '$2a$10$lJo9dqZ82EHGTPCeOsP8ouXprW2rVWSlTDXEq2w47K.VofafSlx2.', 'super_admin', 1, 1)
 ON DUPLICATE KEY UPDATE `phone_number` = VALUES(`phone_number`);
 
 SET FOREIGN_KEY_CHECKS = 1;
@@ -717,11 +760,50 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================================
 
 -- Additional composite indexes for common queries
-CREATE INDEX idx_user_role_active ON users(role, is_active);
-CREATE INDEX idx_campaign_active_dates ON campaigns(is_active, start_date, end_date);
-CREATE INDEX idx_completion_campaign_user ON campaign_completions(campaign_id, user_id);
+-- idx_user_role_active: users(role) already has idx_role, composite added by ALTER TABLE if needed
+ALTER TABLE users ADD INDEX idx_user_role_active (role, is_active);
+ALTER TABLE campaigns ADD INDEX idx_campaign_active_dates (is_active, start_date, end_date);
+ALTER TABLE campaign_completions ADD INDEX idx_completion_campaign_user (campaign_id, user_id);
 CREATE INDEX idx_transaction_user_type ON transactions(user_id, transaction_type, created_at);
-CREATE INDEX idx_connection_user_timestamp ON user_connection_logs(user_id, timestamp);
+CREATE INDEX idx_connection_user_timestamp ON user_connection_logs(mac_address, created_at);
+
+-- ============================================================================
+-- PUBLIC WEBSITE FORMS (partner applications & contact messages)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `partner_applications` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `full_name` VARCHAR(255) NOT NULL,
+  `location` VARCHAR(255) NULL,
+  `business_type` VARCHAR(100) NULL,
+  `package_type` VARCHAR(100) NULL,
+  `phone_number` VARCHAR(20) NULL,
+  `email` VARCHAR(255) NULL,
+  `message` TEXT NULL,
+  `status` ENUM('pending', 'contacted', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  `notes` TEXT NULL,
+  `processed_by` INT(11) NULL,
+  `processed_at` DATETIME NULL,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_partner_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `contact_messages` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(255) NOT NULL,
+  `email` VARCHAR(255) NULL,
+  `message` TEXT NULL,
+  `status` ENUM('unread', 'read', 'replied') NOT NULL DEFAULT 'unread',
+  `reply` TEXT NULL,
+  `replied_by` INT(11) NULL,
+  `replied_at` DATETIME NULL,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_contact_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================================
 -- END OF SCHEMA
