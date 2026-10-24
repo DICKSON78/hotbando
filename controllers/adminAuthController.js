@@ -73,15 +73,23 @@ class AdminAuthController {
                 login_time: new Date()
             };
 
-            if (user.role === 'super_admin') {
-                await new Promise((resolve, reject) => {
-                    req.session.regenerate((err) => {
-                        if (err) reject(err);
-                        else resolve();
-                    });
+            // Regenerate session ID to prevent session fixation
+            await new Promise((resolve, reject) => {
+                req.session.regenerate((err) => {
+                    if (err) reject(err);
+                    else resolve();
                 });
-                const { password: _pw, ...safeAdmin } = sessionData;
+            });
+
+            const { password: _pw, ...safeAdmin } = sessionData;
+
+            if (user.role === 'super_admin') {
                 req.session.admin_user = safeAdmin;
+                req.session.sponsor_user = null;
+                req.session.bank_user = null;
+                req.session.franchise_user = null;
+                req.session.reseller_user = null;
+                req.session.investor_user = null;
                 logger.info('Super admin logged in', { user: user.name, email: user.email });
                 if (isDefaultPassword) {
                     return res.redirect('/admin/change-password');
@@ -89,14 +97,12 @@ class AdminAuthController {
                 return res.redirect('/admin/dashboard');
                 
             } else if (user.role === 'admin') {
-                await new Promise((resolve, reject) => {
-                    req.session.regenerate((err) => {
-                        if (err) reject(err);
-                        else resolve();
-                    });
-                });
-                const { password: _pw, ...safeAdmin } = sessionData;
                 req.session.admin_user = safeAdmin;
+                req.session.sponsor_user = null;
+                req.session.bank_user = null;
+                req.session.franchise_user = null;
+                req.session.reseller_user = null;
+                req.session.investor_user = null;
                 logger.info('Admin logged in', { user: user.name, email: user.email });
                 if (isDefaultPassword) {
                     return res.redirect('/admin/change-password');
@@ -104,16 +110,50 @@ class AdminAuthController {
                 return res.redirect('/admin/dashboard');
                 
             } else if (user.role === 'sponsor') {
-                await new Promise((resolve, reject) => {
-                    req.session.regenerate((err) => {
-                        if (err) reject(err);
-                        else resolve();
-                    });
-                });
-                const { password: _pw, ...safeAdmin } = sessionData;
                 req.session.sponsor_user = safeAdmin;
+                req.session.admin_user = null;
+                req.session.bank_user = null;
+                req.session.franchise_user = null;
+                req.session.reseller_user = null;
+                req.session.investor_user = null;
                 logger.info('Sponsor logged in', { user: user.name, email: user.email });
                 return res.redirect('/sponsor/dashboard');
+            } else if (user.role === 'bank_partner') {
+                req.session.bank_user = safeAdmin;
+                req.session.admin_user = null;
+                req.session.sponsor_user = null;
+                req.session.franchise_user = null;
+                req.session.reseller_user = null;
+                req.session.investor_user = null;
+                logger.info('Bank partner logged in', { user: user.name, email: user.email });
+                return res.redirect('/bank/dashboard');
+            } else if (user.role === 'franchise_owner') {
+                req.session.franchise_user = safeAdmin;
+                req.session.admin_user = null;
+                req.session.sponsor_user = null;
+                req.session.bank_user = null;
+                req.session.reseller_user = null;
+                req.session.investor_user = null;
+                logger.info('Franchise owner logged in', { user: user.name, email: user.email });
+                return res.redirect('/franchise/dashboard');
+            } else if (user.role === 'reseller') {
+                req.session.reseller_user = safeAdmin;
+                req.session.admin_user = null;
+                req.session.sponsor_user = null;
+                req.session.bank_user = null;
+                req.session.franchise_user = null;
+                req.session.investor_user = null;
+                logger.info('Reseller logged in', { user: user.name, email: user.email });
+                return res.redirect('/reseller/dashboard');
+            } else if (user.role === 'investor') {
+                req.session.investor_user = safeAdmin;
+                req.session.admin_user = null;
+                req.session.sponsor_user = null;
+                req.session.bank_user = null;
+                req.session.franchise_user = null;
+                req.session.reseller_user = null;
+                logger.info('Investor logged in', { user: user.name, email: user.email });
+                return res.redirect('/investor/dashboard');
             }
             
         } catch (error) {

@@ -291,15 +291,27 @@ app.post('/api/login',
             });
         });
         // Set role-specific session key (exactly one per login)
+        req.session.admin_user = null;
+        req.session.sponsor_user = null;
+        req.session.bank_user = null;
+        req.session.franchise_user = null;
+        req.session.reseller_user = null;
+        req.session.investor_user = null;
         if (user.role === 'admin' || user.role === 'super_admin') req.session.admin_user = sessionData;
         else if (user.role === 'sponsor') req.session.sponsor_user = sessionData;
         else if (user.role === 'bank_partner') req.session.bank_user = sessionData;
         else if (user.role === 'franchise_owner') req.session.franchise_user = sessionData;
         else if (user.role === 'reseller') req.session.reseller_user = sessionData;
         else if (user.role === 'investor') req.session.investor_user = sessionData;
-        res.json({
-            user: { id: user.id, name: user.name, email: user.email, role: user.role, phone_number: user.phone_number, location: user.location },
-            redirect: DASHBOARD_ROUTES[user.role] || '/login'
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err.message);
+                return res.status(500).json({ error: 'Session error. Please try again.' });
+            }
+            res.json({
+                user: { id: user.id, name: user.name, email: user.email, role: user.role, phone_number: user.phone_number, location: user.location },
+                redirect: DASHBOARD_ROUTES[user.role] || '/login'
+            });
         });
     } catch (err) {
         console.error('API login error:', err.message);
