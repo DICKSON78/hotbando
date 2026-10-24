@@ -10,6 +10,7 @@ const { adminAuth } = require('../middleware/authMiddleware');
 // Public routes (no authentication required)
 router.post('/partner-application', publicController.submitPartnerApplication);
 router.post('/contact-message', publicController.submitContactMessage);
+router.get('/stats', publicController.getPublicStats);
 
 // Admin routes (require authentication)
 router.get('/partner-applications', adminAuth, publicController.getPartnerApplications);

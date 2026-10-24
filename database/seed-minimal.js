@@ -5,7 +5,7 @@ require('dotenv').config();
 async function seed() {
     console.log('Seeding minimal test data...\n');
 
-    const hash = await bcrypt.hash(process.env.SEED_PASSWORD || 'password123', 10);
+    const hash = await bcrypt.hash(process.env.SEED_PASSWORD || 'password123', 12);
 
     // 1. Users
     const users = [

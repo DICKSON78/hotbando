@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-6">
-    <h1 class="text-2xl font-bold text-gray-800">Withdraw Funds</h1>
+    <h1 class="text-2xl font-bold text-white">Withdraw Funds</h1>
 
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
+    <div class="bg-[#111118] rounded-2xl border border-[#1e1e2a] p-5 shadow-sm">
       <div class="mb-6">
         <p class="metric-label">Available Balance</p>
         <p class="metric-value">TSH {{ (earnings?.wallet?.balance || 0).toLocaleString() }}</p>
@@ -17,8 +17,8 @@
           <label class="input-label">Phone Number (M-Pesa)</label>
           <input v-model="phone" type="tel" required class="input" placeholder="0755123456">
         </div>
-        <p v-if="error" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{{ error }}</p>
-        <p v-if="success" class="text-green-600 text-sm bg-green-50 p-3 rounded-lg">{{ success }}</p>
+        <p v-if="error" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
+        <p v-if="success" class="text-green-400 text-sm bg-green-500/10 p-3 rounded-lg">{{ success }}</p>
         <button type="submit" :disabled="submitting" class="btn btn-primary w-full justify-center py-2.5">
           {{ submitting ? 'Processing...' : 'Submit Withdrawal Request' }}
         </button>

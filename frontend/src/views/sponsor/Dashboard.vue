@@ -1,41 +1,58 @@
 <template>
-  <div class="space-y-5">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
+  <div class="space-y-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="stat-card">
         <div class="flex items-center justify-between">
-          <div><p class="metric-label">Active Campaigns</p><p class="metric-value">{{ activeCount }}</p></div>
-          <div class="metric-icon bg-emerald-100 text-emerald-600"><i class="fas fa-play"></i></div>
+          <div>
+            <p class="stat-label">Active Campaigns</p>
+            <p class="stat-value">{{ activeCount }}</p>
+          </div>
+          <div class="stat-icon" style="background: rgba(16,185,129,0.1); color: #34d399"><i class="fas fa-play"></i></div>
         </div>
       </div>
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
+      <div class="stat-card">
         <div class="flex items-center justify-between">
-          <div><p class="metric-label">Total Campaigns</p><p class="metric-value">{{ campaigns.length }}</p></div>
-          <div class="metric-icon bg-blue-100 text-blue-600"><i class="fas fa-ad"></i></div>
+          <div>
+            <p class="stat-label">Total Campaigns</p>
+            <p class="stat-value">{{ campaigns.length }}</p>
+          </div>
+          <div class="stat-icon" style="background: rgba(59,130,246,0.1); color: #60a5fa"><i class="fas fa-ad"></i></div>
         </div>
       </div>
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
+      <div class="stat-card">
         <div class="flex items-center justify-between">
-          <div><p class="metric-label">Wallet Balance</p><p class="metric-value">{{ formatMoney(wallet.balance) }}</p></div>
-          <div class="metric-icon bg-brand-100 text-brand-600"><i class="fas fa-wallet"></i></div>
+          <div>
+            <p class="stat-label">Wallet Balance</p>
+            <p class="stat-value">{{ formatMoney(wallet.balance) }}</p>
+          </div>
+          <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-wallet"></i></div>
         </div>
       </div>
     </div>
 
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-brand-100 flex items-center justify-between">
-        <h3 class="section-title"><i class="fas fa-ad section-icon text-brand-500"></i> My Campaigns</h3>
-        <router-link to="/sponsor/campaigns/create" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New</router-link>
+    <div class="section-card">
+      <div class="section-header">
+        <h3 class="section-title"><i class="fas fa-ad" style="color: #FF7A30"></i> My Campaigns</h3>
+        <router-link to="/sponsor/campaigns/create" class="btn btn-primary btn-sm">
+          <i class="fas fa-plus"></i> New
+        </router-link>
       </div>
-      <div class="p-5">
-        <table class="tbl-shadcn">
-          <thead><tr><th>Title</th><th>Status</th><th>Views</th></tr></thead>
+      <div class="overflow-x-auto">
+        <table class="re-table">
+          <thead>
+            <tr><th>Title</th><th>Status</th><th>Views</th></tr>
+          </thead>
           <tbody>
             <tr v-for="c in campaigns" :key="c.id">
-              <td class="font-medium text-gray-800">{{ c.campaign_name }}</td>
-              <td><span class="badge" :class="statusClass(campaignStatus(c))">{{ campaignStatus(c) }}</span></td>
+              <td class="font-medium text-white">{{ c.campaign_name }}</td>
+              <td>
+                <span class="badge" :class="statusClass(campaignStatus(c))">{{ campaignStatus(c) }}</span>
+              </td>
               <td>{{ c.views || 0 }}</td>
             </tr>
-            <tr v-if="!campaigns.length"><td colspan="3" class="text-center text-gray-400 py-10">No campaigns yet</td></tr>
+            <tr v-if="!campaigns.length">
+              <td colspan="3" class="text-center text-white/30 py-10">No campaigns yet</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -51,7 +68,7 @@ const campaigns = ref([])
 const wallet = ref({})
 function formatMoney(n) { return 'TSh ' + (Number(n || 0).toLocaleString()) }
 function statusClass(s) {
-  return s === 'active' ? 'badge-success' : s === 'pending' ? 'badge-warning' : 'badge-danger'
+  return s === 'active' ? 'badge-green' : s === 'pending' ? 'badge-yellow' : 'badge-red'
 }
 function campaignStatus(c) {
   if (c.is_active === 1 || c.is_active === true) return 'active'

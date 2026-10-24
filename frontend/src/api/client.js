@@ -24,6 +24,17 @@ const direct = axios.create({
   timeout: 15000
 })
 
+direct.interceptors.response.use(
+  r => r,
+  err => {
+    const p = window.location.pathname
+    if (err.response?.status === 401 && !p.startsWith('/login') && !p.startsWith('/hotspot')) {
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
 export function adminGet(url) {
   return api.get(`/admin${url}`).then(r => r.data)
 }
@@ -45,7 +56,7 @@ export function hotspotGet(url, config) {
 }
 
 export function hotspotPost(url, data, config) {
-  return direct.post(`/hotspot${url}`, data, config).then(r => r.data)
+  return api.post(`/hotspot${url}`, data, config).then(r => r.data)
 }
 
 // For admin login (form POST to /admin/login, not /api/admin/login)

@@ -1,363 +1,356 @@
 /**
- * WireGuard Service for HotBando
- * Handles key generation, config generation, and peer management
+ * WireGuard Service — Self-contained (no external VPS dependency)
+ * The HotBando server itself is the WireGuard hub.
+ * MikroTik routers connect as peers over the public internet.
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const db = require('../config/database');
+const logger = require('./logger');
+
+const WG_INTERFACE = process.env.WG_INTERFACE || 'wg0';
+const WG_PORT = parseInt(process.env.WG_PORT) || 51820;
+const WG_NETWORK = process.env.WG_NETWORK || '10.7.0.0/16';
+const WG_SERVER_IP = process.env.WG_SERVER_IP || '10.7.0.1';
+// Public uplink iface for NAT masquerade (GCP=ens4, DigitalOcean=eth0)
+const WG_PUBLIC_IFACE = process.env.WG_PUBLIC_IFACE || 'ens4';
+
+// Container paths: use shared volume for host-side WG management
+// /host-wireguard maps to /etc/wireguard on the host
+const WG_HOST_DIR = fs.existsSync('/host-wireguard') ? '/host-wireguard' : '/etc/wireguard';
+const WG_KEYS_DIR = path.join(WG_HOST_DIR, 'hotbando-keys');
+const SERVER_PUBLIC_KEY_FILE = path.join(WG_KEYS_DIR, 'server.key.pub');
+const SERVER_PRIVATE_KEY_FILE = path.join(WG_KEYS_DIR, 'server.key');
+const WG_CONF = path.join(WG_HOST_DIR, `${WG_INTERFACE}.conf`);
 
 class WireGuardService {
-  constructor() {
-    // VPS Server Configuration
-    this.vpsConfig = {
-      publicIp: process.env.WG_VPS_IP || '196.192.xxx.xxx',
-      listenPort: parseInt(process.env.WG_PORT) || 51820,
-      networkCidr: '10.7.0.0/24',
-      serverIp: '10.7.0.1',
-      interfaceName: 'wg0'
-    };
-  }
-
-  /**
-   * Generate WireGuard keypair using Node.js crypto
-   * Returns { privateKey, publicKey }
-   */
-  generateKeyPair() {
-    // Generate X25519 keypair (Curve25519)
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('x25519', {
-      publicKeyEncoding: { type: 'spki', format: 'der' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'der' }
-    });
-
-    // Extract raw keys (last 32 bytes of DER encoding)
-    const rawPrivate = privateKey.slice(-32);
-    const rawPublic = publicKey.slice(-32);
-
-    return {
-      privateKey: rawPrivate.toString('base64'),
-      publicKey: rawPublic.toString('base64')
-    };
-  }
-
-  /**
-   * Generate preshared key for additional security
-   */
-  generatePresharedKey() {
-    return crypto.randomBytes(32).toString('base64');
-  }
-
-  /**
-   * Get next available IP in the WireGuard network
-   */
-  async getNextAvailableIp() {
-    try {
-      // Get all assigned IPs
-      const [rows] = await db.execute(`
-        SELECT wireguard_ip FROM mikrotiks
-        WHERE wireguard_ip IS NOT NULL
-        ORDER BY wireguard_ip
-      `);
-
-      const usedIps = rows.map(r => r.wireguard_ip);
-
-      // Find next available IP (starting from 10.7.0.2, as .1 is server)
-      for (let i = 2; i <= 254; i++) {
-        const ip = `10.7.0.${i}`;
-        if (!usedIps.includes(ip)) {
-          return ip;
-        }
-      }
-
-      throw new Error('No available IP addresses in WireGuard network');
-    } catch (error) {
-      console.error('Error getting next IP:', error);
-      // Default to .2 if table doesn't have wireguard_ip column
-      return '10.7.0.2';
+    constructor() {
+        this.serverPublicIp = process.env.SERVER_PUBLIC_IP || '34.35.81.196';
+        this.listenPort = WG_PORT;
+        this.networkCidr = WG_NETWORK;
+        this.serverIp = WG_SERVER_IP;
+        this.interfaceName = WG_INTERFACE;
     }
-  }
 
-  /**
-   * Generate VPS server configuration
-   */
-  generateServerConfig(peers = []) {
-    let config = `# WireGuard Server Configuration - HotBando VPS
-# Auto-generated: ${new Date().toISOString()}
+    // ── Key generation (X25519 via Node.js crypto) ──
+
+    generateKeyPair() {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('x25519', {
+            publicKeyEncoding: { type: 'spki', format: 'der' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'der' }
+        });
+        return {
+            privateKey: privateKey.slice(-32).toString('base64'),
+            publicKey: publicKey.slice(-32).toString('base64')
+        };
+    }
+
+    generatePresharedKey() {
+        return crypto.randomBytes(32).toString('base64');
+    }
+
+    // ── Server key management (persisted on disk) ──
+
+    ensureServerKeys() {
+        try {
+            if (!fs.existsSync(WG_KEYS_DIR)) {
+                fs.mkdirSync(WG_KEYS_DIR, { recursive: true, mode: 0o700 });
+            }
+
+            if (fs.existsSync(SERVER_PUBLIC_KEY_FILE) && fs.existsSync(SERVER_PRIVATE_KEY_FILE)) {
+                const pub = fs.readFileSync(SERVER_PUBLIC_KEY_FILE, 'utf8').trim();
+                const priv = fs.readFileSync(SERVER_PRIVATE_KEY_FILE, 'utf8').trim();
+                return { publicKey: pub, privateKey: priv };
+            }
+
+            const keys = this.generateKeyPair();
+            fs.writeFileSync(SERVER_PRIVATE_KEY_FILE, keys.privateKey, { mode: 0o600 });
+            fs.writeFileSync(SERVER_PUBLIC_KEY_FILE, keys.publicKey, { mode: 0o644 });
+            logger.info('WireGuard server keys generated');
+            return keys;
+        } catch (error) {
+            logger.error('Failed to generate server keys:', error.message);
+            throw error;
+        }
+    }
+
+    // ── Next available IP ──
+
+    async getNextAvailableIp() {
+        try {
+            const [rows] = await db.execute(`
+                SELECT wireguard_ip FROM mikrotiks
+                WHERE wireguard_ip IS NOT NULL AND wireguard_ip != ''
+                ORDER BY wireguard_ip
+            `);
+            const usedIps = new Set(rows.map(r => r.wireguard_ip));
+
+            // Scan the full /16 (10.7.0.2 .. 10.7.255.254) for scale
+            for (let b = 0; b <= 255; b++) {
+                for (let i = (b === 0 ? 2 : 1); i <= 254; i++) {
+                    const ip = `10.7.${b}.${i}`;
+                    if (!usedIps.has(ip)) return ip;
+                }
+            }
+            throw new Error('No available IPs in WireGuard network');
+        } catch (error) {
+            if (error.message.includes('No available')) throw error;
+            return '10.7.0.2';
+        }
+    }
+
+    // ── Server configuration ──
+
+    async ensureServerConfig() {
+        const keys = this.ensureServerKeys();
+        const serverKey = keys.privateKey;
+
+        // Get existing peers from DB
+        let peers = [];
+        try {
+            const [rows] = await db.execute(`
+                SELECT router_id, router_name, wireguard_ip, wireguard_public_key, wireguard_preshared_key
+                FROM mikrotiks
+                WHERE wireguard_configured = 1 AND wireguard_ip IS NOT NULL AND wireguard_public_key IS NOT NULL
+            `);
+            peers = rows;
+        } catch (e) {
+            // Column may not exist
+        }
+
+        let config = `# HotBando WireGuard Server — Auto-generated
+# Do NOT edit manually; managed by the system
 
 [Interface]
-Address = ${this.vpsConfig.serverIp}/24
-ListenPort = ${this.vpsConfig.listenPort}
-PrivateKey = <SERVER_PRIVATE_KEY>
+Address = ${this.serverIp}/${this.networkCidr.split('/')[1]}
+ListenPort = ${this.listenPort}
+PrivateKey = ${serverKey}
 
-# Enable IP forwarding
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-
+# IP forwarding & NAT
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${WG_PUBLIC_IFACE} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${WG_PUBLIC_IFACE} -j MASQUERADE
 `;
 
-    // Add peers
-    peers.forEach(peer => {
-      config += `
-# ${peer.name || peer.routerId}
+        for (const peer of peers) {
+            config += `
+# ${peer.router_name || peer.router_id}
 [Peer]
-PublicKey = ${peer.publicKey}
-AllowedIPs = ${peer.allowedIp}/32
-${peer.presharedKey ? `PresharedKey = ${peer.presharedKey}` : ''}
+PublicKey = ${peer.wireguard_public_key}
+AllowedIPs = ${peer.wireguard_ip}/32
+${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}` : ''}
 `;
-    });
+        }
 
-    return config;
-  }
+        fs.writeFileSync(WG_CONF, config, { mode: 0o600 });
+        return config;
+    }
 
-  /**
-   * Generate MikroTik router configuration commands
-   */
-  generateMikroTikConfig(options) {
-    const {
-      routerName,
-      routerId,
-      assignedIp,
-      privateKey,
-      publicKey,
-      serverPublicKey,
-      serverEndpoint
-    } = options;
+    // ── Apply server config (writes file + signals host watcher) ──
 
-    const commands = `
-###############################################
-# WireGuard Configuration for MikroTik Router
-# Router: ${routerName} (${routerId})
-# Assigned IP: ${assignedIp}
+    async applyServerConfig() {
+        await this.ensureServerConfig();
+
+        try {
+            // Signal the host-side watcher to apply the config
+            const triggerFile = path.join(WG_HOST_DIR, '.wg-apply');
+            fs.writeFileSync(triggerFile, Date.now().toString(), { mode: 0o644 });
+            logger.info('WireGuard apply triggered (config written to ' + WG_CONF + ')');
+
+            // Wait a few seconds for the watcher to apply
+            await new Promise(resolve => setTimeout(resolve, 4000));
+
+            // Check status
+            const status = await this.getServerStatus();
+            return {
+                success: true,
+                message: status.running
+                    ? 'WireGuard server configured and running'
+                    : 'Config written — watcher will apply shortly',
+                status
+            };
+        } catch (error) {
+            logger.error('Failed to apply WireGuard config:', error.message);
+            return { success: false, message: error.message };
+        }
+    }
+
+    // ── Add a peer to the server (rebuilds config + triggers watcher) ──
+
+    async addPeerToServer(routerId, routerPublicKey, routerIp) {
+        try {
+            // Rebuild config file (includes all peers) and trigger watcher
+            await this.ensureServerConfig();
+            const triggerFile = path.join(WG_HOST_DIR, '.wg-apply');
+            fs.writeFileSync(triggerFile, Date.now().toString(), { mode: 0o644 });
+            return { success: true };
+        } catch (error) {
+            return { success: false, message: error.message };
+        }
+    }
+
+    // ── Remove a peer (rebuilds config + triggers watcher) ──
+
+    async removePeerFromServer(routerPublicKey) {
+        try {
+            await this.ensureServerConfig();
+            const triggerFile = path.join(WG_HOST_DIR, '.wg-apply');
+            fs.writeFileSync(triggerFile, Date.now().toString(), { mode: 0o644 });
+            return { success: true };
+        } catch (error) {
+            return { success: false, message: error.message };
+        }
+    }
+
+    // ── Get WireGuard status (runs on host via shared volume + status file) ──
+
+    async getServerStatus() {
+        const base = {
+            running: false,
+            interface: this.interfaceName,
+            listenPort: this.listenPort,
+            serverIp: this.serverIp,
+            serverPublicIp: this.serverPublicIp,
+            network: this.networkCidr
+        };
+        // Host watcher status (written by /usr/local/bin/hotbando-wg-apply)
+        const statusResult = path.join(WG_HOST_DIR, '.wg-status-result');
+
+        try {
+            if (fs.existsSync(statusResult)) {
+                const data = JSON.parse(fs.readFileSync(statusResult, 'utf8'));
+                return { ...base, ...data };
+            }
+        } catch (e) { /* fall through */ }
+
+        // Fallback: check if config file exists and parse peers from DB
+        let configExists = false;
+        try { configExists = fs.existsSync(WG_CONF); } catch (e) {}
+
+        const peers = [];
+        try {
+            const [rows] = await db.execute(`
+                SELECT router_id, router_name, wireguard_ip, wireguard_public_key, status, last_seen
+                FROM mikrotiks WHERE wireguard_configured = 1 AND wireguard_ip IS NOT NULL
+            `);
+            rows.forEach(r => {
+                peers.push({
+                    routerId: r.router_id, name: r.router_name,
+                    wgIp: r.wireguard_ip, publicKey: r.wireguard_public_key,
+                    status: r.status, lastSeen: r.last_seen
+                });
+            });
+        } catch (e) { /* columns may not exist */ }
+
+        return {
+            running: configExists,
+            interface: this.interfaceName,
+            listenPort: this.listenPort,
+            serverIp: this.serverIp,
+            serverPublicIp: this.serverPublicIp,
+            network: this.networkCidr,
+            peers
+        };
+    }
+
+    // ── Generate MikroTik WireGuard config commands ──
+
+    generateMikroTikConfig(options) {
+        const { routerName, assignedIp, privateKey, publicKey, serverPublicKey, serverEndpoint } = options;
+
+        return `
+# WireGuard Configuration — ${routerName}
 # Generated: ${new Date().toISOString()}
-###############################################
 
-# Step 1: Create WireGuard interface
-/interface wireguard add name=wg-hotbando listen-port=${this.vpsConfig.listenPort} private-key="${privateKey}"
+# 1. Create WireGuard interface
+/interface wireguard add name=wg-hotbando listen-port=13231 private-key="${privateKey}"
 
-# Step 2: Add peer (VPS Server)
+# 2. Add server as peer
 /interface wireguard peers add \\
     interface=wg-hotbando \\
     public-key="${serverPublicKey}" \\
-    endpoint-address=${serverEndpoint || this.vpsConfig.publicIp} \\
-    endpoint-port=${this.vpsConfig.listenPort} \\
-    allowed-address=${this.vpsConfig.networkCidr} \\
+    endpoint-address=${serverEndpoint} \\
+    endpoint-port=${this.listenPort} \\
+    allowed-address=${this.serverIp}/32 \\
     persistent-keepalive=25s
 
-# Step 3: Assign IP address to WireGuard interface
-/ip address add address=${assignedIp}/24 interface=wg-hotbando network=10.7.0.0
+# 3. Assign IP
+/ip address add address=${assignedIp}/32 interface=wg-hotbando
 
-# Step 4: Add route to WireGuard network (if not auto-added)
-/ip route add dst-address=${this.vpsConfig.networkCidr} gateway=wg-hotbando
+# 4. Route to server network
+/ip route add dst-address=${this.serverIp}/32 gateway=wg-hotbando
 
-# Step 5: Configure firewall to allow WireGuard traffic
-/ip firewall filter add chain=input protocol=udp dst-port=${this.vpsConfig.listenPort} action=accept comment="WireGuard"
-/ip firewall filter add chain=forward in-interface=wg-hotbando action=accept comment="WireGuard Forward In"
-/ip firewall filter add chain=forward out-interface=wg-hotbando action=accept comment="WireGuard Forward Out"
+# 5. Firewall: allow WG traffic
+/ip firewall filter add chain=input protocol=udp dst-port=13231 action=accept comment="WireGuard Input"
+/ip firewall filter add chain=forward in-interface=wg-hotbando action=accept comment="WireGuard Fwd In"
+/ip firewall filter add chain=forward out-interface=wg-hotbando action=accept comment="WireGuard Fwd Out"
 
-# Step 6: NAT for WireGuard traffic (optional - for internet access via VPS)
-# /ip firewall nat add chain=srcnat out-interface=wg-hotbando action=masquerade
-
-# Step 7: Enable API access via WireGuard (secure remote management)
-/ip service set api address=10.7.0.0/24
-/ip service set api-ssl address=10.7.0.0/24
-
-# Step 8: Verify connection
-# After running these commands, verify with:
-# /interface wireguard print
-# /interface wireguard peers print
-# /ping ${this.vpsConfig.serverIp}
-
-###############################################
-# Router Public Key (add this to VPS server):
-# ${publicKey}
-###############################################
+# 6. Restrict API access to WG network
+/ip service set api address=${this.networkCidr}
 `;
+    }
 
-    return commands;
-  }
+    // ── Database persistence ──
 
-  /**
-   * Generate configuration for a router and save to database
-   */
-  async generateRouterConfig(routerId) {
-    try {
-      // Get router info
-      const [routers] = await db.execute(
-        'SELECT * FROM mikrotiks WHERE router_id = ?',
-        [routerId]
-      );
-
-      if (routers.length === 0) {
-        throw new Error('Router not found');
-      }
-
-      const router = routers[0];
-
-      // Generate keys
-      const keys = this.generateKeyPair();
-      const presharedKey = this.generatePresharedKey();
-
-      // Get next available IP
-      const assignedIp = await this.getNextAvailableIp();
-
-      // Get server public key from settings (or use placeholder)
-      const [settings] = await db.execute(
-        "SELECT setting_value FROM system_settings WHERE setting_key = 'wireguard_server_public_key'"
-      );
-      const serverPublicKey = settings[0]?.setting_value || '<VPS_SERVER_PUBLIC_KEY>';
-
-      // Generate MikroTik commands
-      const mikrotikCommands = this.generateMikroTikConfig({
-        routerName: router.router_name,
-        routerId: router.router_id,
-        assignedIp,
-        privateKey: keys.privateKey,
-        publicKey: keys.publicKey,
-        serverPublicKey,
-        serverEndpoint: this.vpsConfig.publicIp
-      });
-
-      // Save WireGuard config to router (try, but don't fail if columns don't exist)
-      try {
-        await db.execute(`
-          UPDATE mikrotiks SET
-            wireguard_ip = ?,
-            wireguard_public_key = ?,
-            wireguard_private_key = ?,
-            wireguard_preshared_key = ?,
-            wireguard_configured = 1,
-            updated_at = NOW()
-          WHERE router_id = ?
-        `, [assignedIp, keys.publicKey, keys.privateKey, presharedKey, routerId]);
-      } catch (dbError) {
-        console.log('WireGuard columns may not exist, skipping DB update');
-      }
-
-      return {
-        success: true,
-        router: {
-          id: router.id,
-          routerId: router.router_id,
-          name: router.router_name
-        },
-        wireguard: {
-          assignedIp,
-          publicKey: keys.publicKey,
-          privateKey: keys.privateKey,
-          presharedKey
-        },
-        mikrotikCommands,
-        serverInfo: {
-          publicIp: this.vpsConfig.publicIp,
-          port: this.vpsConfig.listenPort,
-          network: this.vpsConfig.networkCidr
+    async saveRouterWireGuard(routerId, assignedIp, publicKey, privateKey, presharedKey) {
+        try {
+            await db.execute(`
+                UPDATE mikrotiks SET
+                    wireguard_ip = ?,
+                    wireguard_public_key = ?,
+                    wireguard_private_key = ?,
+                    wireguard_preshared_key = ?,
+                    wireguard_configured = 1,
+                    updated_at = NOW()
+                WHERE router_id = ?
+            `, [assignedIp, publicKey, privateKey, presharedKey, routerId]);
+        } catch (e) {
+            logger.warn('Could not save WireGuard info to DB (columns may not exist): ' + e.message);
         }
-      };
-    } catch (error) {
-      console.error('Error generating router config:', error);
-      return {
-        success: false,
-        error: error.message
-      };
     }
-  }
 
-  /**
-   * Get all WireGuard peers (routers with WireGuard configured)
-   */
-  async getWireGuardPeers() {
-    try {
-      const [peers] = await db.execute(`
-        SELECT
-          router_id,
-          router_name,
-          wireguard_ip,
-          wireguard_public_key,
-          status,
-          last_seen
-        FROM mikrotiks
-        WHERE wireguard_configured = 1 OR wireguard_ip IS NOT NULL
-        ORDER BY wireguard_ip
-      `);
-
-      return {
-        success: true,
-        peers: peers.map(p => ({
-          routerId: p.router_id,
-          name: p.router_name,
-          wgIp: p.wireguard_ip,
-          publicKey: p.wireguard_public_key,
-          status: p.status,
-          lastSeen: p.last_seen
-        }))
-      };
-    } catch (error) {
-      // If columns don't exist, return empty
-      return { success: true, peers: [] };
+    async getWireGuardPeers() {
+        try {
+            const [peers] = await db.execute(`
+                SELECT router_id, router_name, wireguard_ip, wireguard_public_key, status, last_seen
+                FROM mikrotiks
+                WHERE wireguard_configured = 1 OR wireguard_ip IS NOT NULL
+                ORDER BY wireguard_ip
+            `);
+            return {
+                success: true,
+                peers: peers.map(p => ({
+                    routerId: p.router_id,
+                    name: p.router_name,
+                    wgIp: p.wireguard_ip,
+                    publicKey: p.wireguard_public_key,
+                    status: p.status,
+                    lastSeen: p.last_seen
+                }))
+            };
+        } catch (error) {
+            return { success: true, peers: [] };
+        }
     }
-  }
 
-  /**
-   * Generate peer addition command for VPS server
-   */
-  generateAddPeerCommand(publicKey, allowedIp, routerName) {
-    return `# Add peer: ${routerName}
-wg set wg0 peer ${publicKey} allowed-ips ${allowedIp}/32
+    // ── Legacy helpers (kept for backward compat) ──
 
-# Or add to /etc/wireguard/wg0.conf:
-# [Peer]
-# # ${routerName}
-# PublicKey = ${publicKey}
-# AllowedIPs = ${allowedIp}/32`;
-  }
+    generateServerConfig(peers = []) {
+        let config = `# HotBando WireGuard Server\n[Interface]\nAddress = ${this.serverIp}/24\nListenPort = ${this.listenPort}\nPrivateKey = <SERVER_PRIVATE_KEY>\n`;
+        peers.forEach(peer => {
+            config += `\n[Peer]\nPublicKey = ${peer.publicKey}\nAllowedIPs = ${peer.allowedIp}/32\n`;
+        });
+        return config;
+    }
 
-  /**
-   * VPS Setup guide
-   */
-  getVpsSetupGuide() {
-    return `
-###############################################
-# WireGuard VPS Server Setup Guide
-# HotBando Central Server
-###############################################
-
-# 1. Install WireGuard
-apt update && apt install -y wireguard
-
-# 2. Generate server keys
-wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
-chmod 600 /etc/wireguard/server_private.key
-
-# 3. Create configuration file
-cat > /etc/wireguard/wg0.conf << 'EOF'
-[Interface]
-Address = ${this.vpsConfig.serverIp}/24
-ListenPort = ${this.vpsConfig.listenPort}
-PrivateKey = $(cat /etc/wireguard/server_private.key)
-
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-
-# Peers will be added below as routers are configured
-EOF
-
-# 4. Enable IP forwarding
-echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
-sysctl -p
-
-# 5. Configure firewall
-ufw allow ${this.vpsConfig.listenPort}/udp
-
-# 6. Start WireGuard
-systemctl enable wg-quick@wg0
-systemctl start wg-quick@wg0
-
-# 7. Verify
-wg show
-
-# 8. Get server public key (save this for MikroTik routers)
-cat /etc/wireguard/server_public.key
-`;
-  }
+    getVpsSetupGuide() {
+        return `# This server IS the WireGuard hub. No external VPS needed.
+# WireGuard is managed automatically by the system.
+# Server public IP: ${this.serverPublicIp}
+# WireGuard port: ${this.listenPort}
+# Network: ${this.networkCidr}`;
+    }
 }
 
 module.exports = new WireGuardService();

@@ -1,17 +1,9 @@
-const CACHE = 'hotbando-v2';
-const ASSETS = [
-    '/hotspot/',
-    '/hotspot/login',
-    '/hotspot/signup',
-    '/hotspot/dashboard',
-    '/hotspot/subscribe',
-    '/hotspot/ads',
-];
+const CACHE = 'hotbando-v6';
 
 self.addEventListener('install', (e) => {
     self.skipWaiting();
     e.waitUntil(
-        caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
+        caches.open(CACHE).then((cache) => cache.addAll(['/hotspot/', '/logo.png'])).catch(() => {})
     );
 });
 
@@ -25,20 +17,38 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-    if (e.request.url.includes('/hotspot/') || e.request.url.includes('/assets/')) {
+    const url = new URL(e.request.url);
+    if (url.origin !== self.location.origin) return;
+
+    // App shell (navigations) — network-first so new releases show immediately.
+    if (url.pathname.startsWith('/hotspot/')) {
         e.respondWith(
-            caches.match(e.request).then((cached) => {
-                const fetchPromise = fetch(e.request)
-                    .then((res) => {
-                        if (res.ok) {
-                            const copy = res.clone();
-                            caches.open(CACHE).then((cache) => cache.put(e.request, copy));
-                        }
-                        return res;
-                    })
-                    .catch(() => cached);
-                return cached || fetchPromise;
-            })
+            fetch(e.request)
+                .then((res) => {
+                    if (res.ok) {
+                        const copy = res.clone();
+                        caches.open(CACHE).then((cache) => cache.put(e.request, copy));
+                    }
+                    return res;
+                })
+                .catch(() => caches.match(e.request))
+        );
+        return;
+    }
+
+    // Hashed build assets are immutable — cache-first with background refresh.
+    if (url.pathname.startsWith('/assets/')) {
+        e.respondWith(
+            caches.match(e.request).then((cached) =>
+                cached ||
+                fetch(e.request).then((res) => {
+                    if (res.ok) {
+                        const copy = res.clone();
+                        caches.open(CACHE).then((cache) => cache.put(e.request, copy));
+                    }
+                    return res;
+                })
+            )
         );
     }
 });
@@ -47,8 +57,8 @@ self.addEventListener('push', (e) => {
     const data = e.data?.json() || { title: 'HotBando', body: 'Angalia data yako!' };
     self.registration.showNotification(data.title, {
         body: data.body,
-        icon: '/assets/hot-bando-logo.png',
-        badge: '/assets/hot-bando-logo.png',
+        icon: '/hot-bando-logo.png',
+        badge: '/hot-bando-logo.png',
         vibrate: [200, 100, 200],
         data: { url: data.url || '/hotspot/' },
     });

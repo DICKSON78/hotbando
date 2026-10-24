@@ -1,69 +1,79 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-brand-500 to-brand-700 p-4">
-    <div class="max-w-lg mx-auto space-y-4">
-      <div class="bg-white/10 backdrop-blur rounded-2xl p-6 text-white">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <p class="text-sm opacity-80">Welcome</p>
-            <h2 class="text-xl font-bold">{{ user?.name || 'User' }}</h2>
-          </div>
-          <button @click="logout" class="text-white/70 hover:text-white"><i class="fas fa-sign-out-alt text-xl"></i></button>
-        </div>
-        <div class="flex items-center gap-2 text-xs opacity-80">
-          <i class="fas fa-wifi"></i>
-          <span>{{ store.ssidshow || 'HotBando WiFi' }}</span>
-        </div>
+  <div class="pb-4">
+    <!-- Greeting -->
+    <div class="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <p class="text-xs text-white/50">Karibu</p>
+        <h1 class="text-xl font-bold text-white truncate">{{ user?.name || 'User' }}</h1>
+        <p class="text-sm text-white/50 truncate">{{ user?.phone_number || 'HotBando Member' }}</p>
       </div>
+      <span class="flex items-center gap-1.5 text-xs font-medium text-white/60 bg-[#111118] border border-[#1e1e2a] rounded-full px-3 py-2 flex-shrink-0">
+        <i class="fas fa-wifi text-[#FF7A30]"></i>{{ store.ssidshow || 'WiFi' }}
+      </span>
+    </div>
 
-      <div class="grid grid-cols-2 gap-3">
-        <div class="bg-white rounded-xl p-4 text-center">
-          <p class="text-2xl font-bold text-brand-500">{{ remainingTime }}</p>
-          <p class="text-xs text-gray-500">Time Remaining</p>
-        </div>
-        <div class="bg-white rounded-xl p-4 text-center">
-          <p class="text-2xl font-bold text-green-500">{{ freeMB }} MB</p>
-          <p class="text-xs text-gray-500">Free Data</p>
-        </div>
+    <!-- Balance card -->
+    <div class="mx-4 balance-card rounded-2xl p-5 text-white">
+      <div class="flex items-center justify-between">
+        <p class="text-white/80 text-xs font-medium">Time Remaining</p>
+        <i class="fas fa-wifi text-white/80"></i>
       </div>
-
-      <div class="bg-white rounded-xl p-4">
-        <div class="flex items-center justify-between mb-3">
-          <p class="text-sm font-medium text-gray-700">Watch Ads to Earn Data</p>
-          <router-link to="/hotspot/ads" class="text-xs text-brand-500 font-medium">View</router-link>
+      <p class="text-3xl font-bold mt-1">{{ remainingTime }}</p>
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-white/20 text-sm">
+        <div>
+          <p class="text-white/70 text-xs">Free Data</p>
+          <p class="font-bold">{{ freeMB }} MB</p>
         </div>
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-2xl font-bold text-purple-500">{{ adsRemaining }}</p>
-            <p class="text-xs text-gray-500">Ads remaining today</p>
-          </div>
-          <p class="text-xs text-gray-400">Watched: {{ adsWatchedToday }}</p>
+        <div class="text-right">
+          <p class="text-white/70 text-xs">Ads Left</p>
+          <p class="font-bold">{{ adsRemaining }}</p>
         </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <router-link to="/hotspot/subscribe" class="bg-white rounded-xl p-4 text-center hover:shadow-lg transition-shadow">
-          <i class="fas fa-shopping-cart text-2xl text-brand-500 mb-2"></i>
-          <p class="text-sm font-medium text-gray-700">Buy Package</p>
-        </router-link>
-        <router-link to="/hotspot/ads" class="bg-white rounded-xl p-4 text-center hover:shadow-lg transition-shadow">
-          <i class="fas fa-play-circle text-2xl text-purple-500 mb-2"></i>
-          <p class="text-sm font-medium text-gray-700">Watch Ads</p>
-        </router-link>
-      </div>
-
-      <div class="bg-white rounded-xl p-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-3 h-3 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></div>
-            <span class="text-sm text-gray-700">{{ connected ? 'Connected' : 'Disconnected' }}</span>
-          </div>
-          <button @click="toggleConnection" class="text-sm" :class="connected ? 'text-red-500' : 'text-brand-500'">
-            {{ connected ? 'Disconnect' : 'Connect' }}
-          </button>
-        </div>
-        <p v-if="connMsg" class="text-xs mt-2" :class="connError ? 'text-red-500' : 'text-green-500'">{{ connMsg }}</p>
       </div>
     </div>
+
+    <!-- Quick actions -->
+    <div class="grid grid-cols-3 gap-3 px-4 py-4">
+      <router-link to="/hotspot/subscribe" class="tile">
+        <div class="tile-icon" style="background:rgba(255,122,48,0.1);color:#FF7A30"><i class="fa-solid fa-store"></i></div>
+        <span>Buy Package</span>
+      </router-link>
+      <router-link to="/hotspot/ads" class="tile">
+        <div class="tile-icon" style="background:rgba(139,92,246,0.1);color:#8b5cf6"><i class="fa-solid fa-circle-play"></i></div>
+        <span>Watch Ads</span>
+      </router-link>
+      <button class="tile" @click="toggleConnection">
+        <div class="tile-icon" :style="connected ? 'background:rgba(34,197,94,0.1);color:#22c55e' : 'background:rgba(156,163,175,0.1);color:#9ca3af'"><i class="fa-solid fa-wifi"></i></div>
+        <span>{{ connected ? 'Connected' : 'Connect' }}</span>
+      </button>
+    </div>
+
+    <!-- Connection status -->
+    <div class="mx-4 bg-[#111118] border border-[#1e1e2a] rounded-2xl p-4">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="w-3 h-3 rounded-full flex-shrink-0" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-white">{{ connected ? 'Connected' : 'Disconnected' }}</p>
+            <p class="text-xs text-white/50 truncate">{{ store.ssidshow || 'HotBando WiFi' }}</p>
+          </div>
+        </div>
+        <button class="ig-btn flex-shrink-0" :class="connected ? 'ig-btn-outline' : 'ig-btn-primary'" @click="toggleConnection">
+          {{ connected ? 'Disconnect' : 'Connect' }}
+        </button>
+      </div>
+      <p v-if="connMsg" class="text-xs mt-2" :class="connError ? 'text-red-400' : 'text-green-400'">{{ connMsg }}</p>
+    </div>
+
+    <!-- Watched today -->
+    <div class="mx-4 mt-3 bg-[#111118] border border-[#1e1e2a] rounded-2xl p-4 flex items-center justify-between">
+      <div>
+        <p class="text-sm font-semibold text-white">Ads Watched Today</p>
+        <p class="text-xs text-white/50">Tazama matangazo kupata data bure</p>
+      </div>
+      <p class="text-2xl font-bold text-purple-500">{{ adsWatchedToday }}</p>
+    </div>
+
+    <InstallApp />
   </div>
 </template>
 
@@ -72,6 +82,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { hotspotGet, hotspotPost } from '../../api/client'
 import { useHotspotStore } from '../../stores/hotspot'
+import InstallApp from '../../components/InstallApp.vue'
 
 const router = useRouter()
 const store = useHotspotStore()
@@ -127,10 +138,5 @@ async function toggleConnection() {
     connError.value = true
     connMsg.value = 'Imeshindikana. Tafadhali jaribu tena.'
   }
-}
-
-async function logout() {
-  await store.logout()
-  router.push('/hotspot')
 }
 </script>

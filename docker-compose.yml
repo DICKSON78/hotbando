@@ -17,6 +17,8 @@ services:
       - TRUST_PROXY=true
       - DB_PORT=3306
       - DB_POOL_SIZE=50
+      #- COOKIE_SECURE=true
+      #- SESSION_SECURE=true
     depends_on:
       db:
         condition: service_healthy
@@ -25,6 +27,7 @@ services:
     volumes:
       - uploads:/app/public/uploads
       - ./logs:/app/logs
+      - ./data/host-arp.txt:/host-arp:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -42,14 +45,11 @@ services:
   db:
     image: mysql:8.0
     restart: unless-stopped
-    ports:
-      - "3307:3306"
     environment:
       MYSQL_DATABASE: hotbando
       MYSQL_USER: hotbando
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_pass}
-    # Host port removed to avoid conflict — access via Docker network
     volumes:
       - mysql_data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -70,23 +70,21 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # Host port 6380 to avoid conflict — Docker network uses redis:6379
-    ports:
-      - "6380:6379"
     volumes:
       - redis_data:/data
-    env_file:
-      - .env
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     networks:
       - hotbando-net
 
-  # FreeRADIUS for AAA (1M+ user authentication)
   freeradius:
     image: hotbando-freeradius:latest
     restart: unless-stopped
@@ -112,7 +110,25 @@ services:
     networks:
       - hotbando-net
 
-  # Automated database backup
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - nginx_certs:/etc/letsencrypt
+      - nginx_www:/var/www/certbot
+    depends_on:
+      - app
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - hotbando-net
+
   backup:
     image: mysql:8.0
     restart: unless-stopped
@@ -137,6 +153,8 @@ volumes:
   redis_data:
   uploads:
   backup_data:
+  nginx_certs:
+  nginx_www:
 
 networks:
   hotbando-net:

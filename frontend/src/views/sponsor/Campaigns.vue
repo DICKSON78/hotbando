@@ -1,23 +1,23 @@
 <template>
   <div class="space-y-5">
     <div class="flex items-center justify-between">
-      <h3 class="section-title"><i class="fas fa-ad section-icon text-brand-500"></i> My Campaigns</h3>
+      <h3 class="section-title"><i class="fas fa-ad section-icon text-[#FF7A30]"></i> My Campaigns</h3>
       <router-link to="/sponsor/campaigns/create" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Campaign</router-link>
     </div>
 
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
+    <div class="section-card rounded-2xl border border-[#1e1e2a] overflow-hidden">
       <div class="p-5">
         <table class="tbl-shadcn">
           <thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Views</th><th>Date</th></tr></thead>
           <tbody>
             <tr v-for="c in campaigns" :key="c.id">
-              <td class="font-medium text-gray-800">{{ c.campaign_name }}</td>
+              <td class="font-medium text-white">{{ c.campaign_name }}</td>
               <td>{{ c.campaign_type }}</td>
               <td><span class="badge" :class="statusClass(campaignStatus(c))">{{ campaignStatus(c) }}</span></td>
               <td>{{ c.views || 0 }}</td>
-              <td class="text-gray-400">{{ new Date(c.created_at).toLocaleDateString() }}</td>
+              <td class="text-white/40">{{ new Date(c.created_at).toLocaleDateString() }}</td>
             </tr>
-            <tr v-if="!campaigns.length"><td colspan="5" class="text-center text-gray-400 py-10">No campaigns yet. <router-link to="/sponsor/campaigns/create" class="text-brand-500 font-medium hover:underline">Create one</router-link></td></tr>
+            <tr v-if="!campaigns.length"><td colspan="5" class="text-center text-white/40 py-10">No campaigns yet. <router-link to="/sponsor/campaigns/create" class="text-[#FF7A30] font-medium hover:underline">Create one</router-link></td></tr>
           </tbody>
         </table>
       </div>

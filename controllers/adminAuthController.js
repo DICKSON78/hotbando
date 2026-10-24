@@ -74,7 +74,14 @@ class AdminAuthController {
             };
 
             if (user.role === 'super_admin') {
-                req.session.admin_user = sessionData;
+                await new Promise((resolve, reject) => {
+                    req.session.regenerate((err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+                const { password: _pw, ...safeAdmin } = sessionData;
+                req.session.admin_user = safeAdmin;
                 logger.info('Super admin logged in', { user: user.name, email: user.email });
                 if (isDefaultPassword) {
                     return res.redirect('/admin/change-password');
@@ -82,7 +89,14 @@ class AdminAuthController {
                 return res.redirect('/admin/dashboard');
                 
             } else if (user.role === 'admin') {
-                req.session.admin_user = sessionData;
+                await new Promise((resolve, reject) => {
+                    req.session.regenerate((err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+                const { password: _pw, ...safeAdmin } = sessionData;
+                req.session.admin_user = safeAdmin;
                 logger.info('Admin logged in', { user: user.name, email: user.email });
                 if (isDefaultPassword) {
                     return res.redirect('/admin/change-password');
@@ -90,7 +104,14 @@ class AdminAuthController {
                 return res.redirect('/admin/dashboard');
                 
             } else if (user.role === 'sponsor') {
-                req.session.sponsor_user = sessionData;
+                await new Promise((resolve, reject) => {
+                    req.session.regenerate((err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+                const { password: _pw, ...safeAdmin } = sessionData;
+                req.session.sponsor_user = safeAdmin;
                 logger.info('Sponsor logged in', { user: user.name, email: user.email });
                 return res.redirect('/sponsor/dashboard');
             }

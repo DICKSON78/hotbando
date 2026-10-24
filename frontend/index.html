@@ -34,11 +34,17 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js');
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
       });
     }
   </script>
 </head>
-<body class="bg-gray-50">
+<body style="background:#0a0a0f;margin:0;padding:0">
   <div id="app"></div>
 </body>
 </html>

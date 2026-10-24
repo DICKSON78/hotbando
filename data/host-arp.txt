@@ -1,0 +1,2 @@
+192.168.0.1 dev wlp2s0 lladdr 40:ae:30:49:7c:66 REACHABLE 
+172.18.0.2 dev br-305267bf8156 lladdr 7a:fd:fd:1a:8f:28 STALE 

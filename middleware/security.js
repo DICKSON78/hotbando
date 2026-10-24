@@ -24,7 +24,22 @@ const csrfProtection = {
             return next();
         }
 
-        const token = req.body._csrf || req.headers['x-csrf-token'];
+        // Skip CSRF for known webhook endpoints (they use signature verification)
+        const skipPaths = [
+            '/api/payments/ipn',
+            '/api/payments/callback',
+            '/api/clickpesa/webhook'
+        ];
+        if (skipPaths.some(p => req.path.startsWith(p))) {
+            return next();
+        }
+
+        // Skip CSRF for zero-touch/public provisioning endpoints if they use secret
+        if (req.path.startsWith('/api/zero-touch/')) {
+            return next();
+        }
+
+        const token = req.body._csrf || req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
         const sessionToken = req.session.csrfToken;
 
         if (!token || !sessionToken || token !== sessionToken) {
@@ -58,8 +73,9 @@ const sanitizeInput = (input) => {
  */
 const sanitizeBody = (req, res, next) => {
     if (req.body) {
+        const SENSITIVE_FIELDS = ['password', 'password_confirm', 'old_password', 'new_password', 'secret', 'api_key', 'token', 'private_key'];
         Object.keys(req.body).forEach(key => {
-            if (typeof req.body[key] === 'string') {
+            if (!SENSITIVE_FIELDS.includes(key) && typeof req.body[key] === 'string') {
                 req.body[key] = sanitizeInput(req.body[key]);
             }
         });
@@ -77,7 +93,14 @@ const rateLimit = (options = {}) => {
     const max = options.max || 100; // 100 requests per window
 
     return (req, res, next) => {
-        const identifier = req.ip || req.connection.remoteAddress;
+        // Per-account keying when provided (shared IPs/NAT/CGNAT don't block each other)
+        let identifier = req.ip || req.connection.remoteAddress;
+        try {
+            if (typeof options.key === 'function') {
+                const k = options.key(req);
+                if (k) identifier = identifier + '|' + String(k).toLowerCase();
+            }
+        } catch (_) {}
         const now = Date.now();
         
         // Clean old entries
@@ -121,19 +144,29 @@ const rateLimit = (options = {}) => {
  * Security Headers
  */
 const securityHeaders = (req, res, next) => {
-    // Prevent XSS attacks
+    // Prevent MIME sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Prevent clickjacking
     res.setHeader('X-Frame-Options', 'DENY');
+    // Legacy XSS protection (kept for older browsers)
     res.setHeader('X-XSS-Protection', '1; mode=block');
+    // Permissions policy
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self), usb=()');
+    // Cross-origin policies
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
 
     // Content Security Policy - Allow Tailwind CDN, Leaflet.js, OpenStreetMap and inline styles
     res.setHeader('Content-Security-Policy',
         "default-src 'self'; " +
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
-        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://unpkg.com; " +
-        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " +
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivrjs.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
+        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivrjs.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://unpkg.com; " +
+        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; " +
         "img-src 'self' data: https: blob: https://*.tile.openstreetmap.org https://*.openstreetmap.org; " +
-        "connect-src 'self' https://*.tile.openstreetmap.org;"
+        "connect-src 'self' https://*.tile.openstreetmap.org https://cdn.jsdelivr.net https://unpkg.com; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self';"
     );
 
     // Referrer Policy
@@ -256,3 +289,13 @@ module.exports = {
     validators,
     validateRequest
 };
+
+// Auth rate limiters — two layers so shared IPs (NAT/CGNAT hotspots) work:
+// generous per-account bucket + firm per-IP ceiling against spraying.
+const authAccount = (idField) => rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    key: (req) => (req.body && (req.body[idField] || req.body.phone_number || req.body.email)) || ''
+});
+const authIpCeil = rateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
+module.exports.authRateLimit = [authAccount('email'), authIpCeil];

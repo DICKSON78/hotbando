@@ -1,32 +1,32 @@
 <template>
   <div class="space-y-6">
-    <h1 class="text-2xl font-bold text-gray-800">Voucher Management</h1>
+    <h1 class="text-2xl font-bold text-white">Voucher Management</h1>
 
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
-      <h2 class="text-lg font-semibold text-gray-800 mb-4">Generate New Vouchers</h2>
+    <div class="bg-[#111118] rounded-2xl border border-[#1e1e2a] p-5 shadow-sm">
+      <h2 class="text-lg font-semibold text-white mb-4">Generate New Vouchers</h2>
       <div class="space-y-3">
-        <div v-for="pkg in packages" :key="pkg.id" class="flex items-center justify-between py-2 border-b last:border-0">
+        <div v-for="pkg in packages" :key="pkg.id" class="flex items-center justify-between py-2 border-b border-[#1e1e2a] last:border-0">
           <div>
-            <p class="font-medium text-gray-800">{{ pkg.name }}</p>
-            <p class="text-sm text-gray-500">TSH {{ parseFloat(pkg.price).toLocaleString() }}</p>
+            <p class="font-medium text-white">{{ pkg.name }}</p>
+            <p class="text-sm text-white/50">TSH {{ parseFloat(pkg.price).toLocaleString() }}</p>
           </div>
           <input type="number" min="0" max="10000" v-model.number="quantities[pkg.name]"
-            class="w-24 px-3 py-2 border rounded-lg text-center" placeholder="0">
+            class="w-24 px-3 py-2 border border-[#1e1e2a] bg-[#0a0a12] rounded-lg text-center text-white" placeholder="0">
         </div>
       </div>
       <div class="mt-4 flex items-center justify-between">
-        <p class="text-sm text-gray-500">Platform fee: <strong>20%</strong></p>
+        <p class="text-sm text-white/50">Platform fee: <strong>20%</strong></p>
         <button @click="generate" :disabled="generating" class="btn btn-primary">
           {{ generating ? 'Generating...' : 'Generate Vouchers' }}
         </button>
       </div>
-      <p v-if="genError" class="text-red-500 text-sm mt-3 bg-red-50 p-3 rounded-lg">{{ genError }}</p>
-      <p v-if="genSuccess" class="text-green-600 text-sm mt-3 bg-green-50 p-3 rounded-lg">{{ genSuccess }}</p>
+      <p v-if="genError" class="text-red-400 text-sm mt-3 bg-red-500/10 p-3 rounded-lg">{{ genError }}</p>
+      <p v-if="genSuccess" class="text-green-400 text-sm mt-3 bg-green-500/10 p-3 rounded-lg">{{ genSuccess }}</p>
     </div>
 
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-brand-100">
-        <h2 class="section-title"><i class="fas fa-layer-group section-icon text-brand-500"></i> Your Batches</h2>
+    <div class="bg-[#111118] rounded-2xl border border-[#1e1e2a] shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-[#1e1e2a]">
+        <h2 class="section-title"><i class="fas fa-layer-group section-icon text-[#FF7A30]"></i> Your Batches</h2>
       </div>
       <div class="p-5">
         <table class="tbl-shadcn">
@@ -36,9 +36,9 @@
               <td class="font-medium">{{ b.batch_name }}</td>
               <td class="text-right">{{ b.total_vouchers }}</td>
               <td class="text-right">TSH {{ parseFloat(b.total_value).toLocaleString() }}</td>
-              <td class="text-right text-gray-500">{{ b.formatted_date }}</td>
+              <td class="text-right text-white/50">{{ b.formatted_date }}</td>
             </tr>
-            <tr v-if="!batches?.length"><td colspan="4" class="text-center text-gray-400 py-8">No batches yet</td></tr>
+            <tr v-if="!batches?.length"><td colspan="4" class="text-center text-white/40 py-8">No batches yet</td></tr>
           </tbody>
         </table>
       </div>

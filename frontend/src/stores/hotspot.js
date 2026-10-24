@@ -8,6 +8,7 @@ export const useHotspotStore = defineStore('hotspot', {
     routerID: '',
     ssidshow: '',
     location: '',
+    onWifi: false,
     user: null
   }),
   getters: {
@@ -21,6 +22,7 @@ export const useHotspotStore = defineStore('hotspot', {
         this.routerID = r.routerID || ''
         this.ssidshow = r.ssidshow || ''
         this.location = r.location || ''
+        this.onWifi = !!r.onWifi
         this.user = r.user || null
       } catch (e) {
         console.error('Session init failed', e)

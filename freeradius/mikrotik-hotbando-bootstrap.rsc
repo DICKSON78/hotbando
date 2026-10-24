@@ -131,6 +131,14 @@
 /ip hotspot walled-garden add action=allow dst-host="msftconnecttest.com" comment="Windows captive portal"
 /ip hotspot walled-garden add action=allow dst-host="www.msftconnecttest.com" comment="Windows captive portal"
 
+# Allow portal CDN so the login page renders fully in the captive browser
+/ip hotspot walled-garden add action=allow dst-host="cdn.tailwindcss.com" comment="HotBando portal CSS"
+/ip hotspot walled-garden add action=allow dst-host="fonts.googleapis.com" comment="HotBando portal fonts"
+/ip hotspot walled-garden add action=allow dst-host="fonts.gstatic.com" comment="HotBando portal fonts"
+/ip hotspot walled-garden add action=allow dst-host="cdnjs.cloudflare.com" comment="HotBando portal icons"
+/ip hotspot walled-garden add action=allow dst-host="unpkg.com" comment="HotBando portal libs"
+/ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
+
 # ============================================================================
 # 7. RADIUS CONFIGURATION
 # ============================================================================

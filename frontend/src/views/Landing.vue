@@ -5,7 +5,7 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 lg:h-20 items-center">
           <router-link to="/" class="flex items-center space-x-2">
-            <img src="/hot-bando-logo.png" alt="HotBando" class="h-8 lg:h-10">
+            <img src="/hot-bando-logo.png" alt="HotBando" class="h-8 lg:h-10 rounded-full object-cover">
             <span class="text-xl lg:text-2xl font-bold text-brand-500">HotBando</span>
           </router-link>
           <div class="hidden lg:flex items-center space-x-8">
@@ -13,32 +13,10 @@
             <a href="#why-us" class="nav-link text-gray-600 hover:text-brand-500 font-medium">Why Us</a>
             <a href="#pricing" class="nav-link text-gray-600 hover:text-brand-500 font-medium">Pricing</a>
             <a href="#partner" class="nav-link text-gray-600 hover:text-brand-500 font-medium">Partner</a>
+            <a href="#portals" class="nav-link text-gray-600 hover:text-brand-500 font-medium">Portals</a>
             <a href="#contact" class="nav-link text-gray-600 hover:text-brand-500 font-medium">Contact</a>
-            <button v-if="!user" @click="openModal('auth')" class="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2.5 rounded-full font-semibold transition-all shadow-lg hover:shadow-xl hover-scale">Sign In</button>
-            <div v-else class="relative">
-              <button @click="avatarDropdown = !avatarDropdown" class="flex items-center space-x-2 bg-brand-50 hover:bg-brand-100 rounded-full px-4 py-2 transition border border-brand-200">
-                <div class="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-bold">{{ user.name.charAt(0).toUpperCase() }}</div>
-                <span class="text-sm font-medium text-gray-700">{{ user.name.split(' ')[0] }}</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500"></i>
-              </button>
-              <div v-if="avatarDropdown" class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50" @click="avatarDropdown = false">
-                <div class="px-4 py-3 border-b border-gray-100">
-                  <p class="text-sm font-semibold text-gray-900">{{ user.name }}</p>
-                  <p class="text-xs text-gray-500">{{ user.email }}</p>
-                </div>
-                <router-link :to="dashboardRoute" class="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-brand-50 transition">
-                  <i class="fas fa-chart-pie w-5 text-brand-500"></i> My Dashboard
-                </router-link>
-                <router-link :to="dashboardRoute" class="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-brand-50 transition">
-                  <i class="fas fa-user-cog w-5 text-brand-500"></i> Profile
-                </router-link>
-                <div class="border-t border-gray-100 mt-1 pt-1">
-                  <button @click="handleLogout" class="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition">
-                    <i class="fas fa-sign-out-alt w-5"></i> Logout
-                  </button>
-                </div>
-              </div>
-            </div>
+            <router-link v-if="!user" to="/login" class="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2.5 rounded-full font-semibold transition-all shadow-lg hover:shadow-xl">Sign In</router-link>
+            <router-link v-else :to="dashboardRoute" class="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2.5 rounded-full font-semibold transition-all shadow-lg hover:shadow-xl">Dashboard</router-link>
           </div>
           <button @click="mobileOpen = !mobileOpen" class="lg:hidden text-gray-700 hover:text-brand-500 p-2">
             <i class="fas fa-bars text-xl"></i>
@@ -51,17 +29,10 @@
           <a href="#why-us" @click="mobileOpen = false" class="block px-4 py-2.5 text-gray-600 hover:text-brand-500 hover:bg-brand-50 rounded-lg font-medium">Why Us</a>
           <a href="#pricing" @click="mobileOpen = false" class="block px-4 py-2.5 text-gray-600 hover:text-brand-500 hover:bg-brand-50 rounded-lg font-medium">Pricing</a>
           <a href="#partner" @click="mobileOpen = false" class="block px-4 py-2.5 text-gray-600 hover:text-brand-500 hover:bg-brand-50 rounded-lg font-medium">Partner</a>
+          <a href="#portals" @click="mobileOpen = false" class="block px-4 py-2.5 text-gray-600 hover:text-brand-500 hover:bg-brand-50 rounded-lg font-medium">Portals</a>
           <a href="#contact" @click="mobileOpen = false" class="block px-4 py-2.5 text-gray-600 hover:text-brand-500 hover:bg-brand-50 rounded-lg font-medium">Contact</a>
-          <button v-if="!user" @click="openModal('auth'); mobileOpen = false" class="w-full bg-brand-500 hover:bg-brand-600 text-white px-6 py-2.5 rounded-full font-semibold transition-all">Sign In</button>
-          <div v-else class="border-t border-gray-100 pt-3 mt-3">
-            <div class="flex items-center space-x-3 px-4 mb-3">
-              <div class="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold">{{ user.name.charAt(0).toUpperCase() }}</div>
-              <div><p class="text-sm font-semibold text-gray-900">{{ user.name }}</p><p class="text-xs text-gray-500">{{ user.email }}</p></div>
-            </div>
-            <router-link @click="mobileOpen = false" :to="dashboardRoute" class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-brand-50 rounded-lg font-medium"><i class="fas fa-chart-pie w-5 text-brand-500"></i> My Dashboard</router-link>
-            <router-link @click="mobileOpen = false" :to="dashboardRoute" class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-brand-50 rounded-lg font-medium"><i class="fas fa-user-cog w-5 text-brand-500"></i> Profile</router-link>
-            <button @click="handleLogout" class="flex items-center w-full px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-lg font-medium"><i class="fas fa-sign-out-alt w-5"></i> Logout</button>
-          </div>
+          <router-link v-if="!user" to="/login" @click="mobileOpen = false" class="block w-full bg-brand-500 hover:bg-brand-600 text-white px-6 py-2.5 rounded-full font-semibold text-center transition-all">Sign In</router-link>
+          <router-link v-else :to="dashboardRoute" @click="mobileOpen = false" class="block w-full bg-brand-500 hover:bg-brand-600 text-white px-6 py-2.5 rounded-full font-semibold text-center transition-all">Dashboard</router-link>
         </div>
       </div>
     </nav>
@@ -79,20 +50,31 @@
       </div>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
-          <div class="lg:w-1/2 text-center lg:text-left animate__animated animate__fadeInLeft">
+          <div class="lg:w-1/2 text-center lg:text-left">
             <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">High-Speed Internet, <span class="text-yellow-300">Affordable & Accessible</span></h1>
             <p class="text-lg lg:text-xl text-white/90 mb-8 max-w-xl">HotBando delivers fast, reliable internet for students, families, and businesses. Earn free data by watching ads or purchase affordable packages.</p>
             <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <button @click="openModal('auth')" class="bg-white hover:bg-gray-100 text-brand-600 px-8 py-3.5 rounded-full text-lg font-semibold transition-all shadow-lg hover:shadow-xl hover-scale">Get Started</button>
-              <a href="#services" class="border-2 border-white text-white hover:bg-white/10 px-8 py-3.5 rounded-full text-lg font-semibold transition-all hover-scale">Our Services</a>
+              <router-link to="/hotspot/login" class="bg-white hover:bg-gray-100 text-brand-600 px-8 py-3.5 rounded-full text-lg font-semibold transition-all shadow-lg hover:shadow-xl">Get Started</router-link>
+              <a href="#services" class="border-2 border-white text-white hover:bg-white/10 px-8 py-3.5 rounded-full text-lg font-semibold transition-all">Our Services</a>
             </div>
           </div>
-          <div class="lg:w-1/2 flex justify-center animate__animated animate__fadeInRight">
-            <div class="relative w-72 h-72 lg:w-80 lg:h-80">
-              <div class="absolute inset-0 bg-white/10 rounded-full"></div>
-              <div class="absolute inset-4 bg-white/5 rounded-full"></div>
-              <div class="absolute inset-0 flex items-center justify-center">
-                <i class="fas fa-wifi text-8xl lg:text-9xl text-white/90"></i>
+          <div class="lg:w-1/2 flex justify-center">
+            <div class="relative w-64 h-[480px] sm:w-72 sm:h-[540px]">
+              <div class="absolute inset-0 bg-white/10 rounded-full scale-110"></div>
+              <div class="relative h-full w-full rounded-[3rem] border-[10px] border-[#0a0a0a] shadow-2xl overflow-hidden bg-white">
+                <div class="absolute top-0 left-0 right-0 h-6 bg-[#0a0a0a] z-10 flex items-center justify-center">
+                  <div class="w-16 h-1.5 rounded-full bg-gray-700"></div>
+                </div>
+                <img src="/ads/hotbando-demo-1.png" alt="HotBando app" class="w-full h-full object-cover">
+              </div>
+              <div class="absolute -bottom-6 -left-6 bg-white rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center space-x-3">
+                  <div class="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center"><i class="fas fa-wifi"></i></div>
+                  <div>
+                    <p class="text-xs text-gray-500 font-medium">Connected to</p>
+                    <p class="text-sm font-bold text-gray-900">HotBando WiFi</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -135,31 +117,34 @@
           <div class="w-20 h-1 bg-brand-500 mx-auto mt-4 rounded-full"></div>
         </div>
         <div class="grid md:grid-cols-3 gap-8">
-          <div class="service-card bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100">
+          <div class="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100">
             <div class="h-48 bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center">
               <div class="text-white text-6xl"><i class="fas fa-graduation-cap"></i></div>
             </div>
             <div class="p-8">
               <h3 class="text-xl font-semibold text-gray-900 mb-3">For Students</h3>
               <p class="text-gray-600 mb-4">Affordable internet for research, online classes, and educational videos. Start with as little as TZS 500.</p>
+              <router-link to="/hotspot" class="inline-flex items-center text-brand-500 font-semibold hover:text-brand-600 transition"><i class="fas fa-arrow-right mr-2"></i> Connect Now</router-link>
             </div>
           </div>
-          <div class="service-card bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100">
+          <div class="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100">
             <div class="h-48 bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center">
               <div class="text-white text-6xl"><i class="fas fa-users"></i></div>
             </div>
             <div class="p-8">
               <h3 class="text-xl font-semibold text-gray-900 mb-3">For Communities</h3>
               <p class="text-gray-600 mb-4">Connect families, friends, and neighbors with reliable high-speed internet that everyone can use.</p>
+              <router-link to="/hotspot/subscribe" class="inline-flex items-center text-brand-500 font-semibold hover:text-brand-600 transition"><i class="fas fa-arrow-right mr-2"></i> Buy Voucher</router-link>
             </div>
           </div>
-          <div class="service-card bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100">
+          <div class="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100">
             <div class="h-48 bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center">
               <div class="text-white text-6xl"><i class="fas fa-briefcase"></i></div>
             </div>
             <div class="p-8">
               <h3 class="text-xl font-semibold text-gray-900 mb-3">For Businesses</h3>
               <p class="text-gray-600 mb-4">Reliable business-grade connectivity with dedicated support. Perfect for offices, cafes, and retail spaces.</p>
+              <a href="#partner" @click.prevent="openModal('partner')" class="inline-flex items-center text-brand-500 font-semibold hover:text-brand-600 transition"><i class="fas fa-arrow-right mr-2"></i> Become a Partner</a>
             </div>
           </div>
         </div>
@@ -196,8 +181,10 @@
           <div class="lg:w-1/2">
             <div class="relative">
               <div class="bg-gradient-to-br from-brand-50 to-white rounded-3xl p-8 shadow-lg border border-brand-100">
+                <div class="rounded-2xl overflow-hidden shadow-inner mb-6">
+                  <img src="/ads/hotbando-demo-2.png" alt="HotBando dashboard" class="w-full h-72 object-cover object-top">
+                </div>
                 <div class="text-center">
-                  <div class="w-20 h-20 bg-brand-500 rounded-full flex items-center justify-center text-white mx-auto mb-6"><i class="fas fa-bolt text-3xl"></i></div>
                   <h3 class="text-2xl font-bold text-gray-900 mb-2">Speed You Can Feel</h3>
                   <p class="text-gray-600 mb-6">Experience the difference with our high-speed network. Perfect for:</p>
                   <div class="space-y-3 text-left">
@@ -226,7 +213,7 @@
           <div class="w-20 h-1 bg-brand-500 mx-auto mt-4 rounded-full"></div>
         </div>
         <div class="grid md:grid-cols-3 gap-8">
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover-scale">
+          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
             <div class="p-8 border-b border-gray-100">
               <h3 class="text-xl font-semibold text-gray-900">Quick Connect</h3>
               <p class="text-gray-500 mt-2">Perfect for short browsing sessions.</p>
@@ -240,9 +227,10 @@
                 <li class="flex items-start"><i class="fas fa-check text-brand-500 mt-0.5 mr-3"></i><span class="text-gray-600">Occasional ads</span></li>
                 <li class="flex items-start"><i class="fas fa-check text-brand-500 mt-0.5 mr-3"></i><span class="text-gray-600">Standard support</span></li>
               </ul>
+              <router-link to="/hotspot/subscribe" class="mt-8 block w-full bg-brand-500 hover:bg-brand-600 text-white text-center font-semibold py-3 rounded-full transition-all">Buy Now</router-link>
             </div>
           </div>
-          <div class="bg-white rounded-2xl shadow-lg border-2 border-brand-500 overflow-hidden relative hover-scale">
+          <div class="bg-white rounded-2xl shadow-lg border-2 border-brand-500 overflow-hidden relative">
             <div class="absolute top-4 right-4 bg-brand-500 text-white text-xs font-semibold px-3 py-1 rounded-full">Popular</div>
             <div class="p-8 border-b border-gray-100">
               <h3 class="text-xl font-semibold text-gray-900">Daily Pass</h3>
@@ -257,9 +245,10 @@
                 <li class="flex items-start"><i class="fas fa-check text-brand-500 mt-0.5 mr-3"></i><span class="text-gray-600">Fewer ads</span></li>
                 <li class="flex items-start"><i class="fas fa-check text-brand-500 mt-0.5 mr-3"></i><span class="text-gray-600">Priority support</span></li>
               </ul>
+              <router-link to="/hotspot/subscribe" class="mt-8 block w-full bg-brand-500 hover:bg-brand-600 text-white text-center font-semibold py-3 rounded-full transition-all">Buy Now</router-link>
             </div>
           </div>
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover-scale">
+          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
             <div class="p-8 border-b border-gray-100">
               <h3 class="text-xl font-semibold text-gray-900">Weekly Boost</h3>
               <p class="text-gray-500 mt-2">Full week of unlimited browsing.</p>
@@ -273,6 +262,7 @@
                 <li class="flex items-start"><i class="fas fa-check text-brand-500 mt-0.5 mr-3"></i><span class="text-gray-600">Minimal ads</span></li>
                 <li class="flex items-start"><i class="fas fa-check text-brand-500 mt-0.5 mr-3"></i><span class="text-gray-600">24/7 priority support</span></li>
               </ul>
+              <router-link to="/hotspot/subscribe" class="mt-8 block w-full bg-brand-500 hover:bg-brand-600 text-white text-center font-semibold py-3 rounded-full transition-all">Buy Now</router-link>
             </div>
           </div>
         </div>
@@ -334,8 +324,30 @@
       </div>
     </section>
 
+    <!-- Portals -->
+    <section id="portals" class="py-16 lg:py-20 bg-gray-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-12 lg:mb-16">
+          <span class="text-brand-500 font-semibold tracking-wider uppercase">Access Your Portal</span>
+          <h2 class="text-3xl lg:text-4xl font-bold text-gray-900 mt-2 mb-4">One Account, Every Portal</h2>
+          <p class="text-lg text-gray-600 max-w-2xl mx-auto">Sign in to your dashboard to manage your account, packages, ads, and revenue.</p>
+          <div class="w-20 h-1 bg-brand-500 mx-auto mt-4 rounded-full"></div>
+        </div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <a v-for="portal in portals" :key="portal.title" :href="portal.href" class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-brand-500/30 transition-all group">
+            <div class="w-12 h-12 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center mb-5 group-hover:bg-brand-500 group-hover:text-white transition-colors">
+              <i class="fas text-lg" :class="portal.icon"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-1">{{ portal.title }}</h3>
+            <p class="text-gray-600 text-sm mb-4">{{ portal.desc }}</p>
+            <span class="text-brand-500 text-sm font-semibold">Open Portal <i class="fas fa-arrow-right"></i></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- Testimonials -->
-    <section class="py-16 lg:py-20 bg-gray-50">
+    <section class="py-16 lg:py-20 bg-white">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12 lg:mb-16">
           <span class="text-brand-500 font-semibold tracking-wider uppercase">Testimonials</span>
@@ -343,7 +355,7 @@
           <div class="w-20 h-1 bg-brand-500 mx-auto mt-4 rounded-full"></div>
         </div>
         <div class="grid md:grid-cols-3 gap-8">
-          <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover-scale">
+          <div class="bg-gray-50 p-8 rounded-2xl shadow-sm border border-gray-100">
             <div class="flex items-center mb-4 text-yellow-400"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
             <p class="text-gray-600 italic mb-6">"HotBando has been a game-changer for my studies. Fast internet at an affordable price, and I earn free data by watching ads!"</p>
             <div class="flex items-center">
@@ -351,7 +363,7 @@
               <div><h4 class="font-semibold text-gray-900">Amina M.</h4><p class="text-gray-500 text-sm">UDSM Student</p></div>
             </div>
           </div>
-          <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover-scale">
+          <div class="bg-gray-50 p-8 rounded-2xl shadow-sm border border-gray-100">
             <div class="flex items-center mb-4 text-yellow-400"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
             <p class="text-gray-600 italic mb-6">"As a franchise owner, HotBando made it easy to start my own internet business. The support team is always there when I need them."</p>
             <div class="flex items-center">
@@ -359,7 +371,7 @@
               <div><h4 class="font-semibold text-gray-900">Peter K.</h4><p class="text-gray-500 text-sm">Franchise Owner, Arusha</p></div>
             </div>
           </div>
-          <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover-scale">
+          <div class="bg-gray-50 p-8 rounded-2xl shadow-sm border border-gray-100">
             <div class="flex items-center mb-4 text-yellow-400"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i></div>
             <p class="text-gray-600 italic mb-6">"Our hostel residents love the reliable internet. The self-service portal makes it easy for everyone to manage their own accounts."</p>
             <div class="flex items-center">
@@ -373,11 +385,23 @@
 
     <!-- CTA -->
     <section class="py-16 lg:py-20 bg-gradient-to-br from-brand-500 to-brand-700 text-white relative overflow-hidden">
+      <div class="absolute inset-0 opacity-10">
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <defs><pattern id="hex2" x="0" y="0" width="56" height="97" patternUnits="userSpaceOnUse">
+            <path d="M28 0L56 16.2V48.5L28 64.7L0 48.5V16.2Z" fill="none" stroke="white" stroke-width="1.5"/>
+            <path d="M28 32.4L56 48.6V80.9L28 97L0 80.9V48.6Z" fill="none" stroke="white" stroke-width="1"/>
+          </pattern></defs>
+          <rect width="100%" height="100%" fill="url(#hex2)"/>
+        </svg>
+      </div>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
         <h2 class="text-3xl lg:text-4xl font-bold mb-6">Ready to Get <span class="text-yellow-300">Connected?</span></h2>
         <p class="text-xl text-white/90 mb-8 max-w-2xl mx-auto">Join thousands of happy users today. Experience fast, affordable internet with HotBando.</p>
         <div class="flex flex-col sm:flex-row justify-center gap-4">
-          <a href="https://wa.me/255712345678" target="_blank" class="border-2 border-white text-white hover:bg-white/10 px-8 py-3.5 rounded-full text-lg font-semibold transition-all hover-scale flex items-center justify-center">
+          <router-link to="/hotspot/login" class="bg-white hover:bg-gray-100 text-brand-600 px-8 py-3.5 rounded-full text-lg font-semibold transition-all shadow-lg inline-flex items-center justify-center">
+            <i class="fas fa-wifi mr-2"></i> Get Started
+          </router-link>
+          <a href="https://wa.me/255712345678" target="_blank" class="border-2 border-white text-white hover:bg-white/10 px-8 py-3.5 rounded-full text-lg font-semibold transition-all flex items-center justify-center">
             <i class="fab fa-whatsapp mr-2"></i> WhatsApp Us
           </a>
         </div>
@@ -422,7 +446,7 @@
         <div class="grid md:grid-cols-3 gap-8 lg:gap-12">
           <div>
             <div class="flex items-center space-x-2 mb-4">
-              <img src="/hot-bando-logo.png" alt="HotBando" class="h-8">
+              <img src="/hot-bando-logo.png" alt="HotBando" class="h-8 rounded-full object-cover">
               <span class="text-xl font-bold text-brand-400">HotBando</span>
             </div>
             <p class="text-gray-400 text-sm">Fast, affordable, and accessible internet for students, families, and businesses across Tanzania.</p>
@@ -432,11 +456,10 @@
             <ul class="space-y-2 text-sm">
               <li><a href="#services" class="text-gray-400 hover:text-brand-400 transition">Internet Plans</a></li>
               <li><a href="#pricing" class="text-gray-400 hover:text-brand-400 transition">Pricing</a></li>
-              <li><a href="/hotspot/subscribe" class="text-gray-400 hover:text-brand-400 transition">Buy Voucher</a></li>
-              <li><a href="/reseller/signup" class="text-gray-400 hover:text-brand-400 transition">Reseller Signup</a></li>
+              <li><router-link to="/hotspot/subscribe" class="text-gray-400 hover:text-brand-400 transition">Buy Voucher</router-link></li>
+              <li><router-link to="/login" class="text-gray-400 hover:text-brand-400 transition">Partner Sign In</router-link></li>
             </ul>
           </div>
-
           <div>
             <h4 class="font-semibold text-white mb-4 uppercase tracking-wider text-sm">Follow Us</h4>
             <div class="flex space-x-4">
@@ -469,79 +492,6 @@
       <i class="fab fa-whatsapp text-3xl"></i>
     </a>
 
-    <!-- Auth Modal -->
-    <div v-if="activeModal === 'auth'" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-content max-w-md">
-        <div class="flex justify-between items-center mb-6">
-          <div class="flex space-x-2">
-            <button :class="['px-5 py-2 rounded-full font-semibold text-sm transition', authTab === 'login' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']" @click="authTab = 'login'">Sign In</button>
-            <button :class="['px-5 py-2 rounded-full font-semibold text-sm transition', authTab === 'register' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']" @click="authTab = 'register'">Create Account</button>
-          </div>
-          <button @click="closeModal" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-
-        <!-- Login Form -->
-        <form v-if="authTab === 'login'" @submit.prevent="handleLogin" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input v-model="loginForm.email" type="email" required class="input w-full" placeholder="you@example.com">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input v-model="loginForm.password" type="password" required class="input w-full" placeholder="Enter your password">
-          </div>
-          <p v-if="authError" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{{ authError }}</p>
-          <button type="submit" :disabled="authLoading" class="btn btn-primary w-full justify-center">{{ authLoading ? 'Signing in...' : 'Sign In' }}</button>
-          <p class="text-center text-sm text-gray-500">Forgot password? <a href="/hotspot/login" class="text-brand-500 font-medium">Reset here</a></p>
-        </form>
-
-        <!-- Register Form -->
-        <form v-if="authTab === 'register'" @submit.prevent="handleRegister" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-            <input v-model="registerForm.name" type="text" required class="input w-full" placeholder="John Doe">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-            <input v-model="registerForm.email" type="email" required class="input w-full" placeholder="you@example.com">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">I want to join as *</label>
-            <select v-model="registerForm.role" required class="input w-full">
-              <option value="">Select your role</option>
-              <option value="sponsor">Marketing (Sponsor)</option>
-              <option value="franchise_owner">Franchise Owner</option>
-              <option value="reseller">Reseller</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-            <div class="flex gap-2">
-              <select v-model="registerForm.countryCode" class="input w-32 flex-shrink-0">
-                <option value="+255">🇹🇿 +255</option>
-                <option value="+254">🇰🇪 +254</option>
-                <option value="+256">🇺🇬 +256</option>
-                <option value="+257">🇧🇮 +257</option>
-                <option value="+250">🇷🇼 +250</option>
-                <option value="+260">🇿🇲 +260</option>
-                <option value="+27">🇿🇦 +27</option>
-                <option value="+1">🇺🇸 +1</option>
-                <option value="+44">🇬🇧 +44</option>
-              </select>
-              <input v-model="registerForm.phone" type="tel" required class="input w-full" placeholder="7XX XXX XXX">
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-            <input v-model="registerForm.password" type="password" required class="input w-full" placeholder="Create a password (min 6 chars)">
-          </div>
-          <p v-if="authError" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{{ authError }}</p>
-          <button type="submit" :disabled="authLoading" class="btn btn-primary w-full justify-center">{{ authLoading ? 'Creating account...' : 'Create Account' }}</button>
-          <p class="text-center text-sm text-gray-500">Already have an account? <a href="#" @click.prevent="authTab = 'login'" class="text-brand-500 font-medium">Sign in</a></p>
-        </form>
-      </div>
-    </div>
-
     <!-- Partner Application Modal -->
     <div v-if="activeModal === 'partner'" class="modal-overlay" @click.self="closeModal">
       <div class="modal-content max-w-2xl">
@@ -549,8 +499,6 @@
           <h3 class="text-xl font-bold text-gray-900">Apply as Partner</h3>
           <button @click="closeModal" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
-
-        <!-- Step Indicator -->
         <div class="flex justify-center mb-8">
           <div class="flex items-center space-x-2">
             <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold', partnerStep >= 1 ? 'bg-brand-500 text-white' : 'bg-gray-200 text-gray-500']">1</div>
@@ -560,9 +508,7 @@
             <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold', partnerStep >= 3 ? 'bg-brand-500 text-white' : 'bg-gray-200 text-gray-500']">3</div>
           </div>
         </div>
-
         <form @submit.prevent="submitPartnerForm">
-          <!-- Step 1: Personal Details -->
           <div v-if="partnerStep === 1" class="space-y-4">
             <div class="grid md:grid-cols-2 gap-4">
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label><input v-model="partner.name" required class="input w-full" placeholder="Your full name"></div>
@@ -572,12 +518,6 @@
                     <option value="+255">🇹🇿 +255</option>
                     <option value="+254">🇰🇪 +254</option>
                     <option value="+256">🇺🇬 +256</option>
-                    <option value="+257">🇧🇮 +257</option>
-                    <option value="+250">🇷🇼 +250</option>
-                    <option value="+260">🇿🇲 +260</option>
-                    <option value="+27">🇿🇦 +27</option>
-                    <option value="+1">🇺🇸 +1</option>
-                    <option value="+44">🇬🇧 +44</option>
                   </select>
                   <input v-model="partner.phone" type="tel" required class="input w-full" placeholder="7XX XXX XXX">
                 </div>
@@ -587,8 +527,6 @@
             <div><label class="block text-sm font-medium text-gray-700 mb-1">Location (City/Region) *</label><input v-model="partner.location" required class="input w-full" placeholder="e.g. Dar es Salaam"></div>
             <p class="text-sm text-gray-500">* Required fields</p>
           </div>
-
-          <!-- Step 2: Business Info -->
           <div v-if="partnerStep === 2" class="space-y-4">
             <div><label class="block text-sm font-medium text-gray-700 mb-1">Business Type *</label>
               <select v-model="partner.businessType" required class="input w-full">
@@ -620,8 +558,6 @@
             </div>
             <div><label class="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label><textarea v-model="partner.notes" rows="3" class="input w-full" placeholder="Any questions or special requirements..."></textarea></div>
           </div>
-
-          <!-- Step 3: Confirmation -->
           <div v-if="partnerStep === 3" class="space-y-4">
             <div class="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
               <i class="fas fa-check-circle text-green-500 text-5xl mb-4"></i>
@@ -639,8 +575,6 @@
             <p v-if="partnerError" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{{ partnerError }}</p>
             <p v-if="partnerSuccess" class="text-green-600 text-sm bg-green-50 p-3 rounded-lg">{{ partnerSuccess }}</p>
           </div>
-
-          <!-- Navigation -->
           <div class="flex justify-between mt-6">
             <button v-if="partnerStep > 1" type="button" @click="partnerStep--" class="btn btn-ghost">Back</button>
             <div v-else></div>
@@ -676,15 +610,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 
-const router = useRouter()
-
-const mobileOpen = ref(false)
 const currentYear = ref(new Date().getFullYear())
+const mobileOpen = ref(false)
 const activeModal = ref(null)
 const user = ref(null)
-const avatarDropdown = ref(false)
 
 const dashboardRoute = ref('/login')
 
@@ -693,51 +623,33 @@ function getDashboardRoute(role) {
   return map[role] || '/login'
 }
 
+const portals = [
+  { title: 'Customer Portal', desc: 'Manage your data, buy packages, and watch ads for free data.', href: '/hotspot', icon: 'fa-user' },
+  { title: 'Admin Panel', desc: 'Manage users, locations, routers, revenue, and platform settings.', href: '/admin/login', icon: 'fa-shield-halved' },
+  { title: 'Sponsor Portal', desc: 'Upload ads, run campaigns, and track your ad performance.', href: '/sponsor/login', icon: 'fa-bullhorn' },
+  { title: 'Partner Sign In', desc: 'Franchise owners and bank partners manage their dashboards.', href: '/login', icon: 'fa-building' },
+  { title: 'Buy Voucher', desc: 'Buy a package directly without an account.', href: '/hotspot/subscribe', icon: 'fa-ticket' },
+  { title: 'Watch Ads', desc: 'Earn free data by watching short sponsored videos.', href: '/hotspot/ads', icon: 'fa-circle-play' },
+]
+
 async function checkSession() {
   try {
     const r = await fetch('/api/me')
     if (r.ok) {
       const data = await r.json()
       user.value = data.user
-      dashboardRoute.value = getDashboardRoute(data.user.role)
+      dashboardRoute.value = data.redirect || getDashboardRoute(data.user.role)
     }
   } catch {}
 }
 
 async function handleLogout() {
   try {
-    await fetch('/api/logout')
+    await fetch('/api/logout', { method: 'POST' })
   } catch {}
   user.value = null
-  avatarDropdown.value = false
   window.location.href = '/'
 }
-
-function handleClickOutside(e) {
-  if (avatarDropdown.value && !e.target.closest('.relative')) {
-    avatarDropdown.value = false
-  }
-}
-
-// Auth modal
-const authTab = ref('login')
-const authError = ref('')
-const authLoading = ref(false)
-const loginForm = ref({ email: '', password: '' })
-const registerForm = ref({ name: '', email: '', phone: '', countryCode: '+255', password: '', role: '' })
-
-// Partner modal
-const partnerStep = ref(1)
-const partnerSubmitting = ref(false)
-const partnerError = ref('')
-const partnerSuccess = ref('')
-const partner = ref({ name: '', phone: '', countryCode: '+255', email: '', location: '', businessType: '', packageType: '', estimatedUsers: '', notes: '' })
-
-// Contact modal
-const contactSubmitting = ref(false)
-const contactError = ref('')
-const contactSuccess = ref('')
-const contact = ref({ name: '', email: '', message: '' })
 
 function openModal(type) {
   activeModal.value = type
@@ -747,73 +659,22 @@ function openModal(type) {
 function closeModal() {
   activeModal.value = null
   document.body.style.overflow = ''
-  authError.value = ''
   partnerError.value = ''
   partnerSuccess.value = ''
   contactError.value = ''
   contactSuccess.value = ''
 }
 
-async function handleLogin() {
-  authLoading.value = true
-  authError.value = ''
-  try {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loginForm.value)
-    })
-    const data = await r.json()
-    if (data.success) {
-      if (data.user.role === 'admin' || data.user.role === 'super_admin') {
-        closeModal()
-        window.location.href = data.redirect
-        return
-      }
-      user.value = data.user
-      dashboardRoute.value = getDashboardRoute(data.user.role)
-      closeModal()
-      loginForm.value = { email: '', password: '' }
-    } else {
-      authError.value = data.error || 'Invalid email or password'
-    }
-  } catch {
-    authError.value = 'Connection error. Please try again.'
-  } finally {
-    authLoading.value = false
-  }
-}
+const partnerStep = ref(1)
+const partnerSubmitting = ref(false)
+const partnerError = ref('')
+const partnerSuccess = ref('')
+const partner = ref({ name: '', phone: '', countryCode: '+255', email: '', location: '', businessType: '', packageType: '', estimatedUsers: '', notes: '' })
 
-async function handleRegister() {
-  authLoading.value = true
-  authError.value = ''
-  try {
-    const payload = {
-      name: registerForm.value.name,
-      email: registerForm.value.email,
-      phone_number: registerForm.value.countryCode + registerForm.value.phone.replace(/^0+/, ''),
-      password: registerForm.value.password,
-      role: registerForm.value.role
-    }
-    const r = await fetch('/api/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    const data = await r.json()
-    if (data.success) {
-      authError.value = ''
-      registerForm.value = { name: '', email: '', phone: '', countryCode: '+255', password: '', role: '' }
-      authTab.value = 'login'
-    } else {
-      authError.value = data.message || data.error || 'Registration failed'
-    }
-  } catch {
-    authError.value = 'Connection error. Please try again.'
-  } finally {
-    authLoading.value = false
-  }
-}
+const contactSubmitting = ref(false)
+const contactError = ref('')
+const contactSuccess = ref('')
+const contact = ref({ name: '', email: '', message: '' })
 
 async function submitPartnerForm() {
   partnerSubmitting.value = true
@@ -868,7 +729,6 @@ async function submitContactForm() {
 
 onMounted(() => {
   checkSession()
-  document.addEventListener('click', handleClickOutside)
   if (window.location.hash) {
     const id = window.location.hash.slice(1)
     setTimeout(() => {
@@ -882,12 +742,12 @@ onMounted(() => {
 <style scoped>
 .nav-link {
   position: relative;
-  transition: color 0.3s;
+  padding-bottom: 2px;
 }
 .nav-link::after {
   content: '';
   position: absolute;
-  bottom: -2px;
+  bottom: 0;
   left: 0;
   width: 0;
   height: 2px;
@@ -896,45 +756,6 @@ onMounted(() => {
 }
 .nav-link:hover::after {
   width: 100%;
-}
-.hover-scale {
-  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.4s ease;
-}
-.hover-scale:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
-}
-.service-card {
-  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.4s ease;
-}
-.service-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
-}
-.whatsapp-float {
-  position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  z-index: 50;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #25D366;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(37, 211, 102, 0.4);
-  animation: bounce 2s infinite;
-  transition: transform 0.3s;
-}
-.whatsapp-float:hover {
-  transform: scale(1.1);
-  color: white;
-}
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
 }
 .modal-overlay {
   position: fixed;
@@ -964,6 +785,25 @@ onMounted(() => {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+.whatsapp-float {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 40;
+  background: #25D366;
+  color: white;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s;
+}
+.whatsapp-float:hover {
+  transform: scale(1.1);
 }
 section {
   scroll-margin-top: 5rem;

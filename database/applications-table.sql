@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS applications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  role ENUM('franchise_owner','sponsor','bank_partner','investor','reseller') NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255),
+  phone VARCHAR(20) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  company VARCHAR(255),
+  location VARCHAR(255),
+  business_type VARCHAR(100),
+  notes TEXT,
+  fee_amount DECIMAL(10,2) DEFAULT 0,
+  status ENUM('pending','submitted','payment_pending','payment_made','payment_failed','approved','rejected') DEFAULT 'pending',
+  order_reference VARCHAR(255),
+  clickpesa_response TEXT,
+  user_id INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_status (status),
+  INDEX idx_role (role),
+  INDEX idx_order_reference (order_reference)
+);

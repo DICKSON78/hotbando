@@ -1,19 +1,19 @@
 <template>
   <div class="space-y-5">
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-brand-100">
-        <h3 class="section-title"><i class="fas fa-coins section-icon text-brand-500"></i> Payout History</h3>
+    <div class="section-card rounded-2xl border border-[#1e1e2a] overflow-hidden">
+      <div class="px-5 py-4 border-b border-[#1e1e2a]">
+        <h3 class="section-title"><i class="fas fa-coins section-icon text-[#FF7A30]"></i> Payout History</h3>
       </div>
       <div class="p-5">
         <table class="tbl-shadcn">
           <thead><tr><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>
             <tr v-for="p in payouts" :key="p.id">
-              <td class="font-medium text-gray-800">{{ new Date(p.created_at).toLocaleDateString() }}</td>
+              <td class="font-medium text-white">{{ new Date(p.created_at).toLocaleDateString() }}</td>
               <td>{{ formatMoney(p.amount) }}</td>
               <td><span class="badge" :class="statusClass(p.status)">{{ p.status }}</span></td>
             </tr>
-            <tr v-if="!payouts.length"><td colspan="3" class="text-center text-gray-400 py-10">No payouts yet</td></tr>
+            <tr v-if="!payouts.length"><td colspan="3" class="text-center text-white/40 py-10">No payouts yet</td></tr>
           </tbody>
         </table>
       </div>

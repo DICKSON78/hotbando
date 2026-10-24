@@ -21,7 +21,9 @@ COPY . .
 
 # Create required directories with proper permissions
 RUN mkdir -p /app/public/uploads /app/public/ads /app/logs /app/tmp && \
-    chown -R hotbando:hotbando /app
+    mkdir -p /etc/wireguard/hotbando-keys && \
+    chown -R hotbando:hotbando /app /etc/wireguard && \
+    chmod 755 /etc/wireguard
 
 # Switch to non-root user
 USER hotbando

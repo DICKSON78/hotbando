@@ -10,17 +10,17 @@ async function seedComprehensive() {
     console.log('🌱 Starting comprehensive database seeding...\n');
 
     try {
-        const hashedPassword = await bcrypt.hash('password123', 10);
+        const hashedPassword = await bcrypt.hash('password123', 12);
 
         // ========================================
         // 1. PACKAGES - Internet Packages
         // ========================================
         console.log('📦 Seeding packages...');
         const packages = [
-            { name: 'MASAA 6', price: 1000, duration_hours: 6, description: 'Pakiti la masaa 6 - 2GB' },
-            { name: 'MASAA 24', price: 2000, duration_hours: 24, description: 'Pakiti la siku moja - 5GB' },
-            { name: 'WIKI 1', price: 10000, duration_hours: 168, description: 'Pakiti la wiki moja - 20GB' },
-            { name: 'MWEEZI 1', price: 35000, duration_hours: 720, description: 'Pakiti la mwezi mmoja - 100GB' }
+            { name: 'MASAA 6', price: 500, duration_hours: 6, description: 'Pakiti la masaa 6 - 2GB' },
+            { name: 'MASAA 24', price: 1000, duration_hours: 24, description: 'Pakiti la siku moja - 5GB' },
+            { name: 'WIKI 1', price: 6000, duration_hours: 168, description: 'Pakiti la wiki moja - 20GB' },
+            { name: 'MWEZI 1', price: 20000, duration_hours: 720, description: 'Pakiti la mwezi mmoja - 100GB' }
         ];
 
         for (const pkg of packages) {

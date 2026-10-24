@@ -27,7 +27,7 @@ async function seedDatabase() {
 
         // 1. Create sample users (only new ones, don't duplicate)
         console.log('👤 Creating sample users...');
-        const hashedPassword = await bcrypt.hash(process.env.SEED_PASSWORD || 'password123', 10);
+        const hashedPassword = await bcrypt.hash(process.env.SEED_PASSWORD || 'password123', 12);
 
         const users = [
             {

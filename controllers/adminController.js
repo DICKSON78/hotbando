@@ -424,7 +424,7 @@ class AdminController {
         'MASAA 6': { id: 1, price: 500 },
         'MASAA 24': { id: 2, price: 1000 },
         'WIKI 1': { id: 3, price: 6000 },
-        'MWEEZI 1': { id: 4, price: 20000 },
+        'MWEZI 1': { id: 4, price: 20000 },
       };
 
       const [batchResult] = await db.execute(
@@ -1211,7 +1211,7 @@ async getAdViewsForAnalytics(req, res) {
       if (ads.length === 0) {
         return res.status(404).json({ success: false, message: 'Tangazo hakupatikana' });
       }
-      await db.execute('DELETE FROM ads WHERE id = ?', [id]);
+      await db.execute('UPDATE ads SET is_active = 0, approved = 0 WHERE id = ?', [id]);
       return res.json({ success: true, message: 'Tangazo limekataliwa kikamilifu' });
     } catch (error) {
       console.error('Hitilafu katika kukataa tangazo:', error);
@@ -1365,6 +1365,25 @@ async getAdViewsForAnalytics(req, res) {
     } catch (error) {
       console.error('Hitilafu katika kuongeza router:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kuongeza router', error: error.message });
+    }
+  }
+
+  // Connect a PENDING router (zero-touch approval: owner clicks CONNECT)
+  async connectRouter(req, res) {
+    try {
+      const { routerID } = req.params;
+      const routerProvision = require('../utils/routerProvision');
+      const result = await routerProvision.connectRouter(routerID, { ssid: req.body?.ssid || null });
+      return res.json({
+        success: true,
+        message: 'Router imeunganishwa — itapakua config kwenye poll ijayo',
+        router: result.router,
+        wireguardIp: result.wireguardIp,
+        status: result.status
+      });
+    } catch (error) {
+      console.error('Hitilafu katika kuunganisha router:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Imeshindikana kuunganisha router', error: error.message });
     }
   }
 
@@ -1793,10 +1812,15 @@ async getAdViewsForAnalytics(req, res) {
   async deleteUser(req, res) {
     try {
       const { id } = req.params;
-      const [result] = await db.execute('DELETE FROM users WHERE id = ?', [id]);
-      if (result.affectedRows === 0) {
+      const [users] = await db.execute('SELECT id, role FROM users WHERE id = ?', [id]);
+      if (users.length === 0) {
         return res.status(404).json({ success: false, message: 'Mtumiaji hakupatikana' });
       }
+      // Only allow deleting customers, not admins or partners
+      if (users[0].role !== 'customer') {
+        return res.status(403).json({ error: 'Cannot delete non-customer users' });
+      }
+      await db.execute('DELETE FROM users WHERE id = ?', [id]);
       return res.json({ success: true, message: 'Mtumiaji amefutwa kikamilifu', deletedId: id });
     } catch (error) {
       console.error('Hitilafu katika kufuta mtumiaji:', error);

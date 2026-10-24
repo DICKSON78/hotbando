@@ -1,121 +1,228 @@
 <template>
   <div class="space-y-6">
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
-        <div class="flex items-center justify-between">
-          <div> <p class="metric-label">Routers Online</p> <p class="metric-value">{{ stats.online_routers }}/{{ stats.total_routers }}</p> </div>
-          <div class="metric-icon bg-emerald-100 text-emerald-600"><i class="fas fa-wifi"></i></div>
+    <!-- Loading skeleton -->
+    <template v-if="loading">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div v-for="i in 4" :key="i" class="stat-card animate-pulse">
+          <div class="flex items-center justify-between">
+            <div class="space-y-2">
+              <div class="h-3 w-20 rounded" style="background: #1e1e2a"></div>
+              <div class="h-7 w-16 rounded" style="background: #1e1e2a"></div>
+            </div>
+            <div class="w-14 h-14 rounded-xl" style="background: #1e1e2a"></div>
+          </div>
         </div>
       </div>
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
-        <div class="flex items-center justify-between">
-          <div> <p class="metric-label">Active Users</p> <p class="metric-value">{{ stats.active_users }}</p> </div>
-          <div class="metric-icon bg-blue-100 text-blue-600"><i class="fas fa-users"></i></div>
-        </div>
-      </div>
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
-        <div class="flex items-center justify-between">
-          <div> <p class="metric-label">Active Ads</p> <p class="metric-value">{{ stats.activeAds }}</p> </div>
-          <div class="metric-icon bg-brand-100 text-brand-600"><i class="fas fa-ad"></i></div>
-        </div>
-      </div>
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-5 shadow-sm">
-        <div class="flex items-center justify-between">
-          <div> <p class="metric-label">Completion Rate</p> <p class="metric-value">{{ stats.completionRate }}%</p> </div>
-          <div class="metric-icon bg-purple-100 text-purple-600"><i class="fas fa-chart-line"></i></div>
-        </div>
-      </div>
-    </div>
+    </template>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-        <div class="px-5 py-4 border-b border-brand-100">
-          <h3 class="section-title"><i class="fas fa-clock section-icon text-brand-500"></i> Recent Activity</h3>
+    <template v-else>
+      <!-- Stats row -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="stat-label">Total Users</p>
+              <p class="stat-value">{{ stats.total_users || 0 }}</p>
+            </div>
+            <div class="stat-icon" style="background: rgba(59,130,246,0.1); color: #60a5fa"><i class="fas fa-users"></i></div>
+          </div>
+          <div class="mt-3 flex items-center gap-1 text-xs" style="color: #6b7280">
+            <i class="fas fa-circle text-[6px] text-green-400"></i>
+            {{ stats.active_users || 0 }} active now
+          </div>
         </div>
-        <div class="p-5">
-          <div class="space-y-3">
-            <div v-for="a in stats.recentActivity" :key="a.time" class="flex items-start gap-3 text-sm pb-3 border-b border-gray-100 last:border-0">
-              <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs" :class="a.icon === 'user-plus' ? 'bg-emerald-100 text-emerald-600' : 'bg-brand-100 text-brand-600'">
-                <i :class="'fas fa-' + a.icon"></i>
+        <div class="stat-card">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="stat-label">Routers</p>
+              <p class="stat-value">{{ stats.online_routers || 0 }}/{{ stats.total_routers || 0 }}</p>
+            </div>
+            <div class="stat-icon" style="background: rgba(16,185,129,0.1); color: #34d399"><i class="fas fa-wifi"></i></div>
+          </div>
+          <div class="mt-3 flex items-center gap-1 text-xs" style="color: #6b7280">
+            <span class="inline-block w-2 h-2 rounded-full" :style="stats.online_routers > 0 ? 'background: #34d399' : 'background: #ef4444'"></span>
+            {{ stats.online_routers > 0 ? 'Online' : 'All offline' }}
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="stat-label">Data Distributed</p>
+              <p class="stat-value">{{ stats.dataDistributed || 0 }} <span class="text-sm font-normal" style="color: #6b7280">GB</span></p>
+            </div>
+            <div class="stat-icon" style="background: rgba(139,92,246,0.1); color: #a78bfa"><i class="fas fa-database"></i></div>
+          </div>
+          <div class="mt-3 flex items-center gap-1 text-xs" style="color: #6b7280">
+            {{ stats.totalViews || 0 }} ad views (30d)
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="stat-label">Completion Rate</p>
+              <p class="stat-value">{{ stats.completionRate || 0 }}<span class="text-sm font-normal" style="color: #6b7280">%</span></p>
+            </div>
+            <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-chart-line"></i></div>
+          </div>
+          <div class="mt-3 flex items-center gap-1 text-xs" style="color: #6b7280">
+            {{ stats.activeAds || 0 }} active ads
+          </div>
+        </div>
+      </div>
+
+      <!-- Two-column layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chart (takes 2 cols) -->
+        <div class="lg:col-span-2 section-card">
+          <div class="section-header">
+            <h3 class="section-title"><i class="fas fa-chart-line" style="color: #FF7A30"></i> Views Trend (7 Days)</h3>
+          </div>
+          <div class="section-body">
+            <div class="h-64">
+              <canvas ref="chartRef" id="trendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Approvals (1 col) -->
+        <div class="section-card">
+          <div class="section-header">
+            <h3 class="section-title"><i class="fas fa-hourglass-half" style="color: #FF7A30"></i> Pending Ads</h3>
+            <span class="badge badge-yellow" v-if="stats.pendingApprovals?.length">{{ stats.pendingApprovals.length }}</span>
+          </div>
+          <div class="section-body space-y-3" style="max-height: 280px; overflow-y: auto">
+            <div v-for="ad in (stats.pendingApprovals || [])" :key="ad.id" class="flex items-center gap-3 p-3 rounded-xl transition-colors" style="background: #0d0d14">
+              <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background: #1a1a24">
+                <i class="fas fa-ad" style="color: #FF7A30"></i>
               </div>
-              <div> <p class="text-gray-700">{{ a.description }}</p> <p class="text-gray-400 text-xs">{{ a.time }}</p> </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-white truncate">{{ ad.title }}</p>
+                <p class="text-xs" style="color: #6b7280">{{ ad.sponsor_name }}</p>
+              </div>
+              <div class="flex gap-1">
+                <button @click="approveAd(ad.id)" class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors" style="background: rgba(16,185,129,0.1); color: #34d399" title="Approve">
+                  <i class="fas fa-check text-xs"></i>
+                </button>
+                <button @click="declineAd(ad.id)" class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors" style="background: rgba(239,68,68,0.1); color: #f87171" title="Decline">
+                  <i class="fas fa-times text-xs"></i>
+                </button>
+              </div>
             </div>
-            <p v-if="!stats.recentActivity?.length" class="text-gray-400 text-center py-4">No recent activity</p>
+            <p v-if="!stats.pendingApprovals?.length" class="text-center py-6 text-sm" style="color: #6b7280">
+              <i class="fas fa-check-circle mb-2 block text-lg" style="color: #34d399"></i>
+              All caught up!
+            </p>
           </div>
         </div>
       </div>
-      <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-        <div class="px-5 py-4 border-b border-brand-100">
-          <h3 class="section-title"><i class="fas fa-hourglass-half section-icon text-brand-500"></i> Pending Approvals</h3>
-        </div>
-        <div class="p-5">
-          <div class="space-y-3">
-            <div v-for="ad in stats.pendingApprovals" :key="ad.id" class="flex items-start gap-3 text-sm pb-3 border-b border-gray-100 last:border-0">
-              <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden"> <img v-if="ad.video_url" :src="ad.video_url" class="w-full h-full object-cover" alt=""> <i v-else class="fas fa-video text-gray-400"></i> </div>
-              <div class="flex-1"> <p class="text-gray-700 font-medium">{{ ad.title }}</p> <p class="text-gray-400 text-xs">{{ ad.sponsor_name }}</p> </div>
-            </div>
-            <p v-if="!stats.pendingApprovals?.length" class="text-gray-400 text-center py-4">No pending approvals</p>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <div v-if="chartLabels.length" class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-brand-100">
-        <h3 class="section-title"><i class="fas fa-chart-line section-icon text-brand-500"></i> Views Trend</h3>
-      </div>
-      <div class="p-5">
-        <div class="h-64">
-          <canvas ref="chartRef" id="trendChart"></canvas>
+      <!-- Recent Activity -->
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title"><i class="fas fa-clock" style="color: #FF7A30"></i> Recent Activity</h3>
+        </div>
+        <div class="section-body">
+          <div class="space-y-3">
+            <div v-for="(a, i) in (stats.recentActivity || [])" :key="i" class="flex items-center gap-3 p-3 rounded-xl transition-colors" style="background: #0d0d14">
+              <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" :style="a.icon === 'eye' ? 'background: rgba(59,130,246,0.1); color: #60a5fa' : a.icon === 'money-bill-wave' ? 'background: rgba(16,185,129,0.1); color: #34d399' : 'background: rgba(255,122,48,0.1); color: #FF7A30'">
+                <i :class="'fas fa-' + a.icon" class="text-sm"></i>
+              </div>
+              <div class="flex-1">
+                <p class="text-sm" style="color: #d1d5db">{{ a.description }}</p>
+              </div>
+              <span class="text-xs whitespace-nowrap" style="color: #6b7280">{{ a.time }}</span>
+            </div>
+            <p v-if="!stats.recentActivity?.length" class="text-center py-4 text-sm" style="color: #6b7280">No recent activity</p>
+          </div>
         </div>
       </div>
+    </template>
+
+    <!-- Toast -->
+    <div v-if="toast" class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium animate-slideIn" :style="toast.type === 'success' ? 'background: rgba(16,185,129,0.9); color: #fff' : 'background: rgba(239,68,68,0.9); color: #fff'">
+      {{ toast.message }}
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { adminGet } from '../../api/client'
+import { adminGet, adminPost } from '../../api/client'
 
 const stats = ref({})
 const chartRef = ref(null)
-const chartLabels = ref([])
-const chartData = ref([])
+const loading = ref(true)
+const toast = ref(null)
+
+function showToast(message, type = 'success') {
+  toast.value = { message, type }
+  setTimeout(() => { toast.value = null }, 3000)
+}
 
 onMounted(async () => {
   try {
-    stats.value = await adminGet('/dashboard-stats')
-    if (stats.value.chartData) {
-      chartLabels.value = stats.value.chartData.labels || []
-      chartData.value = stats.value.chartData.data || []
-      await nextTick()
-      renderChart()
-    }
-  } catch (e) { console.error(e) }
+    const data = await adminGet('/dashboard-stats')
+    stats.value = data
+    await nextTick()
+    if (data.chartData?.labels?.length) renderChart(data.chartData)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
 })
 
-function renderChart() {
+function renderChart(chartData) {
   const ctx = document.getElementById('trendChart')
   if (!ctx) return
   new Chart(ctx, {
     type: 'line',
     data: {
-      labels: chartLabels.value,
+      labels: chartData.labels,
       datasets: [{
         label: 'Views',
-        data: chartData.value,
+        data: chartData.data,
         borderColor: '#FF7A30',
-        backgroundColor: 'rgba(255, 122, 48, 0.1)',
+        backgroundColor: 'rgba(255, 122, 48, 0.08)',
         fill: true,
-        tension: 0.4
+        tension: 0.4,
+        borderWidth: 2,
+        pointBackgroundColor: '#FF7A30',
+        pointBorderColor: '#FF7A30',
+        pointRadius: 4,
+        pointHoverRadius: 6
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } }
+      scales: {
+        x: { ticks: { color: '#6b7280', font: { size: 11 } }, grid: { color: 'rgba(30,30,42,0.5)' }, border: { color: 'rgba(30,30,42,0.5)' } },
+        y: { beginAtZero: true, ticks: { color: '#6b7280', font: { size: 11 } }, grid: { color: 'rgba(30,30,42,0.5)' }, border: { color: 'rgba(30,30,42,0.5)' } }
+      },
+      interaction: { intersect: false, mode: 'index' }
     }
   })
+}
+
+async function approveAd(id) {
+  try {
+    await adminPost(`/approve-ad/${id}`)
+    stats.value.pendingApprovals = (stats.value.pendingApprovals || []).filter(a => a.id !== id)
+    showToast('Ad approved!')
+  } catch (e) {
+    showToast('Failed to approve', 'error')
+  }
+}
+
+async function declineAd(id) {
+  try {
+    await adminPost(`/decline-ad/${id}`)
+    stats.value.pendingApprovals = (stats.value.pendingApprovals || []).filter(a => a.id !== id)
+    showToast('Ad declined')
+  } catch (e) {
+    showToast('Failed to decline', 'error')
+  }
 }
 </script>

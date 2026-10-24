@@ -5,7 +5,20 @@
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const fs = require('fs');
 const db = require('../config/database');
+
+// Validate network input to prevent command injection
+function sanitizeNetworkInput(input) {
+    if (!input) return null;
+    // Only allow valid IPv4 CIDR notation or single IPs: e.g. 192.168.1.0/24 or 10.0.0.1
+    const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
+    if (!cidrRegex.test(input)) return null;
+    // Verify each octet is 0-255
+    const parts = input.split('/')[0].split('.');
+    if (!parts.every(o => { const n = parseInt(o, 10); return n >= 0 && n <= 255; })) return null;
+    return input;
+}
 
 class MikrotikDetector {
     constructor() {
@@ -109,6 +122,33 @@ class MikrotikDetector {
                     }
                 }
             }
+
+            // If running in the local workstation stack, also read the HOST
+            // neighbour table (a plain file written by a host cron and
+            // bind-mounted read-only at /host-arp) so the scan can see routers
+            // plugged directly into this PC's LAN. Skipped when the file is
+            // not mounted (e.g. cloud deployment). Handles both `ip neigh`
+            // output and /proc/net/arp format.
+            try {
+                const hostArp = fs.readFileSync('/host-arp', 'utf8');
+                const macRe = /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/;
+                const ipRe = /^(\d{1,3}\.){3}\d{1,3}$/;
+                for (const line of hostArp.split('\n')) {
+                    const tokens = line.trim().split(/\s+/);
+                    if (tokens.length === 0 || tokens[0] === 'IP' || !ipRe.test(tokens[0])) continue;
+                    const ip = tokens[0];
+                    const mac = tokens.find(t => macRe.test(t));
+                    if (mac && mikrotikOuis.some(oui => mac.toLowerCase().startsWith(oui))) {
+                        devices.push({
+                            ip,
+                            mac,
+                            source: 'arp',
+                            isMikrotik: true,
+                            confidence: 'high'
+                        });
+                    }
+                }
+            } catch (e) { /* /host-arp not mounted or unreadable — ignore */ }
         } catch (error) {
             // ARP scan failed, continue with other methods
         }
@@ -166,11 +206,17 @@ class MikrotikDetector {
     async scanPorts(networkRange, port = 8728) {
         const devices = [];
 
+        // Sanitize input to prevent command injection
+        const cleanNetwork = sanitizeNetworkInput(networkRange);
+        if (!cleanNetwork) {
+            throw new Error('Invalid network range format. Use CIDR notation (e.g. 192.168.1.0/24)');
+        }
+
         try {
             // Use nmap if available, otherwise fall back to ping sweep
             try {
                 const { stdout } = await execPromise(
-                    `nmap -p ${port} --open -T4 ${networkRange} 2>/dev/null | grep -B1 "open" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" || true`
+                    `nmap -p ${port} --open -T4 ${cleanNetwork} 2>/dev/null | grep -B1 "open" | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" || true`
                 );
                 
                 const ips = stdout.split('\n').filter(ip => ip.trim());
@@ -185,8 +231,10 @@ class MikrotikDetector {
                 }
             } catch (e) {
                 // nmap not available, try ping sweep
+                // Extract base network (e.g., 192.168.1 from 192.168.1.0/24)
+                const baseNetwork = cleanNetwork.replace(/\/\d+$/, '').replace(/\.\d+$/, '');
                 const { stdout } = await execPromise(
-                    `for i in $(seq 1 254); do ping -c1 -W1 ${networkRange}.$i 2>/dev/null | grep "bytes from" | cut -d: -f1 | cut -d' ' -f4 & done; wait`
+                    `for i in $(seq 1 254); do ping -c1 -W1 ${baseNetwork}.$i 2>/dev/null | grep "bytes from" | cut -d: -f1 | cut -d' ' -f4 & done; wait`
                 );
                 
                 const ips = stdout.split('\n').filter(ip => ip.trim());
@@ -244,10 +292,11 @@ class MikrotikDetector {
      * Tries to connect via API and get identity
      */
     async verifyMikrotik(ip, port = 8728, user = 'admin', password = '') {
+        let conn;
         try {
             const RouterOSAPI = require('node-routeros').RouterOSAPI;
-            
-            const conn = new RouterOSAPI({
+
+            conn = new RouterOSAPI({
                 host: ip,
                 user: user,
                 password: password,
@@ -263,7 +312,7 @@ class MikrotikDetector {
             ]);
             const [identity] = await conn.write('/system/identity/print');
             const [resource] = await conn.write('/system/resource/print');
-            conn.close();
+            try { conn.close(); } catch (e) {}
 
             return {
                 isMikrotik: true,
@@ -273,8 +322,34 @@ class MikrotikDetector {
                 uptime: resource.uptime
             };
         } catch (error) {
+            try { if (conn) conn.close(); } catch (e) {}
+            const msg = String((error && error.message) || error);
+            const looksLikeAuth = /login|password|not enough|permission|auth/i.test(msg);
+            if (looksLikeAuth) {
+                return { isMikrotik: true, authFailed: true };
+            }
             return { isMikrotik: false };
         }
+    }
+
+    /**
+     * Try a known set of factory/default credentials on a MikroTik API.
+     * Returns the first working set, or null.
+     */
+    async findWorkingCredentials(ip, port = 8728) {
+        const candidates = [
+            ['admin', ''],
+            ['admin', 'admin'],
+            ['admin', '1234'],
+            ['admin', 'root']
+        ];
+        for (const [user, password] of candidates) {
+            const result = await this.verifyMikrotik(ip, parseInt(port), user, password);
+            if (result.isMikrotik && !result.authFailed) {
+                return { user, password, ...result };
+            }
+        }
+        return null;
     }
 
     /**

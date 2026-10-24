@@ -156,7 +156,7 @@ class HotspotAuthController {
             }
             
             // Hash password
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await bcrypt.hash(password, 12);
             
             // Get device info from session
             const clientMAC = req.session.mac || null;

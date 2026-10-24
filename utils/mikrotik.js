@@ -110,24 +110,88 @@ class MikrotikService {
         return routers.length > 0 ? routers[0].id : null;
     }
 
-    async addUserToRouter(mac, routerID, uptime = 0, bytes = 0) {
+    /**
+     * Add or update a MAC-based hotspot user on MikroTik with time/byte limits.
+     * Uses /ip/hotspot/user (persistent) so limits are enforced by RouterOS.
+     */
+    async addUserToRouter(mac, routerID, uptimeSeconds = 0, bytes = 0) {
         try {
             const conn = await this.getRouterConnection(routerID);
-            
-            // Add user to hotspot
-            await conn.write('/ip/hotspot/active/add', [
-                `=mac-address=${mac}`,
-                `=server=hotspot1`,
-                `=uptime=${uptime}`,
-                `=bytes-in=${bytes}`,
-                `=bytes-out=0`
+
+            // Convert seconds to RouterOS time format (e.g. 1h30m0s)
+            const formatTime = (secs) => {
+                if (!secs || secs <= 0) return '';
+                const h = Math.floor(secs / 3600);
+                const m = Math.floor((secs % 3600) / 60);
+                const s = Math.floor(secs % 60);
+                let str = '';
+                if (h > 0) str += `${h}h`;
+                if (m > 0) str += `${m}m`;
+                if (s > 0) str += `${s}s`;
+                return str || '1s';
+            };
+
+            // Convert bytes to human-readable for limit-bytes-in
+            const limitBytes = bytes > 0 ? String(bytes) : '';
+
+            // Check if MAC-based user already exists
+            const existingUsers = await conn.write('/ip/hotspot/user/print', [
+                `?mac-address=${mac}`
             ]);
 
-            console.log(`✅ User ${mac} added to router ${routerID}`);
+            if (existingUsers.length > 0) {
+                // Update existing user's limits
+                const userId = existingUsers[0]['.id'];
+                const updateArgs = [`=.id=${userId}`];
+
+                if (uptimeSeconds > 0) {
+                    updateArgs.push(`=limit-uptime=${formatTime(uptimeSeconds)}`);
+                }
+                if (limitBytes) {
+                    updateArgs.push(`=limit-bytes-in=${limitBytes}`);
+                }
+
+                await conn.write('/ip/hotspot/user/set', updateArgs);
+                console.log(`Updated hotspot user ${mac} on ${routerID}: uptime=${formatTime(uptimeSeconds)}, bytes=${limitBytes}`);
+            } else {
+                // Create new MAC-based user with time limit.
+                // Try provisioned hotspot server/profiles first, fall back to
+                // legacy defaults for routers provisioned by older scripts.
+                const profile = uptimeSeconds > 0 ? 'hotbando-paid' : 'hotbando-free';
+                const attempts = [
+                    { server: 'hotbando-server', profile },
+                    { server: 'hotspot1', profile: 'hotbando-default' }
+                ];
+                let added = false;
+                let lastErr = null;
+                for (const a of attempts) {
+                    const addArgs = [
+                        `=mac-address=${mac}`,
+                        `=server=${a.server}`,
+                        `=profile=${a.profile}`
+                    ];
+
+                    if (uptimeSeconds > 0) {
+                        addArgs.push(`=limit-uptime=${formatTime(uptimeSeconds)}`);
+                    }
+                    if (limitBytes) {
+                        addArgs.push(`=limit-bytes-in=${limitBytes}`);
+                    }
+
+                    try {
+                        await conn.write('/ip/hotspot/user/add', addArgs);
+                        added = true;
+                        console.log(`Added hotspot user ${mac} to ${routerID} via ${a.server}/${a.profile}: uptime=${formatTime(uptimeSeconds)}, bytes=${limitBytes}`);
+                        break;
+                    } catch (e) { lastErr = e; }
+                }
+                if (!added) throw lastErr || new Error('hotspot user add failed');
+            }
+
             return true;
         } catch (error) {
-            console.error(`❌ Add user to router error:`, error.message);
-            
+            console.error(`Add user to router error:`, error.message);
+
             // Log connection failure
             try {
                 const db = require('../config/database');

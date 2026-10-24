@@ -1,8 +1,8 @@
 <template>
   <div class="max-w-2xl">
-    <h3 class="section-title mb-5"><i class="fas fa-plus-circle section-icon text-brand-500"></i> New Lead Generation Campaign</h3>
+    <h3 class="section-title mb-5"><i class="fas fa-plus-circle section-icon text-[#FF7A30]"></i> New Lead Generation Campaign</h3>
 
-    <form @submit.prevent="submit" class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-6 shadow-sm space-y-4">
+    <form @submit.prevent="submit" class="bg-[#111118] rounded-2xl border border-[#1e1e2a] p-6 shadow-sm space-y-4">
       <div>
         <label class="input-label">Campaign Title</label>
         <input v-model="form.campaign_name" required class="input" placeholder="e.g. Business Loan Offer">
@@ -17,11 +17,11 @@
           <option value="bank_form">Lead Generation</option>
         </select>
       </div>
-      <div class="bg-blue-50 rounded-lg p-4 text-sm text-blue-700">
+      <div class="bg-blue-500/10 rounded-lg p-4 text-sm text-blue-400">
         Lead generation campaigns help you collect prospective customer information for financial products.
       </div>
-      <p v-if="error" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{{ error }}</p>
-      <p v-if="success" class="text-emerald-600 text-sm bg-green-50 p-3 rounded-lg">{{ success }}</p>
+      <p v-if="error" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
+      <p v-if="success" class="text-emerald-400 text-sm bg-green-500/10 p-3 rounded-lg">{{ success }}</p>
       <div class="flex justify-end gap-3 pt-2">
         <router-link to="/bank/campaigns" class="btn btn-ghost">Cancel</router-link>
         <button type="submit" :disabled="submitting" class="btn btn-primary">

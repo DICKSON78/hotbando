@@ -4,9 +4,26 @@ const crypto = require('crypto');
 const pesapal = require('../utils/pesapal');
 const Wallet = require('../models/Wallet');
 
+function generateVoucherCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const group = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `HB-${group()}-${group()}-${group()}`;
+}
+
+async function _createGiftVoucher(packageId, price) {
+  const code = generateVoucherCode();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+  await db.execute(
+    'INSERT INTO vouchers (voucher_code, package_id, price, is_used, expires_at, created_at) VALUES (?, ?, ?, 0, ?, NOW())',
+    [code, packageId, price, expiresAt]
+  );
+  logger.info(`🎁 Gift voucher generated: ${code} for package #${packageId}`);
+  return code;
+}
+
 async function initiatePayment(req, res) {
   try {
-    const { package_id } = req.body;
+    const { package_id, phone_number, gift, recipient_phone } = req.body;
     const user = req.session.hotbando_user;
     if (!user) return res.status(401).json({ error: 'Ingia kwanza' });
 
@@ -15,6 +32,8 @@ async function initiatePayment(req, res) {
 
     const pkg = packages[0];
     const ref = `HB${Date.now()}${crypto.randomBytes(3).toString('hex')}`;
+    const payerPhone = phone_number || user.phone_number || '';
+    const isGift = !!gift;
 
     const [settings] = await db.execute(
       "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'pesapal_%'"
@@ -22,42 +41,59 @@ async function initiatePayment(req, res) {
     const config = {};
     settings.forEach(s => { config[s.setting_key] = s.setting_value; });
 
-    if (config.pesapal_consumer_key && config.pesapal_consumer_secret) {
-      pesapal.init({
-        consumer_key: config.pesapal_consumer_key,
-        consumer_secret: config.pesapal_consumer_secret,
-        env: config.pesapal_env || 'sandbox',
-        callback_url: config.pesapal_callback_url,
-        ipn_url: config.pesapal_ipn_url,
-      });
-
-      let notification_id = config.pesapal_ipn_id;
-      if (!notification_id) {
-        const ipnResult = await pesapal.registerIPN(config.pesapal_ipn_url || `${req.protocol}://${req.get('host')}/api/payments/ipn`);
-        notification_id = ipnResult.ipn_id;
-        await db.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('pesapal_ipn_id', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [notification_id, notification_id]);
+    // DEMO MODE (explicit opt-in only): when PesaPal is not configured AND
+    // DEMO_PAYMENTS=true, complete instantly for testing. Otherwise fail
+    // closed so no real access is granted without real money.
+    if (!config.pesapal_consumer_key || !config.pesapal_consumer_secret) {
+      if (process.env.DEMO_PAYMENTS !== 'true') {
+        return res.status(400).json({ error: 'Malipo ya mtandao hayajasanidiwa kwa sasa. Tumia voucher au wasiliana na msimamizi.' });
       }
-
-      const order = await pesapal.submitOrder({
-        id: ref,
-        amount: pkg.price,
-        description: `HotBando ${pkg.name}`,
-        notification_id,
-        email: user.email || '',
-        phone: user.phone_number || '',
-        firstName: (user.name || '').split(' ')[0],
-        lastName: (user.name || '').split(' ').slice(1).join(' ') || 'HotBando',
-      });
-
       await db.execute(
-        "INSERT INTO payment_requests (user_id, payment_method, amount, phone_number, reference_number, merchant_request_id, status, callback_data) VALUES (?, 'pesapal', ?, ?, ?, ?, 'pending', ?)",
-        [user.id, pkg.price, user.phone_number || '', order.order_tracking_id, ref, JSON.stringify({ package_id, order })]
+        "INSERT INTO payment_requests (user_id, payment_method, amount, phone_number, reference_number, merchant_request_id, status, callback_data) VALUES (?, 'pesapal', ?, ?, ?, ?, 'completed', ?)",
+        [user.id, pkg.price, payerPhone, ref, ref, JSON.stringify({ package_id, gift: isGift, demo: true, recipient_phone: isGift ? recipient_phone || null : null })]
       );
 
-      return res.json({ success: true, redirect_url: order.redirect_url, payment_url: order.redirect_url, order_tracking_id: order.order_tracking_id });
+      if (isGift) {
+        const voucher = await _createGiftVoucher(pkg.id, pkg.price);
+        return res.json({ success: true, demo: true, voucher, message: `Voucher imegeneratiwa! Tuma kwa mtu unayemnunulia.` });
+      }
+
+      await _activatePackage(user.id, pkg.id, pkg.price);
+      return res.json({ success: true, demo: true, activated: true, message: `Kifurushi "${pkg.name}" kimewashwa!` });
     }
 
-    return res.status(400).json({ error: 'PesaPal haijasanidiwa. Wasiliana na msimamizi.' });
+    pesapal.init({
+      consumer_key: config.pesapal_consumer_key,
+      consumer_secret: config.pesapal_consumer_secret,
+      env: config.pesapal_env || 'sandbox',
+      callback_url: config.pesapal_callback_url,
+      ipn_url: config.pesapal_ipn_url,
+    });
+
+    let notification_id = config.pesapal_ipn_id;
+    if (!notification_id) {
+      const ipnResult = await pesapal.registerIPN(config.pesapal_ipn_url || `${req.protocol}://${req.get('host')}/api/payments/ipn`);
+      notification_id = ipnResult.ipn_id;
+      await db.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('pesapal_ipn_id', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [notification_id, notification_id]);
+    }
+
+    const order = await pesapal.submitOrder({
+      id: ref,
+      amount: pkg.price,
+      description: `HotBando ${pkg.name}`,
+      notification_id,
+      email: user.email || '',
+      phone: payerPhone,
+      firstName: (user.name || '').split(' ')[0],
+      lastName: (user.name || '').split(' ').slice(1).join(' ') || 'HotBando',
+    });
+
+    await db.execute(
+      "INSERT INTO payment_requests (user_id, payment_method, amount, phone_number, reference_number, merchant_request_id, status, callback_data) VALUES (?, 'pesapal', ?, ?, ?, ?, 'pending', ?)",
+      [user.id, pkg.price, payerPhone, order.order_tracking_id, ref, JSON.stringify({ package_id, gift: isGift, recipient_phone: isGift ? recipient_phone || null : null })]
+    );
+
+    return res.json({ success: true, redirect_url: order.redirect_url, payment_url: order.redirect_url, order_tracking_id: order.order_tracking_id });
   } catch (e) {
     logger.error('Payment initiation error:', e.response?.data || e.message);
     res.status(500).json({ error: 'Hitilafu. Jaribu tena.' });
@@ -82,7 +118,12 @@ async function checkPaymentStatus(req, res) {
     const payment = requests[0];
 
     if (payment.status === 'completed') {
-      return res.json({ success: true, status: 'completed', message: 'Malipo yamekamilika kikamilifu!' });
+      let voucher = null;
+      try {
+        const data = typeof payment.callback_data === 'string' ? JSON.parse(payment.callback_data) : payment.callback_data;
+        voucher = data.gift_voucher || null;
+      } catch (e) { /* ignore */ }
+      return res.json({ success: true, status: 'completed', message: 'Malipo yamekamilika kikamilifu!', voucher });
     }
 
     if (payment.status === 'pending' && payment.merchant_request_id) {
@@ -127,6 +168,13 @@ async function _processCompletedPayment(reqData, status) {
     await Wallet.deposit(reqData.user_id, reqData.amount, 'pesapal', reqData.reference_number,
       `Reseller wallet top-up via Pesapal - TSH ${Number(reqData.amount).toLocaleString()}`);
     logger.info(`✅ Wallet top-up: User #${reqData.user_id} +TSH ${reqData.amount}`);
+  } else if (data.gift) {
+    const voucher = await _createGiftVoucher(data.package_id, reqData.amount);
+    data.gift_voucher = voucher;
+    await db.execute(
+      'UPDATE payment_requests SET callback_data = ? WHERE id = ?',
+      [JSON.stringify(data), reqData.id]
+    );
   } else if (data.package_id) {
     await _activatePackage(reqData.user_id, data.package_id, reqData.amount);
   }
@@ -230,8 +278,8 @@ async function _activatePackage(userId, packageId, amount) {
     [pkg.name, now, newUsageUntil, amount, userId]
   );
   await db.execute(
-    'INSERT INTO payments (user_id, amount, payment_method, status, created_at) VALUES (?, ?, "pesapal", "completed", NOW())',
-    [userId, amount]
+    'INSERT INTO payments (user_id, package_id, amount, payment_method, status, activated, created_at) VALUES (?, ?, ?, "pesapal", "completed", 1, NOW())',
+    [userId, packageId, amount]
   );
 }
 

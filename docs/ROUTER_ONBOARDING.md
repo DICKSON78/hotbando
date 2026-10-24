@@ -1,38 +1,73 @@
-# Connecting a Fresh MikroTik Router via the Admin Portal
+# Connecting a Fresh MikroTik Router to HotBando
 
-This guide walks a developer through connecting a **fresh, out-of-the-box MikroTik
-router** to the HotBando platform using the **Admin Portal** (no manual RouterOS
-typing beyond importing one bootstrap script).
+There are **two** ways to connect a router:
 
-The platform talks to each router over the **RouterOS API (port 8728)** for
-management and live status, and the router talks to the central **FreeRADIUS**
-server (UDP 1812/1813) for hotspot authentication and accounting.
+1. **Zero-touch Connect (recommended, layman-friendly)** → `mikrotik-zero-touch.rsc`
+   The technician imports ONE script. The router detects its own WAN + WiFi
+   interfaces, phones home to the HotBando server, and registers as **PENDING**.
+   The OWNER then opens the admin panel — from anywhere in Tanzania — and clicks
+   **Connect** on the router card. The router's next poll (≤2 min) pulls and
+   applies its complete config (WireGuard tunnel, hotspot, RADIUS, SSID). After
+   that the router is managed **over the WireGuard tunnel** from anywhere — no
+   LAN access required, and a layman never touches network settings.
+
+2. **Admin-portal driven** → the *WireGuard Setup* tab walks a developer
+   through detect → register → configure with a live terminal feed.
+
+Both put the router inside the **WireGuard** network (`10.7.0.0/16`), so the
+platform talks to each router over the **RouterOS API (8728) over the tunnel**,
+and the router talks to FreeRADIUS (UDP 1812/1813) for hotspot auth/accounting.
 
 ```
-   Admin Portal ──(API 8728)──▶ MikroTik Router ──(RADIUS 1812/1813 UDP)──▶ HotBando VPS
-   (hotbando VPS)  ◀──────────┘        │  ◀──────────────────────────────┘  (FreeRADIUS)
-        │                              └── WiFi clients connect here (captive portal)
+   Admin Portal ──(API 8728 over WireGuard)──▶ MikroTik Router
+   (hotbando VPS wg0 10.7.0.1/16)              │  ◀──(RADIUS 1812/1813 UDP)──  VPS
+        │                                      └── WiFi clients (captive portal)
 ```
 
 ## Prerequisites
 
-1. **A running HotBando instance** (see [DEPLOYMENT.md](./DEPLOYMENT.md)) with a
-   public IP or domain that the router can reach — e.g. `hotbando.example.com` or `196.192.x.x`.
-2. **RADIUS is enabled** and the shared `RADIUS_SECRET` is set in `.env`:
-   ```ini
-   RADIUS_ENABLED=true
-   RADIUS_SECRET=<your-32-char-secret>
+1. A **running HotBando instance** with a public IP reachable by the router.
+   Current server: `34.35.81.196` (app port `3000`).
+2. **RADIUS enabled** and `RADIUS_SECRET` set in `.env`.
+3. **Zero-touch only:** `ROUTER_REGISTRATION_SECRET` set in the server `.env`
+   (reveal it only to installers).
+4. Router is **powered, has an internet WAN link** (factory defaults fine).
+5. Firewall: incoming **TCP 80/443/3000**, **UDP 1812/1813** (RADIUS) and
+   **UDP 51820** (WireGuard) — all already open on the HotBando VPS.
+
+---
+
+# Option A — Zero-Touch Connect (for a layman)
+
+1. Edit `freeradius/mikrotik-zero-touch.rsc` and set the three values at the top:
+   - `<SERVER_IP>` → `34.35.81.196`
+   - `<SERVER_PORT>` → `3000`
+   - `<REGISTRATION_SECRET>` → the server's `ROUTER_REGISTRATION_SECRET`
+2. On the fresh router (WinBox → Terminal), paste the script **once**, or run:
    ```
-3. The router is **powered and connected to the internet** (WAN), and has a fresh
-   RouterOS install (factory defaults are fine — the bootstrap script cleans up).
-4. **RouterOS API is reachable** from the HotBando server. Two common options:
-   - The router has a public IP, **or**
-   - The router is inside the **WireGuard** network (`10.7.0.0/24`) — the Admin
-     Portal's *WireGuard Setup* tab generates the router-side config for you.
-   - You can confirm reachability from the VPS with:
-     ```bash
-     nc -zv <router-ip> 8728
-     ```
+   /import file-name=mikrotik-zero-touch.rsc
+   ```
+3. The router phone-homes (`POST /api/zero-touch/register`) and registers as
+   **PENDING** — it reserves the first free `10.7.0.x` address and waits.
+
+4. In the Admin Portal → **Routers** (from anywhere, e.g. Dodoma), the new card
+   appears with a **PENDING** badge and a **Connect** button.
+
+5. Click **Connect**. The server adds the WireGuard tunnel peer, switches the
+   router's management host to its tunnel IP, and marks it CONNECTING. The
+   router's poll (every 2 min) then downloads + applies the full config:
+   tunnel + hotspot + RADIUS + SSID. The card turns **ONLINE**.
+
+6. It is now configurable from the dashboard **from anywhere** — the management
+   host is the tunnel IP, so you do not need to be on the router's LAN.
+
+> The bootstrap verifies the phone-home worked. If you see "ERROR: could not
+> download provisioning script", check server IP, port, and the secret.
+> If the router stays PENDING, click **Connect** in the panel.
+
+---
+
+# Option B — Admin Portal Walkthrough (developer)
 
 ## Step 1 — Log in to the Admin Portal
 

@@ -191,10 +191,11 @@ CREATE TABLE IF NOT EXISTS `user_connection_logs` (
   `router_id` INT(11) NOT NULL,
   `location_id` INT(11) NULL,
   `ip_address` VARCHAR(50) NULL,
-  `action` ENUM('connect', 'disconnect', 'timeout', 'kicked', 'error') NOT NULL,
+  `action` ENUM('connect', 'disconnect', 'timeout', 'kicked', 'error', 'connect_failed') NOT NULL,
   `session_duration` INT DEFAULT 0, -- seconds
   `bytes_uploaded` BIGINT DEFAULT 0,
   `bytes_downloaded` BIGINT DEFAULT 0,
+  `bytes_charged` TINYINT(1) NOT NULL DEFAULT 0, -- free-tier consumption marker
   `error_message` TEXT NULL,
   `user_agent` TEXT NULL,
   `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -463,7 +464,7 @@ CREATE TABLE IF NOT EXISTS `payment_requests` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `user_id` INT(11) NOT NULL,
   `transaction_id` INT(11) NULL,
-  `payment_method` ENUM('mpesa', 'tigopesa', 'airtelmoney') NOT NULL,
+  `payment_method` ENUM('mpesa', 'tigopesa', 'airtelmoney', 'pesapal') NOT NULL,
   `amount` DECIMAL(10, 2) NOT NULL,
   `phone_number` VARCHAR(20) NOT NULL,
   `reference_number` VARCHAR(255) NULL, -- From payment gateway
@@ -637,12 +638,15 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
 CREATE TABLE IF NOT EXISTS `payments` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `user_id` INT(11) NOT NULL,
+  `package_id` INT NULL,
   `amount` DECIMAL(10, 2) NOT NULL,
   `payment_method` VARCHAR(20) NULL DEFAULT 'cash',
   `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+  `activated` TINYINT(1) NOT NULL DEFAULT 0, -- atomic claim: one payment extends time once
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_user` (`user_id`),
+  KEY `idx_package` (`package_id`),
   KEY `idx_status` (`status`),
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -724,7 +728,7 @@ INSERT INTO `packages` (`name`, `description`, `duration_hours`, `price`, `is_ac
 ('MASAA 6', '6 hours of internet access', 6, 500.00, 1, 1),
 ('MASAA 24', '24 hours (1 day) of internet access', 24, 1000.00, 1, 2),
 ('WIKI 1', '1 week of internet access', 168, 6000.00, 1, 3),
-('MWEEZI 1', '1 month of internet access', 720, 20000.00, 1, 4)
+('MWEZI 1', '1 month of internet access', 720, 20000.00, 1, 4)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
 -- Insert default system settings
@@ -804,6 +808,102 @@ CREATE TABLE IF NOT EXISTS `contact_messages` (
   PRIMARY KEY (`id`),
   KEY `idx_contact_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================================
+-- INVESTOR PORTAL
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `investors` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `user_id` INT(11) NOT NULL,
+  `amount` DECIMAL(12, 2) NOT NULL,
+  `investment_type` ENUM('fixed', 'flexible') DEFAULT 'fixed',
+  `duration_months` INT(11) DEFAULT 12,
+  `expected_roi` DECIMAL(5, 2) DEFAULT 12.00,
+  `status` ENUM('active', 'completed', 'withdrawn') DEFAULT 'active',
+  `invested_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `matures_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_investor_user` (`user_id`),
+  KEY `idx_investor_status` (`status`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `investment_returns` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `investment_id` INT(11) NOT NULL,
+  `amount` DECIMAL(12, 2) NOT NULL,
+  `period` VARCHAR(20) NULL,
+  `calculated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_return_investment` (`investment_id`),
+  FOREIGN KEY (`investment_id`) REFERENCES `investors`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- RESELLER SYSTEM
+-- ============================================================================
+
+ALTER TABLE users MODIFY COLUMN role ENUM('customer', 'admin', 'sponsor', 'bank_partner', 'franchise_owner', 'super_admin', 'reseller') DEFAULT 'customer';
+
+CREATE TABLE IF NOT EXISTS `resellers` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `user_id` INT(11) NOT NULL,
+  `balance` DECIMAL(10, 2) DEFAULT 0,
+  `total_earned` DECIMAL(10, 2) DEFAULT 0,
+  `status` ENUM('active', 'suspended') DEFAULT 'active',
+  `tier` VARCHAR(20) NOT NULL DEFAULT 'bronze',
+  `commission_rate` DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+  `total_vouchers_sold` INT NOT NULL DEFAULT 0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `reseller_withdrawals` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `reseller_id` INT(11) NOT NULL,
+  `user_id` INT(11) NOT NULL,
+  `amount` DECIMAL(10, 2) NOT NULL,
+  `payment_method` VARCHAR(50) NULL DEFAULT 'mobile_money',
+  `payment_phone` VARCHAR(20) NULL,
+  `status` ENUM('pending', 'approved', 'paid', 'rejected') DEFAULT 'pending',
+  `processed_by` INT(11) NULL,
+  `processed_at` DATETIME NULL,
+  `notes` TEXT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_reseller_id` (`reseller_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`),
+  FOREIGN KEY (`reseller_id`) REFERENCES `resellers`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- CLICKPESA TRANSACTIONS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS `clickpesa_transactions` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `order_reference` VARCHAR(64) NOT NULL,
+  `user_id` INT(11) DEFAULT NULL,
+  `amount` DECIMAL(12,2) NOT NULL,
+  `phone` VARCHAR(20) DEFAULT NULL,
+  `purpose` VARCHAR(50) DEFAULT 'payment',
+  `status` VARCHAR(20) DEFAULT 'PENDING',
+  `channel` VARCHAR(30) DEFAULT NULL,
+  `clickpesa_id` VARCHAR(100) DEFAULT NULL,
+  `clickpesa_response` JSON DEFAULT NULL,
+  `extra_data` JSON DEFAULT NULL,
+  `processed` TINYINT(1) DEFAULT 0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_order_reference` (`order_reference`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
 -- END OF SCHEMA

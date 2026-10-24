@@ -5,6 +5,7 @@ const db = require('../config/database');
 const hotspotController = require('../controllers/hotspotController');
 const mikrotikService = require('../utils/mikrotik');
 const { getRealClientMAC, getRealRouterID, getRealSSID, getRealLocation, formatRemainingTime } = hotspotController.helpers;
+const { authRateLimit } = require('../middleware/security');
 
 // Establish device session (mirrors GET /hotspot)
 router.get('/session', async (req, res) => {
@@ -14,18 +15,55 @@ router.get('/session', async (req, res) => {
         const ssidshow = getRealSSID(req);
         const location = await getRealLocation(routerID);
 
-        req.session.mac = mac;
-        req.session.routerID = routerID;
-        req.session.ssidshow = ssidshow;
-        req.session.location = location;
-        req.session.clientIP = req.ip;
-        req.session.userAgent = req.headers['user-agent'];
+        // Only update session WiFi info if request has explicit routerID param
+        // (from MikroTik captive portal redirect) OR if session already has a valid one
+        const hasExplicitRouter = req.query.routerID || req.query.routerid || req.query.router_id;
+        if (hasExplicitRouter) {
+            // Validate against DB
+            let onWifi = false;
+            let registeredRouter = null;
+            try {
+                const [routers] = await db.execute(
+                    'SELECT id, router_id, router_name, status, ssid, latitude, longitude FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                    [routerID]
+                );
+                if (routers.length > 0) {
+                    onWifi = true;
+                    registeredRouter = routers[0];
+                }
+            } catch (_) {}
+
+            req.session.mac = mac;
+            req.session.routerID = routerID;
+            req.session.ssidshow = ssidshow;
+            req.session.location = location;
+            req.session.onWifi = onWifi;
+            req.session.clientIP = req.ip;
+            req.session.userAgent = req.headers['user-agent'];
+        } else if (req.session.routerID) {
+            // Re-validate existing routerID
+            let onWifi = false;
+            let registeredRouter = null;
+            try {
+                const [routers] = await db.execute(
+                    'SELECT id, router_id, router_name, status, ssid, latitude, longitude FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                    [req.session.routerID]
+                );
+                if (routers.length > 0) {
+                    onWifi = true;
+                    registeredRouter = routers[0];
+                }
+            } catch (_) {}
+            req.session.onWifi = onWifi;
+        }
 
         res.json({
-            mac,
-            routerID,
-            ssidshow,
-            location,
+            mac: req.session.mac || mac,
+            routerID: req.session.routerID || '',
+            ssidshow: req.session.ssidshow || ssidshow,
+            location: req.session.location || location,
+            onWifi: req.session.onWifi || false,
+            registeredRouter: null,
             user: req.session.hotbando_user || null
         });
     } catch (error) {
@@ -35,11 +73,13 @@ router.get('/session', async (req, res) => {
 });
 
 // Login / register / voucher / ads delegate to controller (JSON-aware)
-router.post('/login', hotspotController.loginUser);
-router.post('/register', hotspotController.register);
-router.post('/voucher', hotspotController.voucher);
-router.get('/get-ad', hotspotController.getAd);
-router.post('/complete-ad', hotspotController.completeAd);
+// Strict rate limit on auth endpoints: 5 attempts per 15 min per IP
+router.post('/login', authRateLimit, hotspotController.loginUser);
+router.post('/register', authRateLimit, hotspotController.register);
+router.post('/voucher', requireWifi, hotspotController.voucher);
+router.get('/get-ad', requireWifi, hotspotController.getAd);
+router.get('/ads-list', requireWifi, hotspotController.getAdsList);
+router.post('/complete-ad', requireWifi, hotspotController.completeAd);
 
 // Active internet packages for the subscribe page
 router.get('/packages', async (req, res) => {
@@ -54,8 +94,33 @@ router.get('/packages', async (req, res) => {
     }
 });
 
+// Middleware: require WiFi connection from registered MikroTik
+async function requireWifi(req, res, next) {
+    // Heal stale sessions: a logged-in user's bound router counts as on-WiFi
+    if (!req.session.onWifi && req.session.hotbando_user?.last_router_id) {
+        try {
+            const [routers] = await db.execute(
+                'SELECT router_id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                [req.session.hotbando_user.last_router_id]
+            );
+            if (routers.length > 0) {
+                req.session.routerID = routers[0].router_id;
+                req.session.onWifi = true;
+            }
+        } catch (_) {}
+    }
+    if (!req.session.onWifi) {
+        return res.status(403).json({
+            error: 'Please connect to HotBando WiFi first.',
+            onWifi: false,
+            redirectTo: '/hotspot'
+        });
+    }
+    next();
+}
+
 // JSON dashboard data
-router.get('/dashboard', async (req, res) => {
+router.get('/dashboard', requireWifi, async (req, res) => {
     if (!req.session.hotbando_user) {
         return res.status(401).json({ error: 'Umelazimika kuingia kwenye akaunti yako.' });
     }
@@ -86,15 +151,26 @@ router.get('/dashboard', async (req, res) => {
         );
         const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
 
-        const routerStatus = await mikrotikService.checkRouterStatus(req.session.routerID || 'router-default');
-
+        // MikroTik calls with fast timeout — don't block dashboard if router unreachable
+        let routerOnline = false;
         let connectedUsers = 0;
         try {
-            const sessions = await mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
-            connectedUsers = sessions.length;
-        } catch (error) {
-            console.warn('⚠️ Could not get connected users count:', error.message);
-        }
+            const routerPromise = mikrotikService.checkRouterStatus(req.session.routerID || 'router-default');
+            const result = await Promise.race([
+                routerPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Router timeout')), 5000))
+            ]);
+            routerOnline = result?.online || false;
+        } catch (_) {}
+
+        try {
+            const sessionsPromise = mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
+            const sessions = await Promise.race([
+                sessionsPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Router timeout')), 5000))
+            ]);
+            connectedUsers = sessions?.length || 0;
+        } catch (_) {}
 
         const adsWatchedToday = todayViews[0].count;
         const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
@@ -122,9 +198,9 @@ router.get('/dashboard', async (req, res) => {
             adsRemaining,
             dailyAdLimit,
             canWatchAds: adsRemaining > 0,
-            routerStatus: routerStatus.status,
+            routerStatus: routerOnline ? 'online' : 'offline',
             connectedUsers,
-            routerMessage: routerStatus.isOnline ?
+            routerMessage: routerOnline ?
                 `Mtandao upo tayari (${connectedUsers} watumiaji wanaotumia)` :
                 'Kuna changamoto ndogo kwenye mtandao, lakini bado unaweza kutumia internet'
         });
@@ -135,7 +211,7 @@ router.get('/dashboard', async (req, res) => {
 });
 
 // Data usage endpoint (for real-time usage polling)
-router.get('/usage', async (req, res) => {
+router.get('/usage', requireWifi, async (req, res) => {
     const user = req.session.hotbando_user;
     if (!user) {
         return res.status(401).json({ error: 'Umelazimika kuingia kwenye akaunti yako.' });

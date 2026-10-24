@@ -56,6 +56,9 @@ router.get('/:routerID/details', adminController.getRouterDetails);
 // Reboot router
 router.post('/:routerID/reboot', adminController.rebootRouter);
 
+// Connect a PENDING router (zero-touch approval)
+router.post('/:routerID/connect', adminController.connectRouter);
+
 // Add router
 router.post('/', adminController.addRouter);
 

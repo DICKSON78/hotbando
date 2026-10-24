@@ -1,29 +1,54 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { useResellerStore } from '../stores/reseller'
-import { usePartnerStore } from '../stores/partner'
+import { useHotspotStore } from '../stores/hotspot'
 
 const routes = [
-  { path: '/', name: 'landing', component: () => import('../views/Landing.vue') },
+  // Website pages (public)
+  { path: '/', name: 'landing', component: () => import('../views/website/Home.vue') },
+  { path: '/services', name: 'website-services', component: () => import('../views/website/Services.vue') },
+  { path: '/pricing', name: 'website-pricing', component: () => import('../views/website/Pricing.vue') },
+  { path: '/about', name: 'website-about', component: () => import('../views/website/About.vue') },
+  { path: '/partners', name: 'website-partners', component: () => import('../views/website/Partners.vue') },
+  { path: '/contact', name: 'website-contact', component: () => import('../views/website/Contact.vue') },
+
+  // Single unified login for all portals
   { path: '/login', name: 'portal-login', component: () => import('../views/PortalLogin.vue') },
   { path: '/admin/login', redirect: '/login' },
+
+  // ==================== Admin Portal ====================
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, roles: ['admin', 'super_admin'] },
     children: [
+      { path: '', redirect: '/admin/overview' },
+      { path: 'overview', name: 'overview', component: () => import('../views/admin/Overview.vue') },
       { path: 'dashboard', name: 'dashboard', component: () => import('../views/admin/Dashboard.vue') },
-      { path: 'locations', name: 'locations', component: () => import('../views/admin/Locations.vue') },
-      { path: 'routers', name: 'routers', component: () => import('../views/admin/Routers.vue') },
+      { path: 'branches', name: 'branches', component: () => import('../views/admin/Branches.vue') },
+      { path: 'staff', name: 'staff', component: () => import('../views/admin/Staff.vue') },
+      { path: 'finance', name: 'finance', component: () => import('../views/admin/Finance.vue') },
+      { path: 'assets', name: 'assets', component: () => import('../views/admin/Assets.vue') },
+      { path: 'tickets', name: 'tickets', component: () => import('../views/admin/Tickets.vue') },
+      { path: 'audit', name: 'audit', component: () => import('../views/admin/Audit.vue') },
+      { path: 'compliance', name: 'compliance', component: () => import('../views/admin/Compliance.vue') },
+      { path: 'reports', name: 'reports', component: () => import('../views/admin/Reports.vue') },
       { path: 'users', name: 'users', component: () => import('../views/admin/Users.vue') },
+      { path: 'routers', name: 'routers', component: () => import('../views/admin/Routers.vue') },
+      { path: 'locations', name: 'locations', component: () => import('../views/admin/Locations.vue') },
       { path: 'resellers', name: 'resellers', component: () => import('../views/admin/Resellers.vue') },
       { path: 'withdrawals', name: 'withdrawals', component: () => import('../views/admin/Withdrawals.vue') },
       { path: 'campaigns', name: 'campaigns', component: () => import('../views/admin/Campaigns.vue') },
       { path: 'revenue', name: 'revenue', component: () => import('../views/admin/Revenue.vue') },
       { path: 'wallet', name: 'wallet', component: () => import('../views/admin/Wallet.vue') },
+      { path: 'revenue-share', name: 'revenue-share', component: () => import('../views/admin/RevenueShare.vue') },
+      { path: 'notifications', name: 'notifications', component: () => import('../views/admin/Notifications.vue') },
+      { path: 'applications', name: 'applications', component: () => import('../views/admin/Applications.vue') },
+      { path: 'packages', name: 'packages', component: () => import('../views/admin/Packages.vue') },
       { path: 'settings', name: 'settings', component: () => import('../views/admin/Settings.vue') }
     ]
   },
+
+  // ==================== Customer / Hotspot Portal ====================
   {
     path: '/hotspot',
     component: () => import('../layouts/HotspotLayout.vue'),
@@ -36,10 +61,12 @@ const routes = [
       { path: 'ads', name: 'hotspot-ads', component: () => import('../views/hotspot/Ads.vue') }
     ]
   },
+
+  // ==================== Reseller Portal ====================
   {
     path: '/reseller',
     component: () => import('../layouts/ResellerLayout.vue'),
-    meta: { requiresReseller: true },
+    meta: { requiresAuth: true, roles: ['reseller'] },
     children: [
       { path: '', redirect: '/reseller/dashboard' },
       { path: 'dashboard', name: 'reseller-dashboard', component: () => import('../views/reseller/Dashboard.vue') },
@@ -53,10 +80,12 @@ const routes = [
     name: 'reseller-signup',
     component: () => import('../views/reseller/Signup.vue')
   },
+
+  // ==================== Franchise Portal ====================
   {
     path: '/franchise',
     component: () => import('../layouts/FranchiseLayout.vue'),
-    meta: { requiresPartner: 'franchise_owner' },
+    meta: { requiresAuth: true, roles: ['franchise_owner', 'admin', 'super_admin'] },
     children: [
       { path: '', redirect: '/franchise/dashboard' },
       { path: 'dashboard', name: 'franchise-dashboard', component: () => import('../views/franchise/Dashboard.vue') },
@@ -64,10 +93,12 @@ const routes = [
       { path: 'revenue', name: 'franchise-revenue', component: () => import('../views/franchise/Revenue.vue') }
     ]
   },
+
+  // ==================== Sponsor Portal ====================
   {
     path: '/sponsor',
     component: () => import('../layouts/SponsorLayout.vue'),
-    meta: { requiresPartner: 'sponsor' },
+    meta: { requiresAuth: true, roles: ['sponsor', 'admin', 'super_admin'] },
     children: [
       { path: '', redirect: '/sponsor/dashboard' },
       { path: 'dashboard', name: 'sponsor-dashboard', component: () => import('../views/sponsor/Dashboard.vue') },
@@ -76,10 +107,12 @@ const routes = [
       { path: 'wallet', name: 'sponsor-wallet', component: () => import('../views/sponsor/Wallet.vue') }
     ]
   },
+
+  // ==================== Bank Portal ====================
   {
     path: '/bank',
     component: () => import('../layouts/BankLayout.vue'),
-    meta: { requiresPartner: 'bank_partner' },
+    meta: { requiresAuth: true, roles: ['bank_partner', 'admin', 'super_admin'] },
     children: [
       { path: '', redirect: '/bank/dashboard' },
       { path: 'dashboard', name: 'bank-dashboard', component: () => import('../views/bank/Dashboard.vue') },
@@ -87,36 +120,68 @@ const routes = [
       { path: 'campaigns/create', name: 'bank-campaigns-create', component: () => import('../views/bank/CampaignForm.vue') },
       { path: 'leads', name: 'bank-leads', component: () => import('../views/bank/Leads.vue') }
     ]
+  },
+
+  // ==================== Investor Portal ====================
+  {
+    path: '/investor',
+    component: () => import('../layouts/InvestorLayout.vue'),
+    meta: { requiresAuth: true, roles: ['investor', 'admin', 'super_admin', 'franchise_owner'] },
+    children: [
+      { path: '', redirect: '/investor/dashboard' },
+      { path: 'dashboard', name: 'investor-dashboard', component: () => import('../views/investor/Dashboard.vue') },
+      { path: 'investments', name: 'investor-investments', component: () => import('../views/investor/Investments.vue') },
+      { path: 'returns', name: 'investor-returns', component: () => import('../views/investor/Returns.vue') },
+      { path: 'portfolio', name: 'investor-portfolio', component: () => import('../views/investor/Portfolio.vue') }
+    ]
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    return { top: 0 }
+  }
 })
 
+// ==================== Unified RBAC Guard ====================
 router.beforeEach(async (to) => {
+  // Hotspot guest routes (login/signup) — bounce logged-in customers
+  const hotspotGuestRoutes = ['hotspot-login', 'hotspot-signup']
+  if (hotspotGuestRoutes.includes(to.name)) {
+    const hotspot = useHotspotStore()
+    await hotspot.init()
+    if (hotspot.isLoggedIn) return '/hotspot/dashboard'
+    return  // allow
+  }
+
+  // Hotspot protected routes — require customer session + WiFi
+  const hotspotAuthRoutes = ['hotspot-dashboard', 'hotspot-subscribe', 'hotspot-ads']
+  if (hotspotAuthRoutes.includes(to.name)) {
+    const hotspot = useHotspotStore()
+    await hotspot.init()
+    if (!hotspot.isLoggedIn) return '/hotspot/login'
+    if (!hotspot.onWifi) return '/hotspot'
+    return  // allow
+  }
+
+  // Portal routes — require auth + role check
   if (to.meta.requiresAuth) {
     const auth = useAuthStore()
-    if (!auth.isAdmin) {
+    // Only call checkSession if we don't already have a user
+    if (!auth.user) {
       const ok = await auth.checkSession()
-      if (!ok) return '/'
+      if (!ok) return '/login'
     }
-  }
-  if (to.meta.requiresReseller) {
-    const reseller = useResellerStore()
-    if (!reseller.user) {
-      const ok = await reseller.checkSession()
-      if (!ok) return '/'
-    }
-  }
-  if (to.meta.requiresPartner) {
-    const partner = usePartnerStore()
-    if (!partner.user) {
-      await partner.checkSession()
-    }
-    if (!partner.user || partner.user.role !== to.meta.requiresPartner) {
-      return '/'
+    // Role check — meta.roles defines allowed roles for this portal
+    if (to.meta.roles && to.meta.roles.length > 0) {
+      if (!auth.hasRole(...to.meta.roles)) {
+        // Wrong portal — redirect to their correct dashboard
+        return auth.dashboardUrl()
+      }
     }
   }
 })

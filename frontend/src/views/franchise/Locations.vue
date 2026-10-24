@@ -1,25 +1,25 @@
 <template>
   <div class="space-y-5">
-    <div class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-brand-100">
-        <h3 class="section-title"><i class="fas fa-map-marker-alt section-icon text-brand-500"></i> My Locations</h3>
+    <div class="section-card rounded-2xl border border-[#1e1e2a] overflow-hidden">
+      <div class="px-5 py-4 border-b border-[#1e1e2a]">
+        <h3 class="section-title"><i class="fas fa-map-marker-alt section-icon text-[#FF7A30]"></i> My Locations</h3>
       </div>
-      <div v-if="loading" class="p-10 text-center text-gray-400">Loading...</div>
+      <div v-if="loading" class="p-10 text-center text-white/40">Loading...</div>
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-        <div v-for="l in locations" :key="l.id" class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition cursor-pointer">
+        <div v-for="l in locations" :key="l.id" class="bg-[#0d0d14] rounded-xl border border-[#1e1e2a] p-4 shadow-sm hover:shadow-md transition cursor-pointer">
           <div class="flex items-start justify-between">
             <div>
-              <h4 class="font-semibold text-gray-800">{{ l.name }}</h4>
-              <p class="text-sm text-gray-500 mt-1">{{ l.address || l.city || '—' }}</p>
+              <h4 class="font-semibold text-white">{{ l.name }}</h4>
+              <p class="text-sm text-white/50 mt-1">{{ l.address || l.city || '—' }}</p>
             </div>
-            <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center"><i class="fas fa-map-marker-alt"></i></div>
+            <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center"><i class="fas fa-map-marker-alt"></i></div>
           </div>
           <div class="mt-4 flex items-center justify-between text-sm">
-            <span class="text-gray-400">Routers: {{ l.router_count || 0 }}</span>
-            <span class="text-emerald-600 font-semibold">{{ formatMoney(l.total_revenue) }}</span>
+            <span class="text-white/40">Routers: {{ l.router_count || 0 }}</span>
+            <span class="text-emerald-500 font-semibold">{{ formatMoney(l.total_revenue) }}</span>
           </div>
         </div>
-        <div v-if="!locations.length" class="col-span-full text-center py-12 text-gray-400">No locations assigned yet</div>
+        <div v-if="!locations.length" class="col-span-full text-center py-12 text-white/40">No locations assigned yet</div>
       </div>
     </div>
   </div>

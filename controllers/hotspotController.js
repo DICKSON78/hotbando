@@ -104,6 +104,12 @@ function isApiRequest(req) {
     return req.path.startsWith('/api/') || req.headers['x-requested-with'] === 'XMLHttpRequest' || accept.includes('application/json');
 }
 
+function secondsUntilMidnight() {
+    const now = new Date();
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+    return Math.floor((next - now) / 1000);
+}
+
 // Controller methods
 const hotspotController = {
     // Show marketing homepage - REAL DEVICE INFO
@@ -203,10 +209,12 @@ const hotspotController = {
             );
             
             if (users.length === 0) {
+                // Dummy bcrypt to prevent timing side-channel
+                await bcrypt.compare('dummy-notreal', '$2a$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
                 if (isApiRequest(req)) {
-                    return res.status(400).json({ error: 'Namba hii ya simu haijasajiliwa au imezuiwa.' });
+                    return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
                 }
-                errors.phone_number = 'Namba hii ya simu haijasajiliwa au imezuiwa.';
+                errors.phone_number = 'Neno la siri au namba ya simu si sahihi.';
                 return res.render('hotspot/login', { 
                     errors, 
                     formData: req.body,
@@ -221,9 +229,9 @@ const hotspotController = {
             const isPasswordValid = await bcrypt.compare(password, user.password);
             if (!isPasswordValid) {
                 if (isApiRequest(req)) {
-                    return res.status(400).json({ error: 'Umekosea neno la siri.' });
+                    return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
                 }
-                errors.password = 'Umekosea neno la siri.';
+                errors.password = 'Neno la siri au namba ya simu si sahihi.';
                 return res.render('hotspot/login', { 
                     errors, 
                     formData: req.body,
@@ -234,7 +242,35 @@ const hotspotController = {
             }
             
             const currentMAC = req.session.mac || getRealClientMAC(req);
-            const currentRouterID = req.session.routerID || getRealRouterID(req);
+            // Explicit router (captive redirect ?router_id= / header) wins over a
+            // possibly stale session value; session value kept only if registered.
+            const explicitRouter = req.query.routerID || req.query.routerid || req.query.router_id || req.headers['x-router-id'] || null;
+            let currentRouterID = explicitRouter || null;
+            if (!currentRouterID && req.session.routerID) {
+                try {
+                    const [rr] = await db.execute(
+                        'SELECT id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                        [req.session.routerID]
+                    );
+                    if (rr.length > 0) currentRouterID = req.session.routerID;
+                } catch (_) {}
+            }
+            if (!currentRouterID) currentRouterID = getRealRouterID(req);
+            // Never poison a good binding: only persist routers that are
+            // actually registered; otherwise keep the user's known router.
+            try {
+                const [chk] = await db.execute(
+                    'SELECT id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                    [currentRouterID]
+                );
+                if (chk.length === 0 && user.last_router_id) {
+                    const [chk2] = await db.execute(
+                        'SELECT id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                        [user.last_router_id]
+                    );
+                    if (chk2.length > 0) currentRouterID = user.last_router_id;
+                }
+            } catch (_) {}
             const currentLocation = req.session.location || await getRealLocation(currentRouterID);
             const currentIP = req.ip;
             
@@ -249,13 +285,25 @@ const hotspotController = {
                 [currentMAC, currentRouterID, currentLocation, currentIP, user.id]
             );
             
+            await new Promise((resolve, reject) => {
+                req.session.regenerate((err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+            const { password: _pw, ...safeUser } = user;
             req.session.hotbando_user = {
-                ...user, 
+                ...safeUser, 
                 mac_address: currentMAC, 
                 last_router_id: currentRouterID,
                 location: currentLocation,
                 ip_address: currentIP
             };
+            req.session.mac = currentMAC;
+            req.session.routerID = currentRouterID;
+            req.session.location = currentLocation;
+            req.session.onWifi = true;
+            req.session.ssidshow = req.session.ssidshow || getRealSSID(req);
             
             console.log(`✅ REAL User ${user.name} logged in:`, {
                 mac: currentMAC,
@@ -337,8 +385,8 @@ const hotspotController = {
                 errors.phone_number = 'Namba ya simu inapaswa kuwa na tarakimu 10 na kuanza na 0.';
             }
             
-            if (!password || password.length < 4) {
-                errors.password = 'Neno siri linapaswa kuwa na angalau tarakimu 4.';
+            if (!password || password.length < 8) {
+                errors.password = 'Neno siri linapaswa kuwa na angalau tarakimu 8.';
             }
             
             if (password !== password_confirm) {
@@ -365,9 +413,9 @@ const hotspotController = {
             
             if (existingUsers.length > 0) {
                 if (isApiRequest(req)) {
-                    return res.status(400).json({ error: 'Namba hii ya simu tayari imesajiliwa.' });
+                    return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
                 }
-                errors.phone_number = 'Namba hii ya simu tayari imesajiliwa.';
+                errors.phone_number = 'Neno la siri au namba ya simu si sahihi.';
                 return res.render('hotspot/signup', { 
                     errors, 
                     formData: req.body,
@@ -377,7 +425,7 @@ const hotspotController = {
                 });
             }
             
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await bcrypt.hash(password, 12);
             
             const clientMAC = req.session.mac || null;
             const location = req.session.location || null;
@@ -403,7 +451,19 @@ const hotspotController = {
             );
             
             const user = newUsers[0];
-            req.session.hotbando_user = user;
+            await new Promise((resolve, reject) => {
+                req.session.regenerate((err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+            const { password: _pw, ...safeRegUser } = user;
+            req.session.hotbando_user = safeRegUser;
+            req.session.mac = clientMAC;
+            req.session.routerID = routerID;
+            req.session.location = location;
+            req.session.onWifi = true;
+            req.session.ssidshow = req.session.ssidshow || getRealSSID(req);
             
             console.log(`✅ REAL New user registered:`, {
                 name,
@@ -610,6 +670,7 @@ const hotspotController = {
                     success: false, 
                     adsWatchedToday: todayViews[0].count,
                     adsRemaining: 0,
+                    resetIn: secondsUntilMidnight(),
                     message: 'Umeshazidi kiasi cha matangazo leo. Jaribu kesho tena.' 
                 });
             }
@@ -641,10 +702,18 @@ const hotspotController = {
             const ad = ads[0];
             const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
             
+            // Server-side start tracking: record when this ad was served.
+            // completeAd will verify enough wall-clock time has passed.
+            req.session.ad_start = {
+                ad_id: ad.id,
+                started_at: Date.now()
+            };
+            
             res.json({ 
                 success: true, 
                 adsWatchedToday: todayViews[0].count,
                 adsRemaining: Math.max(0, dailyAdLimit - todayViews[0].count),
+                resetIn: secondsUntilMidnight(),
                 ad: {
                     id: ad.id,
                     title: ad.title,
@@ -663,6 +732,60 @@ const hotspotController = {
             res.json({ 
                 success: false, 
                 message: 'Imeshindikana kupata tangazo.' 
+            });
+        }
+    },
+
+    // List all available ads (video list) - SASHA URIASISHAJI
+    async getAdsList(req, res) {
+        try {
+            const user = req.session.hotbando_user;
+            if (!user) {
+                return res.json({ 
+                    success: false, 
+                    message: 'Umelazimika kuingia kwenye akaunti yako.' 
+                });
+            }
+
+            const [todayViews] = await db.execute(
+                'SELECT COUNT(*) as count FROM ad_views WHERE user_id = ? AND DATE(created_at) = CURDATE()',
+                [user.id]
+            );
+
+            const [adLimitSetting] = await db.execute(
+                'SELECT setting_value FROM system_settings WHERE setting_key = "daily_ad_limit"'
+            );
+            const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
+
+            const [ads] = await db.execute(
+                'SELECT a.*, u.name AS sponsor_name, u.company_name FROM ads a JOIN users u ON a.sponsor_id = u.id WHERE a.approved = 1 AND a.is_active = 1 ORDER BY a.created_at DESC, a.id DESC'
+            );
+
+            res.json({
+                success: true,
+                ads: ads.map(ad => ({
+                    id: ad.id,
+                    title: ad.title,
+                    description: ad.description,
+                    image_url: ad.image_url,
+                    video_url: ad.video_url,
+                    duration: ad.duration,
+                    reward_mb: Math.round(ad.reward_bytes / (1024 * 1024)),
+                    reward_bytes: ad.reward_bytes,
+                    is_video: !!ad.video_url,
+                    sponsor_name: ad.sponsor_name,
+                    company_name: ad.company_name,
+                    views_count: ad.views_count
+                })),
+                adsWatchedToday: todayViews[0].count,
+                adsRemaining: Math.max(0, dailyAdLimit - todayViews[0].count),
+                resetIn: secondsUntilMidnight()
+            });
+        } catch (error) {
+            console.error('❌ Get ads list error:', error);
+            res.json({ 
+                success: false, 
+                message: 'Imeshindikana kupata matangazo.' 
             });
         }
     },
@@ -710,32 +833,88 @@ const hotspotController = {
             }
             
             const ad = ads[0];
-            
-            // Record ad view
-            await db.execute(
-                'INSERT INTO ad_views (user_id, ad_id, watched_duration, data_earned, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-                [user.id, ad_id, watched_duration || ad.duration, ad.reward_bytes, req.ip, req.headers['user-agent']]
+
+            // Validate watched_duration: must watch at least 80% of ad duration
+            const [minPctSetting] = await db.execute(
+                'SELECT setting_value FROM system_settings WHERE setting_key = "min_ad_watch_percentage"'
             );
-            
-            // Add reward data to user
-            await db.execute(
-                'UPDATE users SET free_bytes = free_bytes + ? WHERE id = ?',
-                [ad.reward_bytes, user.id]
+            const minWatchPct = minPctSetting.length > 0 ? parseInt(minPctSetting[0].setting_value) : 80;
+            const minRequiredDuration = Math.ceil((ad.duration * minWatchPct) / 100);
+            const actualDuration = parseInt(watched_duration) || 0;
+
+            if (actualDuration < minRequiredDuration) {
+                return res.json({
+                    success: false,
+                    message: `Tazama tangazo kwa angalau ${minRequiredDuration} sekundi ili upate reward.`
+                });
+            }
+
+            // Server-side time check: ad must have been served by getAd, and enough
+            // wall-clock time must have elapsed since. This prevents spoofing
+            // watched_duration without actually waiting.
+            const adStart = req.session.ad_start;
+            if (!adStart || adStart.ad_id !== ad.id) {
+                return res.json({
+                    success: false,
+                    message: 'Tangazo halijaanza. Jaza kutoka kwenye ukurasa wa matangazo.'
+                });
+            }
+            const elapsedSeconds = Math.floor((Date.now() - adStart.started_at) / 1000);
+            if (elapsedSeconds < minRequiredDuration) {
+                return res.json({
+                    success: false,
+                    message: `Subiri angalau ${minRequiredDuration} sekundi (kimepita ${elapsedSeconds}) kisha maliza tangazo.`
+                });
+            }
+            // Clear the start so the same served ad cannot be completed twice
+            delete req.session.ad_start;
+
+            // Prevent duplicate completions within 5 minutes
+            const [recentViews] = await db.execute(
+                'SELECT id FROM ad_views WHERE user_id = ? AND ad_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) LIMIT 1',
+                [user.id, ad_id]
             );
+
+            if (recentViews.length > 0) {
+                return res.json({
+                    success: false,
+                    message: 'Umeshatizama tangazo hili hivi karibuni. Subiri kidogo.'
+                });
+            }
             
-            // Update ad views count
-            await db.execute(
-                'UPDATE ads SET views_count = views_count + 1 WHERE id = ?',
-                [ad.id]
-            );
+            // Record ad view + add reward + bump views in a single transaction
+            const conn = await db.getConnection();
+            try {
+                await conn.beginTransaction();
+
+                await conn.execute(
+                    'INSERT INTO ad_views (user_id, ad_id, watched_duration, data_earned, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
+                    [user.id, ad_id, actualDuration, ad.reward_bytes, req.ip, req.headers['user-agent']]
+                );
+
+                await conn.execute(
+                    'UPDATE users SET free_bytes = free_bytes + ? WHERE id = ?',
+                    [ad.reward_bytes, user.id]
+                );
+
+                await conn.execute(
+                    'UPDATE ads SET views_count = views_count + 1 WHERE id = ?',
+                    [ad.id]
+                );
+
+                await conn.commit();
+            } catch (txError) {
+                await conn.rollback();
+                throw txError;
+            } finally {
+                conn.release();
+            }
             
             // Update session data
             req.session.hotbando_user.free_bytes += ad.reward_bytes;
             
             const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
             const newTotalMB = Math.round((user.free_bytes + ad.reward_bytes) / (1024 * 1024));
-            
-            console.log(`✅ User ${user.name} watched ad "${ad.title}" and earned ${rewardMB}MB`);
             
             res.json({ 
                 success: true, 
@@ -747,7 +926,7 @@ const hotspotController = {
             });
             
         } catch (error) {
-            console.error('❌ Complete ad error:', error);
+            console.error('Complete ad error:', error);
             res.json({ 
                 success: false, 
                 message: 'Imeshindikana kukamilisha tangazo.' 
@@ -905,11 +1084,12 @@ const hotspotController = {
             
             const user = users[0];
             const freeMB = Math.round(user.free_bytes / (1024 * 1024));
+            const { password: _pw3, ...safeUserData } = user;
             
             res.json({ 
                 success: true, 
                 data: {
-                    ...user,
+                    ...safeUserData,
                     free_mb: freeMB
                 }
             });
@@ -1350,7 +1530,7 @@ const hotspotController = {
             const now = new Date();
             
             const [vouchers] = await db.execute(
-                'SELECT v.*, p.duration_hours FROM vouchers v JOIN packages p ON v.package_id = p.id WHERE v.voucher_code = ? AND v.is_used = 0 AND v.expires_at > NOW()',
+                'SELECT v.*, p.duration_hours, p.name AS package_name FROM vouchers v JOIN packages p ON v.package_id = p.id WHERE v.voucher_code = ? AND v.is_used = 0 AND v.expires_at > NOW()',
                 [voucherCode]
             );
             
@@ -1365,38 +1545,57 @@ const hotspotController = {
             }
             
             const vouch = vouchers[0];
-            
+
+            // Atomic redeem: mark used first to prevent double-redeem
+            const [redeemResult] = await db.execute(
+                'UPDATE vouchers SET is_used = 1, used_at = ?, used_by = ? WHERE id = ? AND is_used = 0',
+                [now, user.id, vouch.id]
+            );
+            if (redeemResult.affectedRows === 0) {
+                const msg = 'Voucher imekwisha kutumika na mtu mwingine.';
+                return isApiRequest(req) ? res.status(400).json({ success: 'error', message: msg }) : res.json({ success: 'error', message: msg });
+            }
+
             let newUsageUntil;
             if (user.usage_until && new Date(user.usage_until) > now) {
                 newUsageUntil = new Date(new Date(user.usage_until).getTime() + (vouch.duration_hours * 3600 * 1000));
             } else {
                 newUsageUntil = new Date(now.getTime() + (vouch.duration_hours * 3600 * 1000));
             }
-            
+
             await db.execute(
                 'UPDATE users SET package = ?, usage_start = ?, usage_until = ?, moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
-                [vouch.package_id, now, newUsageUntil, vouch.price, user.id]
-            );
-            
-            await db.execute(
-                'UPDATE vouchers SET is_used = 1, used_at = ?, used_by = ? WHERE id = ?',
-                [now, user.id, vouch.id]
+                [vouch.package_name, now, newUsageUntil, vouch.price, user.id]
             );
 
             await db.execute(
-                'INSERT INTO payments (user_id, amount, payment_method, status, created_at) VALUES (?, ?, "voucher", "completed", NOW())',
-                [user.id, vouch.price]
+                'INSERT INTO payments (user_id, package_id, amount, payment_method, status, activated, created_at) VALUES (?, ?, ?, "voucher", "completed", 1, NOW())',
+                [user.id, vouch.package_id, vouch.price]
             );
-            
+
             const [updatedUser] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
-            req.session.hotbando_user = updatedUser[0];
-            
-            console.log(`✅ User ${user.name} redeemed voucher ${voucher} for package ${vouch.package_id}`);
+            const { password: _pw2, ...safeUpdated } = updatedUser[0];
+            req.session.hotbando_user = safeUpdated;
+
+            // Auto-connect to router after voucher redemption
+            const mac = user.mac_address;
+            const routerID = user.last_router_id;
+            if (mac && routerID) {
+                try {
+                    const uptime = Math.max(0, (newUsageUntil.getTime() - now.getTime()) / 1000);
+                    await mikrotikService.addUserToRouter(mac, routerID, uptime, 0);
+                    console.log(`🔗 Auto-connected ${user.name} after voucher redemption`);
+                } catch (routerErr) {
+                    console.warn('⚠️ Auto-connect after voucher failed (non-critical):', routerErr.message);
+                }
+            }
+
+            console.log(`✅ User ${user.name} redeemed voucher ${voucherCode} for package ${vouch.package_name}, duration: ${vouch.duration_hours}h`);
             
             res.json({ 
                 success: 'success', 
                 message: 'Voucher imefanikiwa! Umefunguliwa kutumia mtandao.',
-                package: vouch.package_id,
+                package: vouch.package_name,
                 until: newUsageUntil,
                 duration: formatRemainingTime(vouch.duration_hours * 3600)
             });
@@ -1435,6 +1634,46 @@ const hotspotController = {
             }
             
             const pkg = packages[0];
+
+            // C2 FIX: Verify a real, UNCLAIMED payment exists (ClickPesa or voucher).
+            // Atomic claim (activated=1) guarantees one payment extends time once.
+            const [verifiedPayments] = await db.execute(
+                'SELECT id FROM payments WHERE user_id = ? AND package_id = ? AND status = "completed" AND activated = 0 AND payment_method IN ("clickpesa","voucher") AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE) LIMIT 1',
+                [user.id, package_id]
+            );
+            if (verifiedPayments.length === 0) {
+                // No unclaimed payment — maybe the webhook already activated it.
+                const [done] = await db.execute(
+                    'SELECT id FROM payments WHERE user_id = ? AND package_id = ? AND status = "completed" AND activated = 1 AND payment_method IN ("clickpesa","voucher","pesapal") AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE) LIMIT 1',
+                    [user.id, package_id]
+                );
+                if (done.length > 0) {
+                    const [fresh] = await db.execute('SELECT usage_until FROM users WHERE id = ?', [user.id]);
+                    return res.json({
+                        success: 'success',
+                        message: 'Kifurushi tayari kimewashwa.',
+                        package: pkg.name,
+                        until: fresh[0]?.usage_until || null
+                    });
+                }
+                return res.status(400).json({ 
+                    success: 'error', 
+                    message: 'Lipa kupitia ClickPesa kwanza kabla ya kuamilisha kifurushi.' 
+                });
+            }
+            const [claim] = await db.execute(
+                'UPDATE payments SET activated = 1 WHERE id = ? AND activated = 0',
+                [verifiedPayments[0].id]
+            );
+            if (claim.affectedRows === 0) {
+                const [fresh] = await db.execute('SELECT usage_until FROM users WHERE id = ?', [user.id]);
+                return res.json({
+                    success: 'success',
+                    message: 'Kifurushi tayari kimewashwa.',
+                    package: pkg.name,
+                    until: fresh[0]?.usage_until || null
+                });
+            }
             
             let newUsageUntil;
             if (user.usage_until && new Date(user.usage_until) > now) {
@@ -1448,13 +1687,11 @@ const hotspotController = {
                 [pkg.name, now, newUsageUntil, pkg.price, user.id]
             );
             
-            await db.execute(
-                'INSERT INTO payments (user_id, amount, payment_method, status, created_at) VALUES (?, ?, "cash", "completed", NOW())',
-                [user.id, pkg.price]
-            );
+            // Verified payment (clickpesa/voucher) is already recorded — no extra row.
             
             const [updatedUser] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
-            req.session.hotbando_user = updatedUser[0];
+            const { password: _pw2, ...safeUpdated } = updatedUser[0];
+            req.session.hotbando_user = safeUpdated;
             
             console.log(`✅ User ${user.name} purchased package ${pkg.name} for TSH ${pkg.price}`);
             
@@ -1551,10 +1788,10 @@ const hotspotController = {
                 }
             }
             
-            const hashedPassword = await bcrypt.hash(new_password, 10);
+            const hashedPassword = await bcrypt.hash(new_password, 12);
             
             await db.execute(
-                'UPDATE users SET password = ?, updated_at = NOW() WHERE phone_number = ?',
+                'UPDATE users SET password = ?, updated_at = NOW() WHERE phone_number = ? AND role = "customer"',
                 [hashedPassword, phone_number]
             );
             

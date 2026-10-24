@@ -20,14 +20,15 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   label: { type: String, default: 'Namba ya Simu' },
   placeholder: { type: String, default: '7XXXXXXXX' },
   hint: { type: String, default: 'Weka namba bila 0 au +' },
   maxDigits: { type: Number, default: 9 },
-  countryCode: { type: String, default: 'TZ' }
+  countryCode: { type: String, default: 'TZ' },
+  initialDigits: { type: String, default: '' }
 })
 
 const emit = defineEmits(['change'])
@@ -62,7 +63,7 @@ const countries = [
 
 const defaultCountry = countries.find(c => c.code === props.countryCode) || countries[0]
 const selectedCode = ref(defaultCountry)
-const digits = ref('')
+const digits = ref(props.initialDigits ? props.initialDigits.replace(/\D/g, '').slice(0, props.maxDigits) : '')
 
 function getFullNumber() {
   return selectedCode.value.prefix + digits.value

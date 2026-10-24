@@ -1,8 +1,8 @@
 <template>
   <div class="max-w-2xl">
-    <h3 class="section-title mb-5"><i class="fas fa-plus-circle section-icon text-brand-500"></i> New Campaign</h3>
+    <h3 class="section-title mb-5"><i class="fas fa-plus-circle section-icon text-[#FF7A30]"></i> New Campaign</h3>
 
-    <form @submit.prevent="submit" class="bg-gradient-to-br from-brand-50 to-white rounded-2xl border border-brand-100 p-6 shadow-sm space-y-4">
+    <form @submit.prevent="submit" class="section-card rounded-2xl border border-[#1e1e2a] p-6 shadow-sm space-y-4">
       <div>
         <label class="input-label">Campaign Title</label>
         <input v-model="form.campaign_name" required class="input" placeholder="e.g. New Product Launch">
@@ -27,8 +27,8 @@
         <label class="input-label">Target URL</label>
         <input v-model="form.target_url" class="input" placeholder="https://">
       </div>
-      <p v-if="error" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{{ error }}</p>
-      <p v-if="success" class="text-green-600 text-sm bg-green-50 p-3 rounded-lg">{{ success }}</p>
+      <p v-if="error" class="text-red-500 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
+      <p v-if="success" class="text-green-500 text-sm bg-green-500/10 p-3 rounded-lg">{{ success }}</p>
       <div class="flex justify-end gap-3 pt-2">
         <router-link to="/sponsor/campaigns" class="btn btn-ghost">Cancel</router-link>
         <button type="submit" :disabled="submitting" class="btn btn-primary">
