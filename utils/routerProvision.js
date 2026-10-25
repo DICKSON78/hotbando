@@ -287,7 +287,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="http://${SERVER_PUBLIC_IP}:${SERVER_PORT}/api/zero-touch/heartbeat" mode=http http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="https://${SERVER_PUBLIC_IP}/api/zero-touch/heartbeat" mode=https http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -550,7 +550,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="http://${SERVER_PUBLIC_IP}:${SERVER_PORT}/api/zero-touch/heartbeat" mode=http http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="https://${SERVER_PUBLIC_IP}/api/zero-touch/heartbeat" mode=https http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------
