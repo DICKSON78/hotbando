@@ -6,6 +6,7 @@ const BASE_URL = process.env.CLICKPESA_BASE_URL || 'https://api.clickpesa.com/th
 const CLIENT_ID = process.env.CLICKPESA_CLIENT_ID || '';
 const API_KEY = process.env.CLICKPESA_API_KEY || '';
 const CHECKSUM_KEY = process.env.CLICKPESA_CHECKSUM_KEY || '';
+const TEST_MODE = process.env.CLICKPESA_TEST_MODE === 'true' || process.env.NODE_ENV === 'development';
 
 let _token = null;
 let _tokenExpiry = 0;
@@ -44,6 +45,9 @@ function verifyWebhookChecksum(payload, receivedChecksum) {
 }
 
 async function getToken() {
+  if (TEST_MODE) {
+    return 'TEST_TOKEN_' + Date.now();
+  }
   if (_token && Date.now() < _tokenExpiry) return _token;
 
   if (!CLIENT_ID || !API_KEY) throw new Error('ClickPesa credentials not configured');
@@ -71,6 +75,16 @@ async function previewUSSDPush({ amount, phoneNumber, orderReference }) {
 }
 
 async function initiateUSSDPush({ amount, phoneNumber, orderReference }) {
+  if (TEST_MODE) {
+    // Simulate successful USSD push initiation
+    return {
+      status: 'PROCESSING',
+      channel: 'USSD',
+      id: 'TEST_' + orderReference,
+      message: 'USSD push sent (TEST MODE)'
+    };
+  }
+
   const token = await getToken();
   const payload = { amount: String(amount), currency: 'TZS', orderReference, phoneNumber };
   if (CHECKSUM_KEY) payload.checksum = createChecksum(payload);
@@ -83,6 +97,17 @@ async function initiateUSSDPush({ amount, phoneNumber, orderReference }) {
 }
 
 async function queryPaymentStatus(orderReference) {
+  if (TEST_MODE) {
+    // In test mode, simulate a completed payment after a short delay
+    return {
+      status: 'SUCCESS',
+      channel: 'USSD',
+      id: 'TEST_' + orderReference,
+      amount: '500',
+      phoneNumber: '255678960706'
+    };
+  }
+
   const token = await getToken();
   const { data } = await axios.get(`${BASE_URL}/payments/${orderReference}`, {
     headers: { Authorization: token },
