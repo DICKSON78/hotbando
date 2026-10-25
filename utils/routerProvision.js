@@ -414,7 +414,15 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
       :if ($pname = "wlan1") do={ :set bridgeFound $bname }
     }
   }
-  :if ([:len $bridgeFound] > 0) do={ :set hotspotIface $bridgeFound } else={ :set hotspotIface "wlan1" }
+  :if ([:len $bridgeFound] > 0) do={
+    :set hotspotIface $bridgeFound
+    # Ensure wlan1 is in the bridge
+    :if ([:len [/interface bridge port find bridge=$bridgeFound interface=wlan1]] = 0) do={
+      /interface bridge port add bridge=$bridgeFound interface=wlan1
+    }
+  } else={
+    :set hotspotIface "wlan1"
+  }
 } else={
   # Fallback
   :if ([:len [/interface find name="bridge1"] ] > 0) do={ :set hotspotIface "bridge1" } else={ :set hotspotIface "wlan1" }
@@ -452,7 +460,21 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 # 3. HOTSPOT + DHCP + DNS + NAT + RADIUS  (same as full bootstrap)
 # ----------------------------------------------------------------------------
-/interface bridge add name=$hotspotIface disabled=no comment="HotBando hotspot"
+# Create/ensure hotspot bridge exists and contains wlan1
+:if ([:len [/interface bridge find name=$hotspotIface]] = 0) do={
+  /interface bridge add name=$hotspotIface disabled=no comment="HotBando hotspot"
+  :if ([:len [/interface wireless find name="wlan1"] ] > 0) do={
+    /interface bridge port add bridge=$hotspotIface interface=wlan1
+  }
+} else={
+  # Ensure wlan1 is in the bridge
+  :if ([:len [/interface wireless find name="wlan1"] ] > 0) do={
+    :if ([:len [/interface bridge port find bridge=$hotspotIface interface=wlan1]] = 0) do={
+      /interface bridge port add bridge=$hotspotIface interface=wlan1
+    }
+  }
+}
+
 /ip dhcp-server remove [find interface=$hotspotIface]
 /ip address remove [find interface=$hotspotIface]
 /ip address add address=${HOTSPOT_IP}/24 interface=$hotspotIface network=${hotspotNetBase} comment="HotBando hotspot gateway"
@@ -498,6 +520,10 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip hotspot walled-garden add action=allow dst-host="connectivitycheck.gstatic.com" comment="HotBando captive"
 /ip hotspot walled-garden add action=allow dst-host="captive.apple.com" comment="HotBando captive"
 /ip hotspot walled-garden add action=allow dst-host="msftconnecttest.com" comment="HotBando captive"
+/ip hotspot walled-garden add action=allow dst-host="msftncsi.com" comment="HotBando captive"
+/ip hotspot walled-garden add action=allow dst-host="www.msftconnecttest.com" comment="HotBando captive"
+/ip hotspot walled-garden add action=allow dst-host="www.google.com" comment="HotBando captive"
+/ip hotspot walled-garden add action=allow dst-host="generate_204" comment="HotBando captive"
 # Portal CDN (Tailwind, fonts, icons) so the login page renders fully
 # inside the phone captive browser before login
 /ip hotspot walled-garden add action=allow dst-host="cdn.tailwindcss.com" comment="HotBando portal CSS"
@@ -553,7 +579,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=http://${SERVER_PUBLIC_IP}:${SERVER_PORT}/hotspot?router_id=${routerID}'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
+:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=https://${SERVER_PUBLIC_IP}/hotspot?router_id=${routerID}'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 :put "============================================="
