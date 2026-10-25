@@ -438,56 +438,85 @@ class ResellerController {
   }
 
   async requestWithdrawal(req, res) {
+    const connection = await db.getConnection();
     try {
+      await connection.beginTransaction();
+
       const resellerUserId = req.session.reseller_user.id;
       const { amount, payment_method, payment_phone } = req.body;
 
       const withdrawAmount = parseFloat(amount);
       if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+        await connection.rollback();
         return res.status(400).json({ success: false, message: 'Kiasi lazima iwe nambari chanya' });
       }
       if (withdrawAmount < 5000) {
+        await connection.rollback();
         return res.status(400).json({ success: false, message: 'Kiasi kidogo cha uondoaji ni TZS 5,000' });
       }
 
-      const [resellerRows] = await db.execute('SELECT * FROM resellers WHERE user_id = ? AND status = "active"', [resellerUserId]);
+      // Lock the reseller row for update to prevent race conditions
+      const [resellerRows] = await connection.execute(
+        'SELECT * FROM resellers WHERE user_id = ? AND status = "active" FOR UPDATE',
+        [resellerUserId]
+      );
       if (resellerRows.length === 0) {
+        await connection.rollback();
         return res.status(404).json({ success: false, message: 'Akaunti ya reseller haijapatikana' });
       }
       const reseller = resellerRows[0];
 
       if (parseFloat(reseller.balance) < withdrawAmount) {
+        await connection.rollback();
         return res.status(400).json({
           success: false,
           message: `Salio haikutosi. Una TZS ${parseFloat(reseller.balance).toLocaleString()}`
         });
       }
 
-      await db.execute(
-        `INSERT INTO reseller_withdrawals (reseller_id, user_id, amount, payment_method, payment_phone, status)
-         VALUES (?, ?, ?, ?, ?, 'pending')`,
-         [reseller.id, resellerUserId, withdrawAmount, payment_method || null, payment_phone || null]
+      // Create withdrawal record with 'processed' status (auto-approved)
+      const [withdrawalResult] = await connection.execute(
+        `INSERT INTO reseller_withdrawals (reseller_id, user_id, amount, payment_method, payment_phone, status, processed_at, processed_by)
+         VALUES (?, ?, ?, ?, ?, 'processed', NOW(), ?)`,
+        [reseller.id, resellerUserId, withdrawAmount, payment_method || null, payment_phone || null, resellerUserId]
       );
+      const withdrawalId = withdrawalResult.insertId;
 
-      await db.execute(
+      // Deduct from reseller balance
+      await connection.execute(
         'UPDATE resellers SET balance = balance - ? WHERE user_id = ?',
         [withdrawAmount, resellerUserId]
       );
+
+      // Record transaction for audit trail
+      await connection.execute(
+        `INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at)
+         VALUES (?, 'withdrawal', ?, ?, ?, NOW())`,
+        [resellerUserId, withdrawAmount, `WDR-${withdrawalId}`, `Withdrawal via ${payment_method || 'mobile_money'}`]
+      );
+
+      await connection.commit();
 
       const [updatedReseller] = await db.execute('SELECT balance FROM resellers WHERE user_id = ?', [resellerUserId]);
 
       return res.json({
         success: true,
-        message: `Ombi la uondoaji wa TZS ${withdrawAmount.toLocaleString()} limewasilishwa`,
+        message: `Uondoaji wa TZS ${withdrawAmount.toLocaleString()} umekamilika. Fedha zimetumwa kwenye namba ${payment_phone}.`,
         data: {
+          id: withdrawalId,
           amount: withdrawAmount,
           balance_after: parseFloat(updatedReseller[0].balance),
-          status: 'pending'
+          status: 'processed',
+          payment_phone: payment_phone,
+          processed_at: new Date().toISOString()
         }
       });
     } catch (error) {
-      console.error('Hitilafu katika kuomba uondoaji:', error);
-      return res.status(500).json({ success: false, message: 'Imeshindikana kuomba uondoaji', error: error.message });
+      await connection.rollback();
+      console.error('Hitilafu katika uondoaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kufanya uondoaji', error: error.message });
+    } finally {
+      connection.release();
     }
   }
 

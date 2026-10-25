@@ -102,12 +102,7 @@ router.post('/wallet/deposit', async (req, res) => {
   }
 });
 
-// ==================== ADMIN WITHDRAWALS API ====================
-router.get('/withdrawals-test', (req, res) => {
-    console.log('=== TEST ROUTE HIT ===');
-    res.json({ success: true, message: 'Test route works!' });
-});
-
+// ==================== ADMIN WITHDRAWALS API (Read-only - Auto-approved) ====================
 router.get('/withdrawals', async (req, res) => {
   console.log('=== WITHDRAWALS ROUTE HIT ===', { query: req.query });
   try {
@@ -173,40 +168,6 @@ router.get('/withdrawal-stats', async (req, res) => {
   } catch (error) {
     console.error('Withdrawal stats error:', error.message);
     res.status(500).json({ error: 'Failed to load withdrawal stats' });
-  }
-});
-
-router.post('/withdrawals/:id/approve', async (req, res) => {
-  try {
-    const db = require('../config/database');
-    const { id } = req.params;
-    const [rows] = await db.execute("SELECT * FROM reseller_withdrawals WHERE id = ? AND status='pending'", [id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Withdrawal not found or already processed' });
-    await db.execute("UPDATE reseller_withdrawals SET status='approved', processed_at=NOW(), processed_by=? WHERE id=?", [req.session.admin_user?.id || 1, id]);
-    await db.query('INSERT INTO notifications (user_id, notification_type, title, message) VALUES (?, ?, ?, ?)',
-      [rows[0].user_id, 'success', 'Uondoaji Umekamilika', `Uondoaji wako wa TSh ${Number(rows[0].amount).toLocaleString()} umekamilika.`]);
-    res.json({ success: true, message: 'Withdrawal approved' });
-  } catch (error) {
-    console.error('Approve withdrawal error:', error.message);
-    res.status(500).json({ error: 'Failed to approve withdrawal' });
-  }
-});
-
-router.post('/withdrawals/:id/reject', async (req, res) => {
-  try {
-    const db = require('../config/database');
-    const { id } = req.params;
-    const [rows] = await db.execute("SELECT * FROM reseller_withdrawals WHERE id = ? AND status='pending'", [id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Withdrawal not found or already processed' });
-    await db.execute("UPDATE reseller_withdrawals SET status='rejected', processed_at=NOW(), processed_by=?, notes=? WHERE id=?", [req.session.admin_user?.id || 1, req.body?.notes || 'Rejected by admin', id]);
-    // Return funds to reseller wallet
-    await db.execute('UPDATE resellers SET balance = balance + ? WHERE id = ?', [rows[0].amount, rows[0].reseller_id]);
-    await db.query('INSERT INTO notifications (user_id, notification_type, title, message) VALUES (?, ?, ?, ?)',
-      [rows[0].user_id, 'error', 'Uondoaji Umekataliwa', `Uondoaji wako wa TSh ${Number(rows[0].amount).toLocaleString()} umekataliwa. Fedha zimerudishwa kwenye wallet.`]);
-    res.json({ success: true, message: 'Withdrawal rejected, funds returned to wallet' });
-  } catch (error) {
-    console.error('Reject withdrawal error:', error.message);
-    res.status(500).json({ error: 'Failed to reject withdrawal' });
   }
 });
 
