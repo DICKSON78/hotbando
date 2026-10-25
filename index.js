@@ -47,27 +47,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Input sanitization
 app.use(sanitizeBody);
 
-// CSRF protection for state-changing requests (skip webhooks/zero-touch/public provisioning)
-app.use((req, res, next) => {
-    const skipPaths = [
-        '/api/payments/ipn',
-        '/api/payments/callback',
-        '/api/clickpesa/webhook',
-        '/api/clickpesa/ussd-webhook'
-    ];
-    if (skipPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
-        return next();
-    }
-    if (req.path.startsWith('/api/zero-touch/')) {
-        return next();
-    }
-    // Skip for some public endpoints that don't use sessions
-    if (req.path === '/api/packages' && req.method === 'GET') {
-        return next();
-    }
-    return csrfProtection.validate(req, res, next);
-});
-
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -105,6 +84,45 @@ app.use(session({
 app.use((req, res, next) => {
     res.locals.csrfToken = csrfProtection.generateToken(req);
     res.locals.user = req.session.user || req.session.admin_user || null;
+    next();
+});
+
+// CSRF protection for state-changing requests (skip webhooks/zero-touch/public provisioning)
+app.use((req, res, next) => {
+    const skipPaths = [
+        '/api/payments/ipn',
+        '/api/payments/callback',
+        '/api/clickpesa/webhook',
+        '/api/clickpesa/ussd-webhook',
+        '/api/admin/login',
+        '/api/admin/logout',
+        '/api/reseller/login',
+        '/api/reseller/logout',
+        '/api/reseller/withdraw',
+        '/api/hotspot/login',
+        '/api/hotspot/register',
+        '/api/login',
+        '/api/logout',
+        '/api/admin/withdrawals',
+    ];
+    if (skipPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
+        return next();
+    }
+    if (req.path.startsWith('/api/zero-touch/')) {
+        return next();
+    }
+    // Skip for some public endpoints that don't use sessions
+    if (req.path === '/api/packages' && req.method === 'GET') {
+        return next();
+    }
+    return csrfProtection.validate(req, res, next);
+});
+
+// DEBUG: Log all requests
+app.use((req, res, next) => {
+    console.log('=== GLOBAL MIDDLEWARE HIT ===', req.method, req.path);
+    const logger = require('./utils/logger');
+    logger.info('GLOBAL REQUEST', { method: req.method, path: req.path, query: req.query, ip: req.ip, session: !!req.session.admin_user });
     next();
 });
 
@@ -424,3 +442,5 @@ connectRedis().then(() => {
         expiryScheduler.start(60000);
     });
 });
+
+module.exports = app;

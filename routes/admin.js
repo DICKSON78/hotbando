@@ -5,6 +5,13 @@ const adminController = require('../controllers/adminController');
 const { csrfProtection } = require('../middleware/security'); // CSRF protection for state-changing requests
 const adminAuthController = require('../controllers/adminAuthController');
 const { adminAuth } = require('../middleware/authMiddleware');
+const logger = require('../utils/logger');
+
+// DEBUG: Log all admin requests
+router.use((req, res, next) => {
+    logger.info('ADMIN ROUTE HIT', { method: req.method, path: req.path, query: req.query, session: !!req.session.admin_user });
+    next();
+});
 
 // ==================== PUBLIC ROUTES (NO AUTH) ====================
 router.get('/login', (req, res) => {
@@ -96,29 +103,49 @@ router.post('/wallet/deposit', async (req, res) => {
 });
 
 // ==================== ADMIN WITHDRAWALS API ====================
+router.get('/withdrawals-test', (req, res) => {
+    console.log('=== TEST ROUTE HIT ===');
+    res.json({ success: true, message: 'Test route works!' });
+});
+
 router.get('/withdrawals', async (req, res) => {
+  console.log('=== WITHDRAWALS ROUTE HIT ===', { query: req.query });
   try {
     const db = require('../config/database');
     const { status = 'pending', page = 1, limit = 20 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    let where = "WHERE t.transaction_type = 'withdrawal'";
+    
+    let where = "WHERE 1=1";
     const params = [];
-    if (status && status !== 'all') { where += ' AND t.status = ?'; params.push(status); }
-    const [withdrawals] = await db.execute(
-      `SELECT t.*, u.name as user_name, u.phone_number, u.email, u.role as user_role
-       FROM transactions t JOIN users u ON t.user_id = u.id
-       ${where} ORDER BY t.created_at DESC LIMIT ${parseInt(limit)} OFFSET ${offset}`, params
-    );
-    const [countResult] = await db.execute(
-      `SELECT COUNT(*) as total FROM transactions t JOIN users u ON t.user_id = u.id ${where}`, params
-    );
+    if (status && status !== 'all') { where += ' AND rw.status = ?'; params.push(status); }
+    
+    const query1 = `SELECT rw.*, u.name as user_name, u.phone_number, u.email,
+              r.commission_rate, r.tier
+       FROM reseller_withdrawals rw
+       JOIN users u ON rw.user_id = u.id
+       JOIN resellers r ON rw.reseller_id = r.id
+       ${where} ORDER BY rw.created_at DESC LIMIT ${parseInt(limit)} OFFSET ${offset}`;
+    
+    console.log('Query:', query1, params);
+    
+    const [withdrawals] = await db.execute(query1, params);
+    console.log('Withdrawals found:', withdrawals.length);
+    
+    const query2 = `SELECT COUNT(*) as total FROM reseller_withdrawals rw
+       JOIN users u ON rw.user_id = u.id
+       JOIN resellers r ON rw.reseller_id = r.id
+       ${where}`;
+    
+    const [countResult] = await db.execute(query2, params);
+    console.log('Count result:', countResult[0]);
+    
     res.json({
       success: true,
       data: withdrawals,
       pagination: { page: parseInt(page), limit: parseInt(limit), total: countResult[0].total, pages: Math.ceil(countResult[0].total / parseInt(limit)) }
     });
   } catch (error) {
-    console.error('Admin withdrawals error:', error.message);
+    console.error('Admin withdrawals error:', error);
     res.status(500).json({ error: 'Failed to load withdrawals' });
   }
 });
@@ -126,16 +153,22 @@ router.get('/withdrawals', async (req, res) => {
 router.get('/withdrawal-stats', async (req, res) => {
   try {
     const db = require('../config/database');
-    const [pending] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM transactions WHERE transaction_type='withdrawal' AND status='pending'");
-    const [completed] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM transactions WHERE transaction_type='withdrawal' AND status='completed'");
-    const [total] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM transactions WHERE transaction_type='withdrawal'");
-    const [today] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM transactions WHERE transaction_type='withdrawal' AND DATE(created_at) = CURDATE()");
+    const [pending] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM reseller_withdrawals WHERE status='pending'");
+    const [approved] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM reseller_withdrawals WHERE status='approved'");
+    const [paid] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM reseller_withdrawals WHERE status='paid'");
+    const [rejected] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM reseller_withdrawals WHERE status='rejected'");
+    const [total] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM reseller_withdrawals");
+    const [today] = await db.execute("SELECT COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM reseller_withdrawals WHERE DATE(created_at) = CURDATE()");
     res.json({
       success: true,
-      pending: { count: pending[0].count, total: pending[0].total },
-      completed: { count: completed[0].count, total: completed[0].total },
-      total: { count: total[0].count, total: total[0].total },
-      today: { count: today[0].count, total: today[0].total }
+      stats: {
+        pending: { count: pending[0].count, total: Number(pending[0].total) },
+        approved: { count: approved[0].count, total: Number(approved[0].total) },
+        paid: { count: paid[0].count, total: Number(paid[0].total) },
+        rejected: { count: rejected[0].count, total: Number(rejected[0].total) },
+        total: { count: total[0].count, total: Number(total[0].total) },
+        today: { count: today[0].count, total: Number(today[0].total) }
+      }
     });
   } catch (error) {
     console.error('Withdrawal stats error:', error.message);
@@ -147,11 +180,11 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
   try {
     const db = require('../config/database');
     const { id } = req.params;
-    const [rows] = await db.execute("SELECT * FROM transactions WHERE id = ? AND transaction_type='withdrawal' AND status='pending'", [id]);
+    const [rows] = await db.execute("SELECT * FROM reseller_withdrawals WHERE id = ? AND status='pending'", [id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Withdrawal not found or already processed' });
-    await db.execute("UPDATE transactions SET status='completed', completed_at=NOW() WHERE id=?", [id]);
+    await db.execute("UPDATE reseller_withdrawals SET status='approved', processed_at=NOW(), processed_by=? WHERE id=?", [req.session.admin_user?.id || 1, id]);
     await db.query('INSERT INTO notifications (user_id, notification_type, title, message) VALUES (?, ?, ?, ?)',
-      [rows[0].user_id, 'success', 'Withdrawal Completed', `Your withdrawal of TSh ${Number(rows[0].amount).toLocaleString()} has been completed.`]);
+      [rows[0].user_id, 'success', 'Uondoaji Umekamilika', `Uondoaji wako wa TSh ${Number(rows[0].amount).toLocaleString()} umekamilika.`]);
     res.json({ success: true, message: 'Withdrawal approved' });
   } catch (error) {
     console.error('Approve withdrawal error:', error.message);
@@ -163,13 +196,14 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   try {
     const db = require('../config/database');
     const { id } = req.params;
-    const [rows] = await db.execute("SELECT * FROM transactions WHERE id = ? AND transaction_type='withdrawal' AND status='pending'", [id]);
+    const [rows] = await db.execute("SELECT * FROM reseller_withdrawals WHERE id = ? AND status='pending'", [id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Withdrawal not found or already processed' });
-    await db.execute("UPDATE transactions SET status='failed', completed_at=NOW() WHERE id=?", [id]);
-    await db.execute('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [rows[0].amount, rows[0].user_id]);
+    await db.execute("UPDATE reseller_withdrawals SET status='rejected', processed_at=NOW(), processed_by=?, notes=? WHERE id=?", [req.session.admin_user?.id || 1, req.body?.notes || 'Rejected by admin', id]);
+    // Return funds to reseller wallet
+    await db.execute('UPDATE resellers SET balance = balance + ? WHERE id = ?', [rows[0].amount, rows[0].reseller_id]);
     await db.query('INSERT INTO notifications (user_id, notification_type, title, message) VALUES (?, ?, ?, ?)',
-      [rows[0].user_id, 'error', 'Withdrawal Rejected', `Your withdrawal of TSh ${Number(rows[0].amount).toLocaleString()} has been rejected. Funds returned to wallet.`]);
-    res.json({ success: true, message: 'Withdrawal rejected' });
+      [rows[0].user_id, 'error', 'Uondoaji Umekataliwa', `Uondoaji wako wa TSh ${Number(rows[0].amount).toLocaleString()} umekataliwa. Fedha zimerudishwa kwenye wallet.`]);
+    res.json({ success: true, message: 'Withdrawal rejected, funds returned to wallet' });
   } catch (error) {
     console.error('Reject withdrawal error:', error.message);
     res.status(500).json({ error: 'Failed to reject withdrawal' });
