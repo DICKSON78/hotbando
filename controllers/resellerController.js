@@ -247,9 +247,20 @@ class ResellerController {
       }
       const [totalResult] = await db.execute(countQuery, countParams);
 
+      const [batches] = await db.execute(
+        `SELECT vb.id, vb.batch_name, vb.total_vouchers, vb.total_value, vb.created_at,
+                DATE_FORMAT(vb.created_at, '%Y-%m-%d %H:%i') as formatted_date
+         FROM voucher_batches vb
+         WHERE vb.created_by = ?
+         ORDER BY vb.created_at DESC
+         LIMIT 20`,
+        [resellerUserId]
+      );
+
       return res.json({
         success: true,
         data: vouchers,
+        batches,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -266,18 +277,22 @@ class ResellerController {
   async generateVouchers(req, res) {
     try {
       const resellerUserId = req.session.reseller_user.id;
-      const { package_type, quantity } = req.body;
+      const { package_type, quantity, packages } = req.body;
 
-      if (!package_type || !PACKAGE_VALUES[package_type]) {
+      let items = [];
+      if (packages && typeof packages === 'object') {
+        for (const [pkgName, qty] of Object.entries(packages)) {
+          const q = parseInt(qty);
+          if (q > 0 && PACKAGE_VALUES[pkgName]) {
+            items.push({ package_type: pkgName, quantity: q });
+          }
+        }
+      } else if (package_type && quantity) {
+        items.push({ package_type, quantity: parseInt(quantity) });
+      }
+
+      if (items.length === 0) {
         return res.status(400).json({ success: false, message: 'Aina ya kifurushi sio sahihi. Chagua: MASAA 6, MASAA 24, WIKI 1, au MWEZI 1' });
-      }
-
-      const qty = parseInt(quantity);
-      if (isNaN(qty) || qty <= 0) {
-        return res.status(400).json({ success: false, message: 'Idadi ya vouchers lazima iwe nambari chanya' });
-      }
-      if (qty > 10000) {
-        return res.status(400).json({ success: false, message: 'Idadi ya vouchers haizidi 10,000 kwa mara moja' });
       }
 
       const [resellerRows] = await db.execute('SELECT * FROM resellers WHERE user_id = ? AND status = "active"', [resellerUserId]);
@@ -286,8 +301,17 @@ class ResellerController {
       }
       const reseller = resellerRows[0];
 
-      const packageInfo = PACKAGE_VALUES[package_type];
-      const totalCost = packageInfo.price * qty;
+      let totalCost = 0;
+      for (const item of items) {
+        const qty = item.quantity;
+        if (isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ success: false, message: 'Idadi ya vouchers lazima iwe nambari chanya' });
+        }
+        if (qty > 10000) {
+          return res.status(400).json({ success: false, message: 'Idadi ya vouchers haizidi 10,000 kwa mara moja' });
+        }
+        totalCost += PACKAGE_VALUES[item.package_type].price * qty;
+      }
 
       if (parseFloat(reseller.balance) < totalCost) {
         return res.status(400).json({
@@ -300,17 +324,21 @@ class ResellerController {
       const nextBatchNumber = (batches[0].maxId || 0) + 1;
       const batchName = `RSL-${new Date().toLocaleString('en-US', { month: 'short' }).toUpperCase()}-${nextBatchNumber.toString().padStart(3, '0')}`;
 
+      const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
       const [batchResult] = await db.execute(
         'INSERT INTO voucher_batches (batch_name, issued_to, total_vouchers, total_value, created_by) VALUES (?, ?, ?, ?, ?)',
-        [batchName, `Reseller: ${req.session.reseller_user.name}`, qty, totalCost, resellerUserId]
+        [batchName, `Reseller: ${req.session.reseller_user.name}`, totalQty, totalCost, resellerUserId]
       );
       const batchId = batchResult.insertId;
 
       const allVouchers = [];
-      for (let i = 0; i < qty; i++) {
-        const code = await this.generateUniqueVoucher();
-        const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-        allVouchers.push([code, packageInfo.id, packageInfo.price, 0, null, null, batchId, expiresAt]);
+      for (const item of items) {
+        const packageInfo = PACKAGE_VALUES[item.package_type];
+        for (let i = 0; i < item.quantity; i++) {
+          const code = await this.generateUniqueVoucher();
+          const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+          allVouchers.push([code, packageInfo.id, packageInfo.price, 0, null, null, batchId, expiresAt]);
+        }
       }
 
       const placeholders = allVouchers.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',');
@@ -322,7 +350,7 @@ class ResellerController {
 
       await db.execute(
         'UPDATE voucher_batches SET total_vouchers = ?, total_value = ? WHERE id = ?',
-        [qty, totalCost, batchId]
+        [totalQty, totalCost, batchId]
       );
 
       await db.execute(
@@ -332,12 +360,11 @@ class ResellerController {
 
       return res.json({
         success: true,
-        message: `Vouchers ${qty} za ${package_type} zimeundwa kikamilifu!`,
+        message: `Vouchers ${totalQty} zimeundwa kikamilifu!`,
         data: {
           batch_id: batchId,
           batch_name: batchName,
-          count: qty,
-          package_type,
+          count: totalQty,
           cost: totalCost,
           balance_after: parseFloat(reseller.balance) - totalCost
         }
