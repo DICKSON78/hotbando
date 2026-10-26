@@ -207,9 +207,13 @@ app.get('/api/packages', async (req, res) => {
 });
 
 // Legacy EJS portal routes (SPA handles all /hotspot/* now — only POST API routes kept)
-// Legacy EJS portal routes – serve GET pages via EJS templates and POST/PUT/DELETE via same router
-// Legacy EJS portal routes – serve GET pages via EJS templates and POST/PUT/DELETE via same router
-app.use('/hotspot', hotspotRoutes);
+const hotspotEjsApi = require('./routes/hotspot');
+app.use('/hotspot', (req, res, next) => {
+    // Only allow POST/PUT/DELETE through the legacy route handlers
+    // GET /hotspot/* is handled by the SPA (Vue router)
+    if (req.method === 'GET') return next();
+    hotspotEjsApi(req, res, next);
+});
 app.use('/sponsor', sponsorRoutes);
 
 // PesaPal webhooks (must be raw/query based - handled in controller)
