@@ -368,7 +368,8 @@ const hotspotController = {
     // Process user registration - REAL DEVICE INFO
     async register(req, res) {
         try {
-            const { name, phone_number, password, password_confirm } = req.body;
+            const { name, phone_number, password } = req.body;
+            const password_confirm = req.body.password_confirm || req.body.passwordConfirm || req.body.password_confirmation;
             const errors = {};
             
             console.log('👤 REAL Registration attempt:', { 
@@ -385,8 +386,8 @@ const hotspotController = {
                 errors.phone_number = 'Namba ya simu inapaswa kuwa na tarakimu 10 na kuanza na 0.';
             }
             
-            if (!password || password.length < 8) {
-                errors.password = 'Neno siri linapaswa kuwa na angalau tarakimu 8.';
+            if (!password || password.length < 6) {
+                errors.password = 'Neno siri linapaswa kuwa na angalau tarakimu 6.';
             }
             
             if (password !== password_confirm) {

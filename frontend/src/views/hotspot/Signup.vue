@@ -45,7 +45,8 @@
         <div><label class="input-label">Full Name</label><input v-model="name" type="text" required class="input" placeholder="John Doe"></div>
         <PhoneInput @change="v => phoneFull = v" />
         <div><label class="input-label">Email (optional)</label><input v-model="email" type="email" class="input" placeholder="you@email.com"></div>
-        <div><label class="input-label">Password</label><input v-model="password" type="password" required class="input" placeholder="Min 6 characters"></div>
+        <div><label class="input-label">Password</label><input v-model="password" type="password" required minlength="6" class="input" placeholder="Min 6 characters"></div>
+        <div><label class="input-label">Confirm Password</label><input v-model="passwordConfirm" type="password" required minlength="6" class="input" placeholder="Re-enter password"></div>
         <div><label class="input-label">Referral Code</label><input v-model="referralCode" type="text" class="input" placeholder="Optional"></div>
         <p v-if="error" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
         <button type="submit" :disabled="loading" class="btn btn-primary w-full justify-center py-2.5">{{ loading ? '...' : 'Register' }}</button>
@@ -68,6 +69,7 @@ const name = ref('')
 const phoneFull = ref('')
 const email = ref('')
 const password = ref('')
+const passwordConfirm = ref('')
 const referralCode = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -75,11 +77,22 @@ const loading = ref(false)
 store.init()
 
 async function handleRegister() {
+  if (password.value !== passwordConfirm.value) {
+    error.value = 'Passwords do not match'
+    return
+  }
   loading.value = true; error.value = ''
   const p = phoneFull.value
   const localPhone = p.startsWith('+255') ? '0' + p.slice(4) : p
   try {
-    await hotspotPost('/register', { name: name.value, phone_number: localPhone, email: email.value, password: password.value, referral_code: referralCode.value })
+    await hotspotPost('/register', {
+      name: name.value,
+      phone_number: localPhone,
+      email: email.value,
+      password: password.value,
+      password_confirm: passwordConfirm.value,
+      referral_code: referralCode.value
+    })
     await store.refreshUser()
     router.replace('/hotspot/dashboard')
   } catch (e) {
