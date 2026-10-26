@@ -431,13 +431,16 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip address add address=${assignedIp}/32 interface="wg-hotbando"
 /ip route add dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando"
 
-# Firewall: allow WG + restrict API to tunnel
+# Firewall: allow WG tunnel traffic, router input & restrict API to tunnel
 /ip firewall filter remove [find comment="HotBando WG"]
-/ip firewall filter add chain=input protocol=udp dst-port=13231 action=accept comment="HotBando WG"
+/ip firewall filter remove [find comment="HotBando WG input"]
+/ip firewall filter add chain=input protocol=udp dst-port=13231 action=accept place-before=0 comment="HotBando WG"
+/ip firewall filter add chain=input in-interface="wg-hotbando" action=accept place-before=0 comment="HotBando WG input"
 /ip firewall filter add chain=forward in-interface="wg-hotbando" action=accept comment="HotBando WG"
 /ip firewall filter add chain=forward out-interface="wg-hotbando" action=accept comment="HotBando WG"
-/ip service set api address=${wireguardService.networkCidr}
-/ip service set winbox address=${wireguardService.networkCidr}
+:do { /interface list member add list=LAN interface="wg-hotbando" comment="HotBando WG LAN" } on-error={}
+/ip service set api disabled=no address=${wireguardService.networkCidr}
+/ip service set winbox disabled=no address=${wireguardService.networkCidr}
 
 # ----------------------------------------------------------------------------
 # 3. HOTSPOT + DHCP + DNS + NAT + RADIUS  (same as full bootstrap)
