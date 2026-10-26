@@ -395,28 +395,19 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 :local wanIface ""
 :local hotspotIface "bridge-hotbando"
 
-# Detect WAN: pick first running ether interface
-:local wanList [/interface ethernet find running=yes]
-:if ([:len $wanList] > 0) do={
-  :set wanIface [/interface ethernet get ($wanList->0) name]
-}
-:if ([:len $wanIface] = 0) do={ :set wanIface "ether1" }
+# Detect WAN: hardcoded for compatibility (avoid RouterOS array syntax issues)
+:local wanIface "ether1"
 
-# Detect wlan1 and ensure it's in the hotspot bridge
+# Detect wlan1 and ensure it's in the hotspot bridge (idempotent)
+:do { /interface bridge port remove [find interface=wlan1] } on-error={}
+:do { /interface bridge remove [find name=bridge-hotbando] } on-error={}
+:do { /interface bridge add name=bridge-hotbando disabled=no comment="HotBando hotspot bridge" } on-error={}
 :if ([:len [/interface wireless find name="wlan1"] ] > 0) do={
-  # Create hotspot bridge if doesn't exist
-  :if ([:len [/interface bridge find name=$hotspotIface]] = 0) do={
-    /interface bridge add name=$hotspotIface disabled=no comment="HotBando hotspot bridge"
-  }
-  # Ensure wlan1 is in the hotspot bridge
-  :if ([:len [/interface bridge port find bridge=$hotspotIface interface=wlan1]] = 0) do={
-    /interface bridge port add bridge=$hotspotIface interface=wlan1
-  }
-} else={
-  # No wlan1 - create bridge anyway for ethernet clients
-  :if ([:len [/interface bridge find name=$hotspotIface]] = 0) do={
-    /interface bridge add name=$hotspotIface disabled=no comment="HotBando hotspot bridge"
-  }
+  :do { /interface bridge port add bridge=bridge-hotbando interface=wlan1 } on-error={}
+}
+# Fallback if bridge-hotbando somehow still missing
+:if ([:len [/interface bridge find name=bridge-hotbando]] = 0) do={
+  /interface bridge add name=bridge-hotbando disabled=no comment="HotBando hotspot bridge"
 }
 
 :put ("WAN interface: " . $wanIface)
