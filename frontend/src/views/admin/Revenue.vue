@@ -1,12 +1,12 @@
 <template>
   <div class="space-y-6">
-    <!-- ClickPesa Balance Banner -->
+    <!-- Legacy ClickPesa Balance Banner -->
     <div v-if="clickpesaBalance" class="section-card" style="border: 1px solid #FF7A30/30">
       <div class="section-body flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-wallet"></i></div>
           <div>
-            <p class="text-sm" style="color: #9ca3af">ClickPesa Account Balance</p>
+            <p class="text-sm" style="color: #9ca3af">Legacy ClickPesa Balance</p>
             <p class="text-lg font-bold text-white">TSh {{ formatNum(clickpesaBalance.available_balance || clickpesaBalance.balance || 0) }}</p>
           </div>
         </div>
@@ -81,10 +81,10 @@
       </div>
     </div>
 
-    <!-- ClickPesa Transaction History -->
+    <!-- Payment Transaction History -->
     <div class="section-card">
       <div class="section-header">
-        <h3 class="section-title"><i class="fas fa-exchange-alt" style="color: #FF7A30"></i> ClickPesa Transactions</h3>
+        <h3 class="section-title"><i class="fas fa-exchange-alt" style="color: #FF7A30"></i> Payment Transactions</h3>
         <span class="badge badge-green">{{ revenue.length }} payments</span>
       </div>
       <div v-if="loading" class="section-body space-y-3">
@@ -146,6 +146,7 @@ function formatNum(n) {
 function formatPurpose(p) {
   const map = {
     'package_purchase': 'Package',
+    'gift_purchase': 'Gift Voucher',
     'wallet_topup': 'Wallet TopUp',
     'reseller_topup': 'Reseller',
     'sponsor_deposit': 'Sponsor',
@@ -237,7 +238,7 @@ function exportCSV() {
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url; a.download = `clickpesa-revenue-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+  a.href = url; a.download = `payments-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
   URL.revokeObjectURL(url)
 }
 

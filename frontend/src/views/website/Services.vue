@@ -155,14 +155,14 @@ const services = [
 const steps = [
   { title: 'Connect', desc: 'Connect your phone or computer to the nearest HotBando WiFi network.' },
   { title: 'Sign Up', desc: 'Register with your phone number in seconds — no complicated steps.' },
-  { title: 'Buy a Plan', desc: 'Choose the plan that suits you and pay via ClickPesa, voucher, or an agent.' },
+  { title: 'Buy a Plan', desc: 'Choose the plan that suits you and pay via PesaPal, voucher, or an agent.' },
   { title: 'Enjoy the Internet', desc: 'Start using fast internet right away. Watch ads to earn free data!' }
 ]
 
 const faqs = [
   {
     q: 'How do I buy a plan?',
-    a: 'There are three ways: (1) Online via ClickPesa through the customer portal or the Pricing page, (2) with a voucher code you buy from our reseller/agent, or (3) in cash at an agent near you.'
+    a: 'There are three ways: (1) Online via PesaPal through the customer portal or the Pricing page, (2) with a voucher code you buy from our reseller/agent, or (3) in cash at an agent near you.'
   },
   {
     q: 'Can I get free data?',

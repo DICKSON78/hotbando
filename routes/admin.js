@@ -421,46 +421,110 @@ router.get('/revenue', async (req, res) => {
     const db = require('../config/database');
     const { from, to } = req.query;
 
-    let where = "WHERE ct.status IN ('SUCCESS','SETTLED')";
-    const params = [];
-    if (from) { where += ' AND ct.created_at >= ?'; params.push(from + ' 00:00:00'); }
-    if (to) { where += ' AND ct.created_at <= ?'; params.push(to + ' 23:59:59'); }
+    const clickParams = [];
+    const pesapalParams = [];
+    let clickWhere = "WHERE ct.status IN ('SUCCESS','SETTLED')";
+    let pesapalWhere = "WHERE pr.status = 'completed' AND pr.payment_method = 'pesapal'";
+    if (from) {
+      clickWhere += ' AND ct.created_at >= ?';
+      clickParams.push(from + ' 00:00:00');
+      pesapalWhere += ' AND COALESCE(pr.completed_at, pr.created_at) >= ?';
+      pesapalParams.push(from + ' 00:00:00');
+    }
+    if (to) {
+      clickWhere += ' AND ct.created_at <= ?';
+      clickParams.push(to + ' 23:59:59');
+      pesapalWhere += ' AND COALESCE(pr.completed_at, pr.created_at) <= ?';
+      pesapalParams.push(to + ' 23:59:59');
+    }
 
-    const [transactions] = await db.execute(
+    const [clickTransactions] = await db.execute(
       `SELECT ct.*, u.name AS user_name, u.phone_number
        FROM clickpesa_transactions ct
        LEFT JOIN users u ON ct.user_id = u.id
-       ${where}
-       ORDER BY ct.created_at DESC LIMIT 200`, params
+       ${clickWhere}
+       ORDER BY ct.created_at DESC LIMIT 200`, clickParams
     );
 
-    const [totalAgg] = await db.execute(
-      `SELECT COALESCE(SUM(ct.amount),0) AS totalRevenue FROM clickpesa_transactions ct ${where}`, params
+    const [pesapalTransactions] = await db.execute(
+      `SELECT pr.id, pr.reference_number, pr.amount, pr.created_at, pr.completed_at, pr.callback_data,
+              u.name AS user_name, u.phone_number
+       FROM payment_requests pr
+       LEFT JOIN users u ON pr.user_id = u.id
+       ${pesapalWhere}
+       ORDER BY COALESCE(pr.completed_at, pr.created_at) DESC LIMIT 200`, pesapalParams
     );
 
-    const todayWhere = where + ' AND DATE(ct.created_at) = CURDATE()';
-    const [todayAgg] = await db.execute(
-      `SELECT COALESCE(SUM(ct.amount),0) AS todayRevenue, COUNT(*) AS totalOrders FROM clickpesa_transactions ct ${todayWhere}`, params
+    const pesapalRows = pesapalTransactions.map((pr) => {
+      let data = {};
+      try {
+        data = typeof pr.callback_data === 'string' ? JSON.parse(pr.callback_data) : (pr.callback_data || {});
+      } catch (_) { data = {}; }
+      const purpose = data.type === 'wallet_topup'
+        ? 'wallet_topup'
+        : data.gift
+          ? 'gift_purchase'
+          : 'package_purchase';
+      return {
+        id: `pesapal-${pr.id}`,
+        order_reference: pr.reference_number,
+        user_name: pr.user_name,
+        phone: pr.phone_number,
+        purpose,
+        amount: pr.amount,
+        channel: 'pesapal',
+        status: 'SUCCESS',
+        created_at: pr.completed_at || pr.created_at,
+      };
+    });
+
+    const transactions = [
+      ...clickTransactions.map((row) => ({ ...row, phone: row.phone || row.phone_number, channel: row.channel || 'clickpesa' })),
+      ...pesapalRows,
+    ]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 200);
+
+    const [clickTotal] = await db.execute(
+      `SELECT COALESCE(SUM(ct.amount),0) AS totalRevenue FROM clickpesa_transactions ct ${clickWhere}`, clickParams
+    );
+    const [pesapalTotal] = await db.execute(
+      `SELECT COALESCE(SUM(pr.amount),0) AS totalRevenue FROM payment_requests pr ${pesapalWhere}`, pesapalParams
+    );
+    const totalRevenue = Number(clickTotal[0]?.totalRevenue || 0) + Number(pesapalTotal[0]?.totalRevenue || 0);
+
+    const todayClickWhere = clickWhere + ' AND DATE(ct.created_at) = CURDATE()';
+    const todayPesapalWhere = pesapalWhere + ' AND DATE(COALESCE(pr.completed_at, pr.created_at)) = CURDATE()';
+    const [clickToday] = await db.execute(
+      `SELECT COALESCE(SUM(ct.amount),0) AS todayRevenue, COUNT(*) AS totalOrders FROM clickpesa_transactions ct ${todayClickWhere}`, clickParams
+    );
+    const [pesapalToday] = await db.execute(
+      `SELECT COALESCE(SUM(pr.amount),0) AS todayRevenue, COUNT(*) AS totalOrders FROM payment_requests pr ${todayPesapalWhere}`, pesapalParams
     );
 
     const [vouchersAgg] = await db.execute(
       `SELECT COUNT(*) AS vouchersSold, COALESCE(SUM(price),0) AS vouchersRevenue FROM vouchers WHERE is_used = 1 AND used_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`
     );
 
-    // Chart data: last 7 days
+    // Chart data: last 7 days, both gateways
     const [chartRows] = await db.execute(
-      `SELECT DATE(created_at) AS day, COALESCE(SUM(amount),0) AS total
-       FROM clickpesa_transactions
-       WHERE status IN ('SUCCESS','SETTLED') AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-       GROUP BY DATE(created_at) ORDER BY day`
+      `SELECT day, COALESCE(SUM(total),0) AS total FROM (
+         SELECT DATE(ct.created_at) AS day, ct.amount AS total
+         FROM clickpesa_transactions ct
+         ${clickWhere} AND ct.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+         UNION ALL
+         SELECT DATE(COALESCE(pr.completed_at, pr.created_at)) AS day, pr.amount AS total
+         FROM payment_requests pr
+         ${pesapalWhere} AND COALESCE(pr.completed_at, pr.created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+       ) x GROUP BY day ORDER BY day`, [...clickParams, ...pesapalParams]
     );
 
     res.json({
       success: true,
       transactions,
-      totalRevenue: totalAgg[0]?.totalRevenue || 0,
-      todayRevenue: todayAgg[0]?.todayRevenue || 0,
-      totalOrders: todayAgg[0]?.totalOrders || 0,
+      totalRevenue,
+      todayRevenue: Number(clickToday[0]?.todayRevenue || 0) + Number(pesapalToday[0]?.todayRevenue || 0),
+      totalOrders: Number(clickToday[0]?.totalOrders || 0) + Number(pesapalToday[0]?.totalOrders || 0),
       vouchersSold: vouchersAgg[0]?.vouchersSold || 0,
       chartData: {
         labels: chartRows.map(r => {

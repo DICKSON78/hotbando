@@ -162,8 +162,8 @@ const comparison = [
 const methods = [
   {
     icon: 'fa-mobile-screen-button',
-    title: 'Online via ClickPesa',
-    desc: 'Buy a plan directly through the customer portal or the Subscribe page using M-Pesa, Tigo Pesa, Airtel Money, or Halo Pesa via ClickPesa.'
+    title: 'Online via PesaPal',
+    desc: 'Buy a plan directly through the customer portal or the Subscribe page using M-Pesa, Tigo Pesa, Airtel Money, or Halo Pesa via PesaPal.'
   },
   {
     icon: 'fa-ticket',

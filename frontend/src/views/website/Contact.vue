@@ -184,7 +184,7 @@ const submitting = ref(false)
 const form = reactive({ name: '', email: '', phone: '', subject: '', message: '' })
 
 const faqs = reactive([
-  { q: 'How do I buy a plan?', a: 'Go to the customer portal, choose the plan you want, and pay via M-Pesa, Tigo Pesa, Airtel Money, or Halo Pesa through ClickPesa. After payment, your plan is activated instantly.', open: false },
+  { q: 'How do I buy a plan?', a: 'Go to the customer portal, choose the plan you want, and pay via M-Pesa, Tigo Pesa, Airtel Money, or Halo Pesa through PesaPal. After payment, your plan is activated instantly.', open: false },
   { q: 'How can I get free data?', a: 'Watch ads on your dashboard. Each completed ad gives you free MBs (default 15MB per ad, max 8 per day).', open: false },
   { q: 'What if the internet is not working?', a: 'Contact us via WhatsApp at +255 712 345 678 or email support@hotbando.co.tz. Our team will resolve the issue within 24 hours.', open: false },
   { q: 'How do I become a reseller?', a: 'Join as a reseller for free. Buy vouchers at wholesale price and sell them for profit. Visit /reseller/signup to get started.', open: false },
