@@ -523,6 +523,11 @@ ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-host="cdnjs.cloudflare.com" comment="HotBando portal icons"
 /ip hotspot walled-garden add action=allow dst-host="unpkg.com" comment="HotBando portal libs"
 /ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
+# PesaPal hosted checkout (must be reachable before the client is authorized)
+/ip hotspot walled-garden add action=allow dst-host="pay.pesapal.com" comment="PesaPal checkout"
+/ip hotspot walled-garden add action=allow dst-host="cybqa.pesapal.com" comment="PesaPal sandbox"
+/ip hotspot walled-garden add action=allow dst-host="pesapal.com" comment="PesaPal"
+/ip hotspot walled-garden add action=allow dst-host="www.pesapal.com" comment="PesaPal"
 
 /radius remove [find]
 /radius add address=${SERVER_PUBLIC_HOST} secret=${RADIUS_SECRET} service=hotspot \\

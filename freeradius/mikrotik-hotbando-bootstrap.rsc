@@ -140,6 +140,12 @@
 /ip hotspot walled-garden add action=allow dst-host="unpkg.com" comment="HotBando portal libs"
 /ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
 
+# Allow PesaPal hosted checkout before the client is authorized
+/ip hotspot walled-garden add action=allow dst-host="pay.pesapal.com" comment="PesaPal checkout"
+/ip hotspot walled-garden add action=allow dst-host="cybqa.pesapal.com" comment="PesaPal sandbox"
+/ip hotspot walled-garden add action=allow dst-host="pesapal.com" comment="PesaPal"
+/ip hotspot walled-garden add action=allow dst-host="www.pesapal.com" comment="PesaPal"
+
 # ============================================================================
 # 7. RADIUS CONFIGURATION
 # ============================================================================
