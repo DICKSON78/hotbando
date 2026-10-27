@@ -7,6 +7,12 @@ const mikrotikService = require('../utils/mikrotik');
 const { getRealClientMAC, getRealRouterID, getRealSSID, getRealLocation, formatRemainingTime } = hotspotController.helpers;
 const { authRateLimit } = require('../middleware/security');
 
+function publicSessionUser(user) {
+    if (!user) return null;
+    const { password, reset_token, reset_token_expiry, verification_code, ...safe } = user;
+    return safe;
+}
+
 // Establish device session (mirrors GET /hotspot)
 router.get('/session', async (req, res) => {
     try {
@@ -58,7 +64,7 @@ router.get('/session', async (req, res) => {
             location: req.session.location || '',
             onWifi: req.session.onWifi,
             registeredRouter,
-            user: req.session.hotbando_user || null
+            user: publicSessionUser(req.session.hotbando_user)
         });
     } catch (error) {
         console.error('❌ API session error:', error);
@@ -132,7 +138,7 @@ router.get('/dashboard', requireWifi, async (req, res) => {
         if (freshUsers.length === 0) {
             return res.status(401).json({ error: 'Akaunti haipatikani.' });
         }
-        req.session.hotbando_user = { ...freshUsers[0], mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
+        req.session.hotbando_user = { ...publicSessionUser(freshUsers[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
         const user = req.session.hotbando_user;
         const now = new Date();
         const usageUntil = new Date(user.usage_until);
