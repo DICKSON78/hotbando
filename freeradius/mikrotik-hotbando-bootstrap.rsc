@@ -116,9 +116,9 @@
 # ============================================================================
 /ip hotspot walled-garden remove [find]
 
-# Allow access to HotBando server
-/ip hotspot walled-garden add action=allow dst-address=<HOTBANDO_SERVER_IP> comment="Allow HotBando server"
-/ip hotspot walled-garden add action=allow dst-address=<HOTBANDO_SERVER_IP> dst-port=80,443 comment="Allow HotBando HTTP/HTTPS"
+# Allow access to HotBando server (use the portal hostname, not a bare IP)
+/ip hotspot walled-garden add action=allow dst-host="<HOTBANDO_SERVER_IP>" comment="Allow HotBando server"
+/ip hotspot walled-garden add action=allow dst-host="<HOTBANDO_SERVER_IP>" dst-port=80,443 comment="Allow HotBando HTTP/HTTPS"
 
 # Allow access to DNS (needed for captive portal detection)
 /ip hotspot walled-garden add action=allow dst-port=53 comment="Allow DNS"
@@ -231,7 +231,7 @@
 /ip hotspot profile set hotbando-profile html-directory=hotspot
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando Hotspot -->\n<html>\n<head>\n<meta http-equiv='refresh' content='0;url=http://<HOTBANDO_SERVER_IP>:3000/hotspot?router_id=<ROUTER_ID>&mac=\$(mac)&ip=\$(ip)'>\n</head>\n<body>HotBando - connecting...</body>\n</html>\n"
+:local loginHtml "<!-- HotBando Hotspot -->\n<html>\n<head>\n<meta http-equiv='refresh' content='0;url=https://<HOTBANDO_SERVER_IP>/hotspot?router_id=<ROUTER_ID>&mac=\$(mac)&ip=\$(ip)'>\n</head>\n<body>HotBando - connecting...</body>\n</html>\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 # ============================================================================

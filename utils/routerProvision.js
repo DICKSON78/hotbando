@@ -25,8 +25,19 @@ const wireguardService = require('./wireguard');
 const logger = require('./logger');
 
 const ROUTER_REGISTRATION_SECRET = process.env.ROUTER_REGISTRATION_SECRET || process.env.RADIUS_SECRET || '';
-const SERVER_PUBLIC_IP = process.env.SERVER_PUBLIC_IP || '34.35.81.196';
-const SERVER_PORT = process.env.PORT || 3000;
+const SERVER_PUBLIC_HOST = process.env.SERVER_PUBLIC_HOST || process.env.SERVER_PUBLIC_IP || 'hotbandowifi.online';
+const SERVER_PUBLIC_IS_IP = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(SERVER_PUBLIC_HOST);
+
+function resolvePublicBaseUrl() {
+    const configured = process.env.PUBLIC_BASE_URL || process.env.APP_URL || '';
+    if (configured && !/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(configured)) {
+        return configured.replace(/\/+$/, '');
+    }
+    return `https://${SERVER_PUBLIC_HOST}`;
+}
+
+const PUBLIC_BASE_URL = resolvePublicBaseUrl();
+const PUBLIC_FETCH_MODE = PUBLIC_BASE_URL.startsWith('https://') ? 'https' : 'http';
 const RADIUS_SECRET = process.env.RADIUS_SECRET || '';
 const DEFAULT_SSID = process.env.DEFAULT_SSID || 'HotBando-Free-WiFi';
 const HOTSPOT_IP = process.env.HOTSPOT_IP || '10.5.50.1';
@@ -129,7 +140,7 @@ async function registerRouter(payload = {}) {
     return {
         router: current,
         assignedIp: current.wireguard_ip,
-        serverPublicIp: SERVER_PUBLIC_IP,
+        serverPublicIp: SERVER_PUBLIC_HOST,
         wgPort: wireguardService.listenPort,
         wgNetwork: wireguardService.networkCidr,
         ssid: ssid || current.ssid || DEFAULT_SSID,
@@ -187,7 +198,7 @@ async function connectRouter(routerID, payload = {}) {
         assignedIp,
         wireguardIp: assignedIp,
         serverPublicKey: wireguardService.ensureServerKeys().publicKey,
-        serverPublicIp: SERVER_PUBLIC_IP,
+        serverPublicIp: SERVER_PUBLIC_HOST,
         wgPort: wireguardService.listenPort,
         wgNetwork: wireguardService.networkCidr,
         status: 'configuring',
@@ -216,12 +227,11 @@ function generateBootstrapScript() {
     return `# ============================================================================
 # HotBando Zero-Touch Bootstrap — paste ONCE into WebFig Terminal
 # (http://192.168.88.1 on a fresh router with internet on its WAN)
-# Server: ${SERVER_PUBLIC_IP}:${SERVER_PORT}
+# Server: ${PUBLIC_BASE_URL}
 # After this import everything is automatic: register → owner Connect → full config.
 # ============================================================================
 
-:global hotbandoServer "${SERVER_PUBLIC_IP}"
-:global hotbandoPort "${SERVER_PORT}"
+:global hotbandoBaseUrl "${PUBLIC_BASE_URL}"
 :global hotbandoSecret "${ROUTER_REGISTRATION_SECRET}"
 :global hbSerial [/system routerboard get serial-number]
 :global hbIdentity [/system identity get name]
@@ -233,9 +243,9 @@ function generateBootstrapScript() {
 :put ("Serial: " . $hbSerial)
 :put "============================================="
 
-:global hbRegUrl ("http://" . $hotbandoServer . ":" . $hotbandoPort . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
+:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
 
-/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=http output=none
+/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=${PUBLIC_FETCH_MODE} output=none
 :delay 2
 
 :if ([:len [/file find name="hotbando-provision.rsc"]] = 0) do={
@@ -264,7 +274,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # ============================================================================
 
 :global hbRouterId "${sanitize(routerID)}"
-:global hbPollUrl ("http://${SERVER_PUBLIC_IP}:${SERVER_PORT}/api/zero-touch/provision/" . $hbRouterId . "?secret=${ROUTER_REGISTRATION_SECRET}")
+:global hbPollUrl ("${PUBLIC_BASE_URL}/api/zero-touch/provision/" . $hbRouterId . "?secret=${ROUTER_REGISTRATION_SECRET}")
 
 :put ("HotBando registered: " . $hbRouterId . " — waiting for CONNECT approval")
 
@@ -272,7 +282,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 /system scheduler add name="hotbando-poll" interval=2m start-time=startup on-event={
   :local tmp "hb-latest.rsc"
   :local size 0
-  /tool fetch url=$hbPollUrl dst-path=$tmp mode=http
+  /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE}
   :delay 2
   :set size [/file get [$tmp] size]
   :if ($size > 300) do={
@@ -287,7 +297,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="https://${SERVER_PUBLIC_IP}/api/zero-touch/heartbeat" mode=https http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -354,7 +364,7 @@ async function provisionRouter(payload = {}) {
         router: current,
         assignedIp,
         serverPublicKey: serverKeys.publicKey,
-        serverPublicIp: SERVER_PUBLIC_IP,
+        serverPublicIp: SERVER_PUBLIC_HOST,
         wgPort: wireguardService.listenPort,
         wgNetwork: wireguardService.networkCidr,
         radiusSecret: RADIUS_SECRET,
@@ -362,6 +372,15 @@ async function provisionRouter(payload = {}) {
         script,
         created: false
     };
+}
+
+function serverWalledGardenRules() {
+    if (SERVER_PUBLIC_IS_IP) {
+        return `/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_HOST} comment="HotBando server"
+/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_HOST} dst-port=80,443 comment="HotBando web"`;
+    }
+    return `/ip hotspot walled-garden add action=allow dst-host="${SERVER_PUBLIC_HOST}" comment="HotBando server"
+/ip hotspot walled-garden add action=allow dst-host="${SERVER_PUBLIC_HOST}" dst-port=80,443 comment="HotBando web"`;
 }
 
 /**
@@ -423,7 +442,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /interface wireguard peers add \\
   interface="wg-hotbando" \\
   public-key="${wireguard.serverPublicKey}" \\
-  endpoint-address=${SERVER_PUBLIC_IP} \\
+  endpoint-address=${SERVER_PUBLIC_HOST} \\
   endpoint-port=${wireguardService.listenPort || 51820} \\
   allowed-address=${wireguardService.serverIp}/32 \\
   persistent-keepalive=25s
@@ -486,8 +505,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip hotspot add name="hotbando-server" interface=$hotspotIface address-pool=hotbando-pool profile=hotbando-profile disabled=no comment="HotBando hotspot server"
 
 /ip hotspot walled-garden remove [find]
-/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_IP} comment="HotBando server"
-/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_IP} dst-port=80,443 comment="HotBando web"
+${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-port=53 comment="HotBando DNS"
 /ip hotspot walled-garden add action=allow dst-address=${HOTSPOT_IP} comment="HotBando gateway"
 /ip hotspot walled-garden add action=allow dst-host="connectivitycheck.gstatic.com" comment="HotBando captive"
@@ -507,7 +525,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
 
 /radius remove [find]
-/radius add address=${SERVER_PUBLIC_IP} secret=${RADIUS_SECRET} service=hotspot \\
+/radius add address=${SERVER_PUBLIC_HOST} secret=${RADIUS_SECRET} service=hotspot \\
   authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=0.0.0.0 \\
   comment="HotBando FreeRADIUS"
 /radius incoming set accept=yes port=1700
@@ -544,7 +562,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="https://${SERVER_PUBLIC_IP}/api/zero-touch/heartbeat" mode=https http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------
@@ -552,7 +570,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=https://${SERVER_PUBLIC_IP}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
+:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=${PUBLIC_BASE_URL}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 :put "============================================="

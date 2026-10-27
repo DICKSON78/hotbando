@@ -7,8 +7,8 @@
         <p class="text-xs text-white/50">Fungua kama app kila unapo-join WiFi</p>
       </div>
     </div>
-    <button v-if="canInstall" @click="install" class="ig-btn ig-btn-primary w-full mt-3">
-      <i class="fa-solid fa-download mr-2"></i>Install App
+    <button v-if="canInstall" @click="install" :disabled="installing" class="ig-btn ig-btn-primary w-full mt-3 disabled:opacity-60">
+      <i class="fa-solid fa-download mr-2"></i>{{ installing ? 'Inasakinisha...' : 'Install App' }}
     </button>
     <div v-else class="text-xs text-white/50 mt-3 leading-relaxed">
       <button v-if="isAndroid" @click="openInChrome" class="ig-btn ig-btn-outline w-full mb-2">
@@ -23,34 +23,62 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const canInstall = ref(false)
+const installing = ref(false)
 const isStandalone = ref(false)
 const isIos = ref(false)
 const isAndroid = ref(false)
 let deferredPrompt = null
 
-function onPrompt(e) {
-  if (e) e.preventDefault()
-  deferredPrompt = e || window.deferredPrompt
+function usePrompt(prompt) {
+  if (!prompt || typeof prompt.prompt !== 'function') return false
+  deferredPrompt = prompt
   canInstall.value = true
+  return true
+}
+
+function onPrompt(e) {
+  if (e && typeof e.preventDefault === 'function') e.preventDefault()
+  const prompt = e && typeof e.prompt === 'function' ? e : window.deferredPrompt
+  usePrompt(prompt)
 }
 
 async function install() {
   const prompt = deferredPrompt || window.deferredPrompt
-  if (prompt) {
-    prompt.prompt()
-    const choice = await prompt.userChoice.catch(() => {})
+  if (!prompt || typeof prompt.prompt !== 'function') {
+    canInstall.value = false
+    if (isAndroid.value) openInChrome()
+    return
+  }
+
+  installing.value = true
+  try {
+    await prompt.prompt()
+    const choice = await prompt.userChoice.catch(() => null)
     if (choice && choice.outcome === 'accepted') {
       canInstall.value = false
     }
+  } catch {
+    canInstall.value = false
+    if (isAndroid.value) openInChrome()
+  } finally {
+    installing.value = false
     deferredPrompt = null
     window.deferredPrompt = null
-  } else if (isAndroid.value) {
-    openInChrome()
   }
 }
 
+function onInstalled() {
+  isStandalone.value = true
+  canInstall.value = false
+  deferredPrompt = null
+  window.deferredPrompt = null
+}
+
 function openInChrome() {
-  window.location.href = `intent://${window.location.host}${window.location.pathname}${window.location.search}#Intent;scheme=https;package=com.android.chrome;end`
+  const scheme = window.location.protocol === 'http:' ? 'http' : 'https'
+  const target = `${window.location.protocol}//${window.location.host}${window.location.pathname}${window.location.search}`
+  const path = `${window.location.host}${window.location.pathname}${window.location.search}`
+  window.location.href = `intent://${path}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`
 }
 
 onMounted(() => {
@@ -58,17 +86,17 @@ onMounted(() => {
   isIos.value = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
   isAndroid.value = /android/i.test(window.navigator.userAgent)
 
-  if (window.deferredPrompt) {
-    deferredPrompt = window.deferredPrompt
-    canInstall.value = true
-  }
+  // Prompt may have been captured in index.html before Vue mounted.
+  if (window.isSecureContext) usePrompt(window.deferredPrompt)
 
   window.addEventListener('beforeinstallprompt', onPrompt)
   window.addEventListener('appinstallavailable', onPrompt)
+  window.addEventListener('appinstalled', onInstalled)
 })
 
 onUnmounted(() => {
   window.removeEventListener('beforeinstallprompt', onPrompt)
   window.removeEventListener('appinstallavailable', onPrompt)
+  window.removeEventListener('appinstalled', onInstalled)
 })
 </script>

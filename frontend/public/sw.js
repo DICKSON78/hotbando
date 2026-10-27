@@ -57,8 +57,8 @@ self.addEventListener('push', (e) => {
     const data = e.data?.json() || { title: 'HotBando', body: 'Angalia data yako!' };
     self.registration.showNotification(data.title, {
         body: data.body,
-        icon: '/hot-bando-logo.png',
-        badge: '/hot-bando-logo.png',
+        icon: '/logo.png',
+        badge: '/logo.png',
         vibrate: [200, 100, 200],
         data: { url: data.url || '/hotspot/' },
     });

@@ -13,12 +13,10 @@
 # in Tanzania — no need to be on the same LAN.
 #
 # Server values (already filled — do NOT change unless the server moves):
-#   67.205.179.122  — HotBando server public IP
-#   3000             — HotBando app port
+#   hotbandowifi.online — HotBando public portal (HTTPS on port 443)
 # ============================================================================
 
-:global hotbandoServer "67.205.179.122"
-:global hotbandoPort "3000"
+:global hotbandoBaseUrl "https://hotbandowifi.online"
 :global hotbandoSecret "d5c45011dbdf3936688cc316ce6f5e00e66102d52736378a"
 :global hbSerial [/system routerboard get serial-number]
 :global hbIdentity [/system identity get name]
@@ -33,9 +31,9 @@
 # ---------------------------------------------------------------------------
 # 1. Phone home (GET with query params — robust, no JSON quoting needed)
 # ---------------------------------------------------------------------------
-:global hbRegUrl ("http://" . $hotbandoServer . ":" . $hotbandoPort . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
+:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
 
-/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=http output=none
+/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none
 :delay 2
 
 :if ([:len [/file find name="hotbando-provision.rsc"]] = 0) do={

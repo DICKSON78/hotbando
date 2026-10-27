@@ -6,23 +6,21 @@
 # ============================================================================
 
 # Replace placeholders:
-#   HOTBANDO_SERVER  — server IP or domain, e.g. 34.35.81.196
-#   HOTBANDO_PORT    — app port (3000)
+#   HOTBANDO_SERVER  — portal hostname, e.g. hotbandowifi.online
 #   REGISTRATION_SECRET — ROUTER_REGISTRATION_SECRET from server .env
 #   ROUTER_ID        — the router_id assigned at registration (e.g. HB-XXXX)
 # ============================================================================
 
-:local hotbandoServer "HOTBANDO_SERVER"
-:local hotbandoPort "HOTBANDO_PORT"
+:local hotbandoBaseUrl "https://HOTBANDO_SERVER"
 :local hotbandoSecret "REGISTRATION_SECRET"
 :local routerId "ROUTER_ID"
 
 :log info "HotBando heartbeat..."
-/tool fetch url=("http://$hotbandoServer:$hotbandoPort/api/zero-touch/heartbeat") \
+/tool fetch url=("$hotbandoBaseUrl/api/zero-touch/heartbeat") \
     http-method=post \
     http-content-type="application/json" \
     http-data="{\"router_id\":\"$routerId\",\"secret\":\"$hotbandoSecret\"}" \
-    mode=http \
+    mode=https \
     output=none
 
 :log info "HotBando heartbeat sent."

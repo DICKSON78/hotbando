@@ -21,6 +21,28 @@ async function _createGiftVoucher(packageId, price) {
   return code;
 }
 
+async function initPesapalFromSettings() {
+  const [settings] = await db.execute(
+    "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'pesapal_%'"
+  );
+  const config = {};
+  settings.forEach(s => { config[s.setting_key] = s.setting_value; });
+
+  if (!config.pesapal_consumer_key || !config.pesapal_consumer_secret) {
+    throw new Error('PesaPal is not configured');
+  }
+
+  pesapal.init({
+    consumer_key: config.pesapal_consumer_key,
+    consumer_secret: config.pesapal_consumer_secret,
+    env: config.pesapal_env || 'sandbox',
+    callback_url: config.pesapal_callback_url,
+    ipn_url: config.pesapal_ipn_url,
+  });
+
+  return config;
+}
+
 async function initiatePayment(req, res) {
   try {
     const { package_id, phone_number, gift, recipient_phone } = req.body;
@@ -90,7 +112,7 @@ async function initiatePayment(req, res) {
 
     await db.execute(
       "INSERT INTO payment_requests (user_id, payment_method, amount, phone_number, reference_number, merchant_request_id, status, callback_data) VALUES (?, 'pesapal', ?, ?, ?, ?, 'pending', ?)",
-      [user.id, pkg.price, payerPhone, order.order_tracking_id, ref, JSON.stringify({ package_id, gift: isGift, recipient_phone: isGift ? recipient_phone || null : null })]
+      [user.id, pkg.price, payerPhone, ref, order.order_tracking_id, JSON.stringify({ package_id, gift: isGift, recipient_phone: isGift ? recipient_phone || null : null })]
     );
 
     return res.json({ success: true, redirect_url: order.redirect_url, payment_url: order.redirect_url, order_tracking_id: order.order_tracking_id });
@@ -192,27 +214,28 @@ async function paymentCallback(req, res) {
   try {
     // Check idempotency - skip if already processed
     const [existing] = await db.execute(
-      "SELECT id, status FROM payment_requests WHERE reference_number = ?",
+      "SELECT id, status FROM payment_requests WHERE merchant_request_id = ?",
       [OrderTrackingId]
     );
 
     if (existing.length && existing[0].status === 'completed') {
-      const [r] = await db.execute("SELECT callback_data FROM payment_requests WHERE reference_number = ?", [OrderTrackingId]);
+      const [r] = await db.execute("SELECT callback_data FROM payment_requests WHERE merchant_request_id = ?", [OrderTrackingId]);
       const callbackData = r.length ? (typeof r[0].callback_data === 'string' ? JSON.parse(r[0].callback_data) : r[0].callback_data) : {};
       return res.redirect(callbackData.type === 'wallet_topup' ? '/reseller/dashboard' : '/hotspot/dashboard');
     }
 
+    await initPesapalFromSettings();
     const status = await pesapal.getPaymentStatus(OrderTrackingId);
     if (status.status_code === 1) {
       const [requests] = await db.execute(
-        "SELECT * FROM payment_requests WHERE reference_number = ? AND status = 'pending'",
+        "SELECT * FROM payment_requests WHERE merchant_request_id = ? AND status = 'pending'",
         [OrderTrackingId]
       );
       if (requests.length) {
         await _processCompletedPayment(requests[0], status);
       }
     }
-    const [r] = await db.execute("SELECT callback_data FROM payment_requests WHERE reference_number = ?", [OrderTrackingId]);
+    const [r] = await db.execute("SELECT callback_data FROM payment_requests WHERE merchant_request_id = ?", [OrderTrackingId]);
     const callbackData = r.length ? (typeof r[0].callback_data === 'string' ? JSON.parse(r[0].callback_data) : r[0].callback_data) : {};
     res.redirect(callbackData.type === 'wallet_topup' ? '/reseller/dashboard' : '/hotspot/dashboard');
   } catch (e) {
@@ -234,7 +257,7 @@ async function paymentIPN(req, res) {
 
     // Check idempotency
     const [existing] = await db.execute(
-      "SELECT id, status FROM payment_requests WHERE reference_number = ?",
+      "SELECT id, status FROM payment_requests WHERE merchant_request_id = ?",
       [OrderTrackingId]
     );
 
@@ -242,10 +265,11 @@ async function paymentIPN(req, res) {
       return res.status(200).send('OK');
     }
 
+    await initPesapalFromSettings();
     const status = await pesapal.getPaymentStatus(OrderTrackingId);
     if (status.status_code === 1) {
       const [requests] = await db.execute(
-        "SELECT * FROM payment_requests WHERE reference_number = ? AND status = 'pending'",
+        "SELECT * FROM payment_requests WHERE merchant_request_id = ? AND status = 'pending'",
         [OrderTrackingId]
       );
       if (requests.length) {
@@ -333,7 +357,7 @@ async function initiateWalletTopup(req, res) {
 
     await db.execute(
       "INSERT INTO payment_requests (user_id, payment_method, amount, phone_number, reference_number, merchant_request_id, status, callback_data) VALUES (?, 'pesapal', ?, ?, ?, ?, 'pending', ?)",
-      [user.id, amount, user.phone_number || '', order.order_tracking_id, ref, JSON.stringify({ type: 'wallet_topup', user_id: user.id, amount })]
+      [user.id, amount, user.phone_number || '', ref, order.order_tracking_id, JSON.stringify({ type: 'wallet_topup', user_id: user.id, amount })]
     );
 
     return res.json({ success: true, redirect_url: order.redirect_url, payment_url: order.redirect_url, order_tracking_id: order.order_tracking_id });

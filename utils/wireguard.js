@@ -27,7 +27,7 @@ const WG_CONF = path.join(WG_HOST_DIR, `${WG_INTERFACE}.conf`);
 
 class WireGuardService {
     constructor() {
-        this.serverPublicIp = process.env.SERVER_PUBLIC_IP || '34.35.81.196';
+        this.serverPublicIp = process.env.SERVER_PUBLIC_HOST || process.env.SERVER_PUBLIC_IP || 'hotbandowifi.online';
         this.listenPort = WG_PORT;
         this.networkCidr = WG_NETWORK;
         this.serverIp = WG_SERVER_IP;
@@ -347,7 +347,7 @@ ${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}
     getVpsSetupGuide() {
         return `# This server IS the WireGuard hub. No external VPS needed.
 # WireGuard is managed automatically by the system.
-# Server public IP: ${this.serverPublicIp}
+# Server public host: ${this.serverPublicIp}
 # WireGuard port: ${this.listenPort}
 # Network: ${this.networkCidr}`;
     }

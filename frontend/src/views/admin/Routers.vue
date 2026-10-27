@@ -378,7 +378,7 @@
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Interface</span><span class="font-mono text-white">{{ wgServer.interface }}</span></div>
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Listen Port</span><span class="font-mono text-white">{{ wgServer.listenPort }}</span></div>
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Server IP</span><span class="font-mono text-white">{{ wgServer.serverIp }}</span></div>
-              <div class="flex justify-between text-sm"><span style="color: #6b7280">Public IP</span><span class="font-mono text-white">{{ wgServer.serverPublicIp }}</span></div>
+              <div class="flex justify-between text-sm"><span style="color: #6b7280">Public Host</span><span class="font-mono text-white">{{ wgServer.serverPublicIp }}</span></div>
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Network</span><span class="font-mono text-white">{{ wgServer.network }}</span></div>
             </div>
             <div v-else class="p-4 rounded-xl text-sm text-center" style="background: #0a0a0f; border: 1px solid var(--border); color: #6b7280">

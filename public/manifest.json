@@ -2,11 +2,11 @@
     "name": "HotBando - Intaneti Bure",
     "short_name": "HotBando",
     "description": "Pata intaneti bure kwa kutazama matangazo au nunua kifurushi cha mtandao wa haraka",
-    "start_url": "/hotspot/login",
+    "start_url": "/hotspot",
     "scope": "/",
     "display": "standalone",
     "orientation": "portrait",
-    "background_color": "#F8FAFC",
+    "background_color": "#0a0a0f",
     "theme_color": "#FF7A30",
     "categories": ["utilities", "networking"],
     "icons": [
