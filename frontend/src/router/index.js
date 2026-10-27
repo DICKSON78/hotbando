@@ -14,6 +14,26 @@ const routes = [
   // Single unified login for all portals
   { path: '/login', name: 'portal-login', component: () => import('../views/PortalLogin.vue') },
   { path: '/admin/login', redirect: '/login' },
+  { path: '/sponsor/login', redirect: '/login' },
+  { path: '/bank/login', redirect: '/login' },
+  { path: '/franchise/login', redirect: '/login' },
+  { path: '/reseller/login', redirect: '/login' },
+  { path: '/investor/login', redirect: '/login' },
+
+  // Legacy EJS URLs now redirect to their Vue equivalents.
+  { path: '/admin/vouchers', redirect: '/admin/packages' },
+  { path: '/admin/video-ads', redirect: '/admin/campaigns' },
+  { path: '/admin/upload-video', redirect: '/admin/campaigns' },
+  { path: '/admin/analytics', redirect: '/admin/dashboard' },
+  { path: '/admin/my-ads', redirect: '/admin/campaigns' },
+  { path: '/admin/approve-content', redirect: '/admin/campaigns' },
+  { path: '/admin/leads', redirect: '/admin/users' },
+  { path: '/admin/generate-vouchers', redirect: '/admin/packages' },
+  { path: '/admin/setup-wizard', redirect: '/admin/routers' },
+  { path: '/sponsor/my-ads', redirect: '/sponsor/campaigns' },
+  { path: '/sponsor/upload-video', redirect: '/sponsor/campaigns/create' },
+  { path: '/sponsor/analytics', redirect: '/sponsor/dashboard' },
+  { path: '/sponsor/settings', redirect: '/sponsor/dashboard' },
 
   // ==================== Admin Portal ====================
   {
@@ -44,7 +64,8 @@ const routes = [
       { path: 'notifications', name: 'notifications', component: () => import('../views/admin/Notifications.vue') },
       { path: 'applications', name: 'applications', component: () => import('../views/admin/Applications.vue') },
       { path: 'packages', name: 'packages', component: () => import('../views/admin/Packages.vue') },
-      { path: 'settings', name: 'settings', component: () => import('../views/admin/Settings.vue') }
+      { path: 'settings', name: 'settings', component: () => import('../views/admin/Settings.vue') },
+      { path: 'change-password', name: 'change-password', component: () => import('../views/admin/ChangePassword.vue') }
     ]
   },
 
@@ -134,7 +155,10 @@ const routes = [
       { path: 'returns', name: 'investor-returns', component: () => import('../views/investor/Returns.vue') },
       { path: 'portfolio', name: 'investor-portfolio', component: () => import('../views/investor/Portfolio.vue') }
     ]
-  }
+  },
+
+  // Vue-only 404 page
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue') }
 ]
 
 const router = createRouter({
@@ -153,7 +177,7 @@ router.beforeEach(async (to) => {
   const hotspotGuestRoutes = ['hotspot-login', 'hotspot-signup']
   if (hotspotGuestRoutes.includes(to.name)) {
     const hotspot = useHotspotStore()
-    await hotspot.init()
+    await hotspot.init(to.query)
     if (hotspot.isLoggedIn) return '/hotspot/dashboard'
     return  // allow
   }
@@ -162,7 +186,7 @@ router.beforeEach(async (to) => {
   const hotspotAuthRoutes = ['hotspot-dashboard', 'hotspot-subscribe', 'hotspot-ads']
   if (hotspotAuthRoutes.includes(to.name)) {
     const hotspot = useHotspotStore()
-    await hotspot.init()
+    await hotspot.init(to.query)
     if (!hotspot.isLoggedIn) return '/hotspot/login'
     if (!hotspot.onWifi) return '/hotspot'
     return  // allow

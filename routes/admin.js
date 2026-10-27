@@ -3,7 +3,6 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { csrfProtection } = require('../middleware/security'); // CSRF protection for state-changing requests
-const adminAuthController = require('../controllers/adminAuthController');
 const { adminAuth } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
 
@@ -12,24 +11,6 @@ router.use((req, res, next) => {
     logger.info('ADMIN ROUTE HIT', { method: req.method, path: req.path, query: req.query, session: !!req.session.admin_user });
     next();
 });
-
-// ==================== PUBLIC ROUTES (NO AUTH) ====================
-router.get('/login', (req, res) => {
-    if (req.session.admin_user) {
-        return res.redirect('/admin/dashboard');
-    }
-    res.render('admin/login', {
-        title: 'Ingia kama Admin - HotBando',
-        error: null
-    });
-});
-
-router.post('/login', (req, res) => adminAuthController.login(req, res));
-router.post('/logout', (req, res) => adminAuthController.logout(req, res));
-
-// Password change (session required but not full admin auth - redirects to login if no session)
-router.get('/change-password', (req, res) => adminAuthController.showChangePassword(req, res));
-router.post('/change-password', (req, res) => adminAuthController.changePassword(req, res));
 
 // ==================== PROTECTED ROUTES (WITH AUTH) ====================
 router.use(adminAuth);
@@ -384,100 +365,10 @@ router.get('/vouchers/stats-full', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// ==================== PAGE ROUTES (RENDER EJS) ====================
-router.get('/dashboard', adminController.renderDashboardPage);
-router.get('/users', adminController.renderUsersPage);
-router.get('/vouchers', adminController.renderVouchersPage);
-router.get('/video-ads', adminController.renderVideoAdsPage);
-router.get('/upload-video', adminController.renderUploadVideoPage);
-router.get('/analytics', adminController.renderAnalyticsPage);
-router.get('/reports', adminController.renderReportsPage);
-router.get('/settings', adminController.renderSettingsPage);
-router.get('/my-ads', adminController.renderMyAdsPage);
-
-// Static pages (no controller needed)
-router.get('/approve-content', (req, res) => {
-    res.render('admin/approve-content', {
-        title: 'Idhini ya Maudhui',
-        activePage: 'approve-content',
-        userName: req.session.admin_user?.name || 'Admin'
-    });
-});
-
-router.get('/generate-vouchers', (req, res) => {
-    res.render('admin/generate-vouchers', {
-        title: 'Undaa Vouchers',
-        activePage: 'generate-vouchers',
-        userName: req.session.admin_user?.name || 'Admin'
-    });
-});
-
-// New feature pages
-router.get('/campaigns', (req, res) => {
-    res.render('admin/campaigns', {
-        title: 'Kampeni',
-        activePage: 'campaigns',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin'
-    });
-});
-
-router.get('/leads', (req, res) => {
-    res.render('admin/leads', {
-        title: 'Wateja Wapya',
-        activePage: 'leads',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin'
-    });
-});
-
-router.get('/wallet', (req, res) => {
-    res.render('admin/wallet', {
-        title: 'Pesa Yangu',
-        activePage: 'wallet',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin'
-    });
-});
-
-router.get('/locations', (req, res) => {
-    res.render('admin/locations', {
-        title: 'Maeneo',
-        activePage: 'locations',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin'
-    });
-});
-
-router.get('/routers', (req, res) => {
-    res.render('admin/routers', {
-        title: 'Routers',
-        activePage: 'routers',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin'
-    });
-});
-
-router.get('/revenue-share', (req, res) => {
-    res.render('admin/revenue-share', {
-        title: 'Mgawanyo',
-        activePage: 'revenue-share',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin'
-    });
-});
-
-router.get('/setup-wizard', (req, res) => {
-    res.render('admin/setup-wizard', {
-        title: 'Setup Wizard',
-        activePage: 'setup-wizard',
-        userName: req.session.admin_user?.name || 'Admin',
-        userRole: req.session.admin_user?.role || 'admin',
-        hotspotAdminPassword: process.env.HOTSPOT_ADMIN_PASSWORD || 'hotbando2024'
-    });
-});
-
 // ==================== API ROUTES (JSON RESPONSES) ====================
+
+// 🔐 ACCOUNT API
+router.post('/change-password', adminController.changePassword);
 
 // 📊 DASHBOARD & ANALYTICS API
 router.get('/dashboard-stats', adminController.dashboardStats);

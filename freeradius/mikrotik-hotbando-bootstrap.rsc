@@ -6,6 +6,7 @@
 #
 # Before running, replace the placeholders below:
 #   <HOTBANDO_SERVER_IP>   — your HotBando server IP/domain
+#   <ROUTER_ID>            — router_id shown in HotBando admin (e.g. HB-AA001122)
 #   <RADIUS_SECRET>        — shared secret (same as RADIUS_SECRET in .env)
 #   <WAN_INTERFACE>        — interface connected to your modem (hAP: ether1)
 #   <HOTSPOT_INTERFACE>    — interface clients connect to.
@@ -89,7 +90,7 @@
 # Create hotspot server profile
 /ip hotspot profile remove [find name="hotbando-profile"]
 /ip hotspot profile add name="hotbando-profile" \
-    login-by=http-pap,http-chap \
+    login-by=http-pap,http-chap,mac \
     html-directory=hotspot \
     use-radius=yes \
     radius-accounting=yes \
@@ -230,7 +231,7 @@
 /ip hotspot profile set hotbando-profile html-directory=hotspot
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando Hotspot -->\n<html>\n<head>\n<meta http-equiv='refresh' content='0;url=http://<HOTBANDO_SERVER_IP>:3000/hotspot'>\n</head>\n<body>HotBando - connecting...</body>\n</html>\n"
+:local loginHtml "<!-- HotBando Hotspot -->\n<html>\n<head>\n<meta http-equiv='refresh' content='0;url=http://<HOTBANDO_SERVER_IP>:3000/hotspot?router_id=<ROUTER_ID>&mac=\$(mac)&ip=\$(ip)'>\n</head>\n<body>HotBando - connecting...</body>\n</html>\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 # ============================================================================

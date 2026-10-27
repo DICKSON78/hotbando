@@ -89,6 +89,42 @@ sub _find_entitled_user {
     return $result;
 }
 
+# Load the remaining allowance for reply attributes. Without this the local
+# RouterOS user limits are ignored once RADIUS authenticates the session.
+sub _load_allowance {
+    my ($username) = @_;
+
+    my $dbh = _db_connect();
+    return undef unless $dbh;
+
+    my ($where, @args);
+    if (_is_mac($username)) {
+        $where = "REPLACE(REPLACE(LOWER(u.mac_address), ':', ''), '-', '') = ?";
+        @args = (_normalize_mac($username));
+    } else {
+        $where = "u.phone_number = ?";
+        @args = ($username);
+    }
+
+    my $sql = "SELECT u.free_bytes,
+                      GREATEST(TIMESTAMPDIFF(SECOND, NOW(), u.usage_until), 0) AS seconds_left,
+                      (u.usage_until > NOW()) AS paid
+               FROM users u
+               WHERE $where
+                 AND u.role = 'customer'
+                 AND u.is_active = 1
+                 AND (u.usage_until > NOW() OR u.free_bytes > 0)
+               LIMIT 1";
+
+    my $sth = $dbh->prepare($sql);
+    $sth->execute(@args);
+    my @row = $sth->fetchrow_array();
+    $sth->finish();
+    $dbh->disconnect();
+
+    return @row ? \@row : undef;
+}
+
 sub authorize {
     my $username = $RAD_REQUEST{'User-Name'} || '';
     return RLM_MODULE_NOTFOUND unless $username;
@@ -127,6 +163,26 @@ sub authenticate {
 }
 
 sub post_auth {
+    my $username = $RAD_REQUEST{'User-Name'} || '';
+    return RLM_MODULE_OK unless $username;
+
+    my $allowance = _load_allowance($username);
+    return RLM_MODULE_OK unless $allowance;
+
+    my ($free_bytes, $seconds_left, $paid) = @$allowance;
+
+    if ($paid && $seconds_left > 0) {
+        # Paid package: let the session live for the remaining package time.
+        $RAD_REPLY{'Session-Timeout'} = int($seconds_left);
+    } elsif ($free_bytes && $free_bytes > 0) {
+        # Free/ad data: enforce the remaining byte allowance for this session.
+        my $bytes = int($free_bytes);
+        $RAD_REPLY{'Mikrotik-Total-Limit'} = $bytes % 4294967296;
+        if ($bytes >= 4294967296) {
+            $RAD_REPLY{'Mikrotik-Total-Limit-Gigawords'} = int($bytes / 4294967296);
+        }
+    }
+
     return RLM_MODULE_OK;
 }
 

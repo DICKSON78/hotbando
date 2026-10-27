@@ -54,6 +54,7 @@ const navItems = [
   { divider: 'SYSTEM' },
   { path: '/admin/notifications', label: 'Notifications', icon: 'fas fa-bell' },
   { path: '/admin/settings', label: 'Settings', icon: 'fas fa-cog' },
+  { path: '/admin/change-password', label: 'Change Password', icon: 'fas fa-key' },
 ]
 
 const pageTitle = computed(() => {
@@ -80,7 +81,8 @@ const pageTitle = computed(() => {
     'tickets': 'Support Tickets',
     'audit': 'Audit Trail',
     'notifications': 'Notifications',
-    'settings': 'System Settings'
+    'settings': 'System Settings',
+    'change-password': 'Change Password'
   }
   return map[route.name] || 'Admin'
 })

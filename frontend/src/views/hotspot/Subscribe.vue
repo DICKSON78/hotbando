@@ -288,8 +288,8 @@ async function redeemVoucher() {
   try {
     const r = await hotspotPost('/voucher', { voucher_code: voucherCode.value })
     voucherMsg.value = r?.message || 'Voucher redeemed!'
-    voucherError.value = false
-    voucherCode.value = ''
+    voucherError.value = !(r?.success === 'success' || r?.success === true)
+    if (!voucherError.value) voucherCode.value = ''
   } catch (e) {
     voucherMsg.value = e.response?.data?.error || 'Invalid voucher'
     voucherError.value = true

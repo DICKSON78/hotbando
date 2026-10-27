@@ -1,11 +1,20 @@
-# Stage 1: Build dependencies
+# Stage 1: Build the Vue frontend
+FROM node:18-alpine AS frontend-builder
+WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci && npm cache clean --force
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Build backend dependencies
 FROM node:18-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
-# Stage 2: Production image
+# Stage 3: Production image
 FROM node:18-alpine
 WORKDIR /app
 
@@ -16,8 +25,9 @@ RUN addgroup -g 1001 -S hotbando && \
 # Copy dependencies from builder
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copy application files
+# Copy application files and the built Vue SPA
 COPY . .
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Create required directories with proper permissions
 RUN mkdir -p /app/public/uploads /app/public/ads /app/logs /app/tmp && \

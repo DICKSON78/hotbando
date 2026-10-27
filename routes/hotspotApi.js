@@ -10,60 +10,54 @@ const { authRateLimit } = require('../middleware/security');
 // Establish device session (mirrors GET /hotspot)
 router.get('/session', async (req, res) => {
     try {
-        const mac = getRealClientMAC(req);
-        const routerID = getRealRouterID(req);
-        const ssidshow = getRealSSID(req);
-        const location = await getRealLocation(routerID);
+        const explicitRouterID = req.query.routerID || req.query.routerid || req.query.router_id;
+        const candidates = [...new Set([
+            explicitRouterID,
+            req.session.routerID,
+            req.session.hotbando_user?.last_router_id
+        ].filter(Boolean))];
 
-        // Only update session WiFi info if request has explicit routerID param
-        // (from MikroTik captive portal redirect) OR if session already has a valid one
-        const hasExplicitRouter = req.query.routerID || req.query.routerid || req.query.router_id;
-        if (hasExplicitRouter) {
-            // Validate against DB
-            let onWifi = false;
-            let registeredRouter = null;
+        // Only accept a router that is actually registered. A stale or
+        // fabricated id (ROUTER_DEFAULT) must never overwrite a valid session.
+        let registeredRouter = null;
+        for (const candidateRouter of candidates) {
             try {
                 const [routers] = await db.execute(
                     'SELECT id, router_id, router_name, status, ssid, latitude, longitude FROM mikrotiks WHERE router_id = ? AND is_active = 1',
-                    [routerID]
+                    [candidateRouter]
                 );
                 if (routers.length > 0) {
-                    onWifi = true;
                     registeredRouter = routers[0];
+                    break;
                 }
             } catch (_) {}
-
-            req.session.mac = mac;
-            req.session.routerID = routerID;
-            req.session.ssidshow = ssidshow;
-            req.session.location = location;
-            req.session.onWifi = onWifi;
-            req.session.clientIP = req.ip;
-            req.session.userAgent = req.headers['user-agent'];
-        } else if (req.session.routerID) {
-            // Re-validate existing routerID
-            let onWifi = false;
-            let registeredRouter = null;
-            try {
-                const [routers] = await db.execute(
-                    'SELECT id, router_id, router_name, status, ssid, latitude, longitude FROM mikrotiks WHERE router_id = ? AND is_active = 1',
-                    [req.session.routerID]
-                );
-                if (routers.length > 0) {
-                    onWifi = true;
-                    registeredRouter = routers[0];
-                }
-            } catch (_) {}
-            req.session.onWifi = onWifi;
         }
 
+        let mac = getRealClientMAC(req) || req.session.mac || null;
+        if (!mac && registeredRouter) {
+            mac = await mikrotikService.resolveClientMAC(registeredRouter.router_id, req.ip);
+        }
+
+        const ssidshow = getRealSSID(req);
+        const location = registeredRouter
+            ? await getRealLocation(registeredRouter.router_id)
+            : (req.session.location || 'Tanzania');
+
+        req.session.mac = mac || req.session.mac;
+        req.session.routerID = registeredRouter ? registeredRouter.router_id : null;
+        req.session.ssidshow = ssidshow || req.session.ssidshow;
+        req.session.location = location;
+        req.session.onWifi = !!registeredRouter;
+        req.session.clientIP = req.ip;
+        req.session.userAgent = req.headers['user-agent'];
+
         res.json({
-            mac: req.session.mac || mac,
+            mac: req.session.mac || '',
             routerID: req.session.routerID || '',
-            ssidshow: req.session.ssidshow || ssidshow,
-            location: req.session.location || location,
-            onWifi: req.session.onWifi || false,
-            registeredRouter: null,
+            ssidshow: req.session.ssidshow || '',
+            location: req.session.location || '',
+            onWifi: req.session.onWifi,
+            registeredRouter,
             user: req.session.hotbando_user || null
         });
     } catch (error) {
@@ -76,10 +70,15 @@ router.get('/session', async (req, res) => {
 // Strict rate limit on auth endpoints: 5 attempts per 15 min per IP
 router.post('/login', authRateLimit, hotspotController.loginUser);
 router.post('/register', authRateLimit, hotspotController.register);
+router.post('/connect', requireWifi, hotspotController.connect);
+router.post('/disconnect', requireWifi, hotspotController.disconnect);
 router.post('/voucher', requireWifi, hotspotController.voucher);
+router.post('/voucher/redeem', requireWifi, hotspotController.voucher);
 router.get('/get-ad', requireWifi, hotspotController.getAd);
+router.get('/ads/random', requireWifi, hotspotController.getAd);
 router.get('/ads-list', requireWifi, hotspotController.getAdsList);
 router.post('/complete-ad', requireWifi, hotspotController.completeAd);
+router.post('/ads/complete', requireWifi, hotspotController.completeAd);
 
 // Active internet packages for the subscribe page
 router.get('/packages', async (req, res) => {

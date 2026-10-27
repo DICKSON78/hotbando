@@ -67,8 +67,6 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
-store.init()
-
 async function handleLogin() {
   loading.value = true; error.value = ''
   const p = phoneFull.value
@@ -76,6 +74,8 @@ async function handleLogin() {
   const form = new URLSearchParams()
   form.append('phone_number', localPhone)
   form.append('password', password.value)
+  form.append('router_id', store.routerID || '')
+  form.append('mac', store.mac || '')
   try {
     await hotspotPost('/login', form, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
     await store.refreshUser()

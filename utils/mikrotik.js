@@ -111,12 +111,93 @@ class MikrotikService {
     }
 
     /**
+     * Resolve a client's MAC address from the router's DHCP lease / hotspot
+     * active / ARP tables using the client IP seen by the web server.
+     * Returns null when it cannot be resolved.
+     */
+    async resolveClientMAC(routerID, ip) {
+        if (!routerID || !ip) return null;
+        const address = String(ip).replace(/^::ffff:/, '');
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            const lookups = [
+                ['/ip/dhcp-server/lease/print', `?address=${address}`],
+                ['/ip/hotspot/active/print', `?address=${address}`],
+                ['/ip/arp/print', `?address=${address}`]
+            ];
+            for (const [path, query] of lookups) {
+                try {
+                    const rows = await conn.write(path, [query]);
+                    if (rows.length > 0 && rows[0]['mac-address']) {
+                        return String(rows[0]['mac-address']).toUpperCase().replace(/-/g, ':');
+                    }
+                } catch (_) { /* try next table */ }
+            }
+        } catch (error) {
+            console.warn(`Could not resolve MAC for ${address} on ${routerID}:`, error.message);
+        }
+        return null;
+    }
+
+    /**
+     * Make sure the HotBando hotspot profile accepts MAC login. Existing
+     * routers were provisioned with login-by=http-pap,http-chap only, which
+     * means a MAC user added by the portal is never auto-authenticated.
+     */
+    async ensureMacLogin(conn) {
+        try {
+            const profiles = await conn.write('/ip/hotspot/profile/print');
+            let hasMac = false;
+            for (const p of profiles) {
+                if (!p.name || !/^hotbando/i.test(p.name)) continue;
+                const loginBy = String(p['login-by'] || '')
+                    .split(',').map(s => s.trim()).filter(Boolean);
+                const needsLogin = !loginBy.includes('mac');
+                const needsMode = p['mac-auth-mode'] !== 'as-username-and-password';
+
+                if (!needsLogin && !needsMode) {
+                    hasMac = true;
+                    continue;
+                }
+
+                if (needsLogin) loginBy.push('mac');
+                const args = [
+                    `=.id=${p['.id']}`,
+                    `=login-by=${loginBy.join(',')}`
+                ];
+                if (needsMode) {
+                    args.push('=mac-auth-mode=as-username-and-password');
+                }
+                try {
+                    await conn.write('/ip/hotspot/profile/set', args);
+                    console.log(`Enabled MAC login on hotspot profile ${p.name}`);
+                    hasMac = true;
+                } catch (profileErr) {
+                    console.warn(`Could not enable MAC login on ${p.name}:`, profileErr.message);
+                }
+            }
+            return hasMac;
+        } catch (error) {
+            console.warn('Could not verify MAC login profile:', error.message);
+            return false;
+        }
+    }
+
+    /**
      * Add or update a MAC-based hotspot user on MikroTik with time/byte limits.
      * Uses /ip/hotspot/user (persistent) so limits are enforced by RouterOS.
+     * The username/password are the MAC address so MAC login can authenticate
+     * the device automatically once the portal grants an entitlement.
      */
     async addUserToRouter(mac, routerID, uptimeSeconds = 0, bytes = 0) {
         try {
+            if (!mac || !routerID) {
+                throw new Error('MAC address and router are required');
+            }
             const conn = await this.getRouterConnection(routerID);
+            const macLoginReady = await this.ensureMacLogin(conn);
+
+            const cleanMac = String(mac).toUpperCase().replace(/-/g, ':');
 
             // Convert seconds to RouterOS time format (e.g. 1h30m0s)
             const formatTime = (secs) => {
@@ -131,33 +212,50 @@ class MikrotikService {
                 return str || '1s';
             };
 
-            // Convert bytes to human-readable for limit-bytes-in
-            const limitBytes = bytes > 0 ? String(bytes) : '';
+            const limitBytes = bytes > 0 ? String(Math.floor(bytes)) : '0';
+            const limitUptime = uptimeSeconds > 0 ? formatTime(uptimeSeconds) : '0s';
+            const profile = uptimeSeconds > 0 ? 'hotbando-paid' : 'hotbando-free';
 
-            // Check if MAC-based user already exists
-            const existingUsers = await conn.write('/ip/hotspot/user/print', [
-                `?mac-address=${mac}`
+            // Limits are mutually exclusive: a paid voucher is time-based,
+            // free/ad data is byte-based. Clear the other limit so an old
+            // free-data cap cannot cut off a paid user (and vice versa).
+            const limitArgs = [
+                `=limit-uptime=${limitUptime}`,
+                `=limit-bytes-total=${limitBytes}`,
+                '=limit-bytes-in=0',
+                '=limit-bytes-out=0'
+            ];
+
+            // Check if MAC-based user already exists. Also match by name so a
+            // user created by an older version (without mac-address) is updated
+            // instead of causing a duplicate-name error.
+            let existingUsers = await conn.write('/ip/hotspot/user/print', [
+                `?mac-address=${cleanMac}`
             ]);
+            if (existingUsers.length === 0) {
+                existingUsers = await conn.write('/ip/hotspot/user/print', [
+                    `?name=${cleanMac}`
+                ]);
+            }
 
             if (existingUsers.length > 0) {
-                // Update existing user's limits
+                // Update the existing user, including name/password so
+                // mac-auth-mode=as-username-and-password can match it.
                 const userId = existingUsers[0]['.id'];
-                const updateArgs = [`=.id=${userId}`];
-
-                if (uptimeSeconds > 0) {
-                    updateArgs.push(`=limit-uptime=${formatTime(uptimeSeconds)}`);
-                }
-                if (limitBytes) {
-                    updateArgs.push(`=limit-bytes-in=${limitBytes}`);
-                }
+                const updateArgs = [
+                    `=.id=${userId}`,
+                    `=name=${cleanMac}`,
+                    `=password=${cleanMac}`,
+                    `=mac-address=${cleanMac}`,
+                    `=profile=${profile}`,
+                    ...limitArgs
+                ];
 
                 await conn.write('/ip/hotspot/user/set', updateArgs);
-                console.log(`Updated hotspot user ${mac} on ${routerID}: uptime=${formatTime(uptimeSeconds)}, bytes=${limitBytes}`);
+                console.log(`Updated hotspot user ${cleanMac} on ${routerID}: uptime=${limitUptime}, bytes=${limitBytes}, profile=${profile}`);
             } else {
-                // Create new MAC-based user with time limit.
-                // Try provisioned hotspot server/profiles first, fall back to
-                // legacy defaults for routers provisioned by older scripts.
-                const profile = uptimeSeconds > 0 ? 'hotbando-paid' : 'hotbando-free';
+                // Create new MAC-based user. Try provisioned hotspot server
+                // first, then fall back to legacy server names.
                 const attempts = [
                     { server: 'hotbando-server', profile },
                     { server: 'hotspot1', profile: 'hotbando-default' }
@@ -166,26 +264,39 @@ class MikrotikService {
                 let lastErr = null;
                 for (const a of attempts) {
                     const addArgs = [
-                        `=mac-address=${mac}`,
+                        `=name=${cleanMac}`,
+                        `=password=${cleanMac}`,
+                        `=mac-address=${cleanMac}`,
                         `=server=${a.server}`,
-                        `=profile=${a.profile}`
+                        `=profile=${a.profile}`,
+                        ...limitArgs
                     ];
-
-                    if (uptimeSeconds > 0) {
-                        addArgs.push(`=limit-uptime=${formatTime(uptimeSeconds)}`);
-                    }
-                    if (limitBytes) {
-                        addArgs.push(`=limit-bytes-in=${limitBytes}`);
-                    }
 
                     try {
                         await conn.write('/ip/hotspot/user/add', addArgs);
                         added = true;
-                        console.log(`Added hotspot user ${mac} to ${routerID} via ${a.server}/${a.profile}: uptime=${formatTime(uptimeSeconds)}, bytes=${limitBytes}`);
+                        console.log(`Added hotspot user ${cleanMac} to ${routerID} via ${a.server}/${a.profile}: uptime=${limitUptime}, bytes=${limitBytes}`);
                         break;
                     } catch (e) { lastErr = e; }
                 }
                 if (!added) throw lastErr || new Error('hotspot user add failed');
+            }
+
+            // RouterOS does not always apply new limits to an already-active
+            // session. If MAC login is available, drop the active session so
+            // the device re-authenticates with the new voucher/ad allowance.
+            if (macLoginReady) {
+                try {
+                    const active = await conn.write('/ip/hotspot/active/print', [
+                        `?mac-address=${cleanMac}`
+                    ]);
+                    for (const a of active) {
+                        await conn.write('/ip/hotspot/active/remove', [`=.id=${a['.id']}`]);
+                        console.log(`Forced re-login for ${cleanMac} to apply new limits`);
+                    }
+                } catch (reauthErr) {
+                    console.warn(`Could not refresh active session for ${cleanMac}:`, reauthErr.message);
+                }
             }
 
             return true;
@@ -209,12 +320,14 @@ class MikrotikService {
     }
 
     async removeUserFromRouter(mac, routerID) {
+        if (!mac || !routerID) return false;
+        const cleanMac = String(mac).toUpperCase().replace(/-/g, ':');
         try {
             const conn = await this.getRouterConnection(routerID);
             
             // Find active session
             const sessions = await conn.write('/ip/hotspot/active/print', [
-                `?mac-address=${mac}`
+                `?mac-address=${cleanMac}`
             ]);
             
             if (sessions.length > 0) {
@@ -223,7 +336,7 @@ class MikrotikService {
                         `=.id=${session['.id']}`
                     ]);
                 }
-                console.log(`✅ User ${mac} removed from router ${routerID}`);
+                console.log(`✅ User ${cleanMac} removed from router ${routerID}`);
                 
                 // Log successful disconnect
                 try {
@@ -231,7 +344,7 @@ class MikrotikService {
                     const dbRouterId = await this.resolveRouterDbId(routerID);
                     await db.execute(
                         'INSERT INTO user_connection_logs (mac_address, router_id, action) VALUES (?, ?, "disconnect")',
-                        [mac, dbRouterId]
+                        [cleanMac, dbRouterId]
                     );
                 } catch (logError) {
                     console.error('Failed to log disconnect:', logError.message);

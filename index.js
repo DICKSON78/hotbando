@@ -63,7 +63,10 @@ const sessionStore = new MySQLStore({
     expiration: 86400000 // 24 hours
 });
 
-const isProd = process.env.NODE_ENV === 'production';
+// The captive portal is often reached over plain HTTP (especially through a
+// MikroTik login.html). A hard-coded Secure cookie silently breaks sessions in
+// that case, so only force Secure when both relevant env flags allow it.
+const forceSecureCookies = process.env.COOKIE_SECURE === 'true' && process.env.SESSION_SECURE !== 'false';
 app.use(session({
     key: 'hotbando_session',
     secret: process.env.SESSION_SECRET || require('crypto').randomBytes(64).toString('hex'),
@@ -71,10 +74,10 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: { 
-        secure: isProd ? true : 'auto', // HTTPS when behind proxy, HTTP otherwise
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        sameSite: isProd ? 'lax' : 'lax',
+        secure: forceSecureCookies ? true : 'auto',
+        httpOnly: process.env.SESSION_HTTP_ONLY !== 'false',
+        maxAge: parseInt(process.env.SESSION_MAX_AGE || '', 10) || 24 * 60 * 60 * 1000,
+        sameSite: 'lax',
         path: '/'
     },
     name: 'hotbando.sid'
@@ -84,7 +87,16 @@ app.use(session({
 app.use((req, res, next) => {
     res.locals.csrfToken = csrfProtection.generateToken(req);
     res.locals.user = req.session.user || req.session.admin_user || null;
+    res.locals.currentMAC = req.session.mac || null;
+    res.locals.currentRouterID = req.session.routerID || null;
     next();
+});
+
+// Provide a CSRF token to the SPA (and any JSON client). The token is bound
+// to the current session; clients send it back as X-CSRF-TOKEN.
+app.get('/api/csrf', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ csrfToken: csrfProtection.generateToken(req) });
 });
 
 // CSRF protection for state-changing requests (skip webhooks/zero-touch/public provisioning)
@@ -126,12 +138,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// View engine setup
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-
 // Routes
-const hotspotRoutes = require('./routes/hotspot');
 const hotspotApiRoutes = require('./routes/hotspotApi');
 const adminRoutes = require('./routes/admin');
 const campaignRoutes = require('./routes/campaignRoutes');
@@ -143,7 +150,6 @@ const routerRoutes = require('./routes/routerRoutes');
 const setupWizardRoutes = require('./routes/setupWizard');
 const autoDetectRoutes = require('./routes/autoDetect');
 const mikrotikSetupRoutes = require('./routes/mikrotikSetup');
-const sponsorRoutes = require('./routes/sponsor');
 const investorRoutes = require('./routes/investor');
 const resellerRoutes = require('./routes/reseller');
 const clickpesaRoutes = require('./routes/clickpesa');
@@ -205,16 +211,6 @@ app.get('/api/packages', async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to load packages' });
   }
 });
-
-// Legacy EJS portal routes (SPA handles all /hotspot/* now — only POST API routes kept)
-const hotspotEjsApi = require('./routes/hotspot');
-app.use('/hotspot', (req, res, next) => {
-    // Only allow POST/PUT/DELETE through the legacy route handlers
-    // GET /hotspot/* is handled by the SPA (Vue router)
-    if (req.method === 'GET') return next();
-    hotspotEjsApi(req, res, next);
-});
-app.use('/sponsor', sponsorRoutes);
 
 // PesaPal webhooks (must be raw/query based - handled in controller)
 app.get('/api/payments/callback', paymentController.paymentCallback);
@@ -395,26 +391,25 @@ app.get('/', (req, res, next) => {
 
 // Admin login handled by Vue SPA at /login
 
-// Simple 404 handler
+// 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
-    res.status(404).render('error', {
-        title: 'Ukurasa Haupo',
-        message: 'Ukurasa ulioutafuta haupo au umehamishwa.',
-        showAdminLogin: true
-    });
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+    }
+    if (req.method === 'GET') {
+        res.status(404);
+        return serveSPA(req, res);
+    }
+    res.status(404).json({ success: false, error: 'Not found' });
 });
 
-// Simple error handler
+// Error handler — never render an EJS template.
 app.use((err, req, res, next) => {
     const logger = require('./utils/logger');
     logger.error('Server Error:', { message: err.message, stack: err.stack });
-    if (req.path.startsWith('/api/')) {
-        return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
-    }
-    res.status(500).render('error', {
-        title: 'Hitilafu ya Mfumo',
-        message: 'Kumetokea hitilafu kwenye server. Tafadhali jaribu tena baadaye.',
-        showAdminLogin: true
+    res.status(500).json({
+        success: false,
+        message: 'Server error. Please try again.'
     });
 });
 

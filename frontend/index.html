@@ -11,10 +11,10 @@
   <meta name="apple-mobile-web-app-title" content="HotBando">
   <meta name="theme-color" content="#FF7A30">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="/vendor/fonts/poppins/poppins.css" rel="stylesheet">
+  <link href="/vendor/css/font-awesome.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/css/leaflet.css" />
+  <script src="/vendor/js/tailwind.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -27,8 +27,8 @@
       }
     }
   </script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="/vendor/js/leaflet.js"></script>
+  <script defer src="/vendor/js/chart.umd.min.js"></script>
   <script type="module" src="/src/main.js"></script>
   <script>
     window.addEventListener('beforeinstallprompt', (e) => {

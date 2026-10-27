@@ -184,12 +184,11 @@ HotBando is a comprehensive WiFi hotspot management platform that provides **fre
 
 ### Technology Stack
 
-- **Backend**: Node.js + Express.js
+- **Backend**: Node.js + Express.js (JSON API only)
 - **Database**: MySQL 5.7+
-- **Template Engine**: EJS
+- **Frontend**: Vue 3 + Vite, TailwindCSS, Chart.js
 - **Session Store**: express-mysql-session
 - **Router Integration**: node-routeros (MikroTik API)
-- **Frontend**: HTML5, TailwindCSS, Chart.js
 - **Authentication**: Session-based with bcrypt
 
 ---

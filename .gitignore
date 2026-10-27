@@ -9,3 +9,5 @@ public/uploads/
 coverage/
 tmp/
 .qodo/
+Modelfile
+.aider*

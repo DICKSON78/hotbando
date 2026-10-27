@@ -63,5 +63,5 @@
 import { useHotspotStore } from '../../stores/hotspot'
 
 const store = useHotspotStore()
-store.init()
+// HotspotLayout initializes the session (including the captive-portal query).
 </script>

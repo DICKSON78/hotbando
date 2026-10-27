@@ -35,6 +35,7 @@ server hotbando {
     }
 
     post-auth {
+        perl
         sql
         Post-Auth-Type REJECT {
             attr_filter.access_reject

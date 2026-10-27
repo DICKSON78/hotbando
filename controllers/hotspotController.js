@@ -17,29 +17,55 @@ function formatRemainingTime(seconds) {
     return 'Chini ya dakika moja';
 }
 
-// Get real client MAC address from various sources
+// Normalize and validate a MAC address (returns null when invalid)
+function normalizeMAC(raw) {
+    if (!raw) return null;
+    const cleaned = String(raw).trim().toUpperCase().replace(/-/g, ':');
+    return /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(cleaned) ? cleaned : null;
+}
+
+// Get real client MAC address from various sources.
+// Never invent a MAC: an invented MAC can never be authorised on the router.
 function getRealClientMAC(req) {
     if (req.query.mac) {
-        return req.query.mac.toUpperCase().replace(/-/g, ':');
+        const m = normalizeMAC(req.query.mac);
+        if (m) return m;
     }
     
     if (req.headers['x-client-mac']) {
-        return req.headers['x-client-mac'].toUpperCase().replace(/-/g, ':');
+        const m = normalizeMAC(req.headers['x-client-mac']);
+        if (m) return m;
     }
     
     if (req.headers['user-agent'] && req.headers['user-agent'].includes('mac=')) {
         const match = req.headers['user-agent'].match(/mac=([A-F0-9:]+)/i);
-        if (match) return match[1].toUpperCase().replace(/-/g, ':');
+        if (match) {
+            const m = normalizeMAC(match[1]);
+            if (m) return m;
+        }
     }
     
-    console.warn('⚠️ Real MAC not found, using IP-based identification');
-    const ip = req.ip || '192.168.1.100';
-    const ipParts = ip.split('.').slice(2);
-    return `00:1B:44:${ipParts[0] || '11'}:${ipParts[1] || '3A'}:B7`;
+    return null;
+}
+
+// Only return routers that actually exist and are active. A stale or
+// fabricated id (e.g. ROUTER_DEFAULT) must not be written to the user row.
+async function resolveRegisteredRouter(routerID) {
+    if (!routerID) return null;
+    try {
+        const [rows] = await db.execute(
+            'SELECT router_id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+            [routerID]
+        );
+        return rows.length > 0 ? rows[0].router_id : null;
+    } catch (_) {
+        return null;
+    }
 }
 
 // Get real location from router information
 async function getRealLocation(routerID) {
+    if (!routerID) return 'Tanzania';
     try {
         const [routers] = await db.execute(
             `SELECT COALESCE(l.name, m.router_name, 'Tanzania') AS location
@@ -66,23 +92,11 @@ async function getRealLocation(routerID) {
     }
 }
 
-// Get real router ID
+// Get router id from the captive-portal redirect / header / session.
+// Callers must validate it with resolveRegisteredRouter before persisting.
 function getRealRouterID(req) {
-    if (req.query.routerID || req.query.routerid || req.query.router_id) {
-        return req.query.routerID || req.query.routerid || req.query.router_id;
-    }
-    
-    if (req.headers['x-router-id']) {
-        return req.headers['x-router-id'];
-    }
-    
-    const clientIP = req.ip;
-    if (clientIP.startsWith('192.168.88.')) return 'ROUTER_DAR_001';
-    if (clientIP.startsWith('192.168.89.')) return 'ROUTER_ARUSHA_001';
-    if (clientIP.startsWith('192.168.90.')) return 'ROUTER_MWANZA_001';
-    if (clientIP.startsWith('10.7.')) return 'router-sim-001';
-    
-    return 'ROUTER_DEFAULT';
+    return req.query.routerID || req.query.routerid || req.query.router_id ||
+        req.headers['x-router-id'] || req.session?.routerID || null;
 }
 
 // Get real SSID
@@ -98,12 +112,6 @@ function getRealSSID(req) {
     return 'HotBando WiFi';
 }
 
-// Detect API/SPA requests (JSON) vs classic EJS form posts
-function isApiRequest(req) {
-    const accept = req.headers['accept'] || '';
-    return req.path.startsWith('/api/') || req.headers['x-requested-with'] === 'XMLHttpRequest' || accept.includes('application/json');
-}
-
 function secondsUntilMidnight() {
     const now = new Date();
     const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
@@ -112,64 +120,6 @@ function secondsUntilMidnight() {
 
 // Controller methods
 const hotspotController = {
-    // Show marketing homepage - REAL DEVICE INFO
-    async index(req, res) {
-        try {
-            const realMAC = getRealClientMAC(req);
-            const realRouterID = getRealRouterID(req);
-            const realSSID = getRealSSID(req);
-            const realLocation = await getRealLocation(realRouterID);
-            
-            req.session.mac = realMAC;
-            req.session.routerID = realRouterID;
-            req.session.ssidshow = realSSID;
-            req.session.location = realLocation;
-            req.session.clientIP = req.ip;
-            req.session.userAgent = req.headers['user-agent'];
-            
-            console.log('📱 REAL Device Access:', {
-                mac: realMAC,
-                location: realLocation,
-                routerID: realRouterID,
-                ssid: realSSID,
-                ip: req.ip
-            });
-            
-            if (req.session.hotbando_user) {
-                return res.redirect('/hotspot/dashboard');
-            }
-            
-            res.render('hotspot/index', {
-                mac: realMAC,
-                location: realLocation,
-                ssidshow: realSSID,
-                user: req.session.hotbando_user
-            });
-            
-        } catch (error) {
-            console.error('❌ Index error:', error);
-            res.render('hotspot/empty');
-        }
-    },
-    
-    // Show login form - REAL INFO
-    async login(req, res) {
-        if (!req.session.mac) {
-            return res.redirect('/hotspot');
-        }
-        
-        if (req.session.hotbando_user) {
-            return res.redirect('/hotspot/dashboard');
-        }
-        
-        res.render('hotspot/login', {
-            mac: req.session.mac,
-            location: req.session.location,
-            ssidshow: req.session.ssidshow,
-            error: null
-        });
-    },
-    
     // Process user login - REAL DEVICE INTEGRATION
     async loginUser(req, res) {
         try {
@@ -191,16 +141,7 @@ const hotspotController = {
             }
             
             if (Object.keys(errors).length > 0) {
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ error: Object.values(errors)[0] });
-                }
-                return res.render('hotspot/login', { 
-                    errors, 
-                    formData: req.body,
-                    mac: req.session.mac,
-                    location: req.session.location,
-                    ssidshow: req.session.ssidshow
-                });
+                return res.status(400).json({ error: Object.values(errors)[0] });
             }
             
             const [users] = await db.execute(
@@ -211,69 +152,45 @@ const hotspotController = {
             if (users.length === 0) {
                 // Dummy bcrypt to prevent timing side-channel
                 await bcrypt.compare('dummy-notreal', '$2a$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
-                }
-                errors.phone_number = 'Neno la siri au namba ya simu si sahihi.';
-                return res.render('hotspot/login', { 
-                    errors, 
-                    formData: req.body,
-                    mac: req.session.mac,
-                    location: req.session.location,
-                    ssidshow: req.session.ssidshow
-                });
+                return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
             }
             
             const user = users[0];
             
             const isPasswordValid = await bcrypt.compare(password, user.password);
             if (!isPasswordValid) {
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
-                }
-                errors.password = 'Neno la siri au namba ya simu si sahihi.';
-                return res.render('hotspot/login', { 
-                    errors, 
-                    formData: req.body,
-                    mac: req.session.mac,
-                    location: req.session.location,
-                    ssidshow: req.session.ssidshow
-                });
+                return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
             }
             
-            const currentMAC = req.session.mac || getRealClientMAC(req);
-            // Explicit router (captive redirect ?router_id= / header) wins over a
-            // possibly stale session value; session value kept only if registered.
-            const explicitRouter = req.query.routerID || req.query.routerid || req.query.router_id || req.headers['x-router-id'] || null;
-            let currentRouterID = explicitRouter || null;
-            if (!currentRouterID && req.session.routerID) {
-                try {
-                    const [rr] = await db.execute(
-                        'SELECT id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
-                        [req.session.routerID]
-                    );
-                    if (rr.length > 0) currentRouterID = req.session.routerID;
-                } catch (_) {}
+            let currentMAC = normalizeMAC(req.body.mac) || normalizeMAC(req.session.mac) || getRealClientMAC(req);
+
+            // Explicit router (captive redirect ?router_id= / header / form) wins
+            // over a possibly stale session value; only registered routers are accepted.
+            const explicitRouter = req.body.router_id || req.query.routerID || req.query.routerid ||
+                req.query.router_id || req.headers['x-router-id'] || null;
+            let currentRouterID = await resolveRegisteredRouter(explicitRouter);
+            if (!currentRouterID) {
+                currentRouterID = await resolveRegisteredRouter(req.session.routerID);
             }
-            if (!currentRouterID) currentRouterID = getRealRouterID(req);
-            // Never poison a good binding: only persist routers that are
-            // actually registered; otherwise keep the user's known router.
-            try {
-                const [chk] = await db.execute(
-                    'SELECT id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
-                    [currentRouterID]
-                );
-                if (chk.length === 0 && user.last_router_id) {
-                    const [chk2] = await db.execute(
-                        'SELECT id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
-                        [user.last_router_id]
-                    );
-                    if (chk2.length > 0) currentRouterID = user.last_router_id;
-                }
-            } catch (_) {}
+            if (!currentRouterID) {
+                currentRouterID = await resolveRegisteredRouter(user.last_router_id);
+            }
+
+            // Resolve the real device MAC from the router when the redirect did
+            // not carry it. Never persist a fabricated MAC.
+            if (!currentMAC && currentRouterID) {
+                currentMAC = await mikrotikService.resolveClientMAC(currentRouterID, req.ip);
+            }
+
             const currentLocation = req.session.location || await getRealLocation(currentRouterID);
             const currentIP = req.ip;
-            
+
+            // Keep a known-good binding when this request came from outside the
+            // hotspot, but never preserve a fabricated legacy value
+            // (ROUTER_DEFAULT / non-MAC text) that the router can never match.
+            const bindMAC = currentMAC || normalizeMAC(user.mac_address) || null;
+            const bindRouter = currentRouterID || null;
+
             await db.execute(
                 `UPDATE users SET 
                  mac_address = ?, 
@@ -282,7 +199,7 @@ const hotspotController = {
                  ip_address = ?,
                  updated_at = NOW() 
                  WHERE id = ?`,
-                [currentMAC, currentRouterID, currentLocation, currentIP, user.id]
+                [bindMAC, bindRouter, currentLocation, currentIP, user.id]
             );
             
             await new Promise((resolve, reject) => {
@@ -294,75 +211,44 @@ const hotspotController = {
             const { password: _pw, ...safeUser } = user;
             req.session.hotbando_user = {
                 ...safeUser, 
-                mac_address: currentMAC, 
-                last_router_id: currentRouterID,
+                mac_address: bindMAC,
+                last_router_id: bindRouter,
                 location: currentLocation,
                 ip_address: currentIP
             };
-            req.session.mac = currentMAC;
-            req.session.routerID = currentRouterID;
+            req.session.mac = bindMAC;
+            req.session.routerID = bindRouter;
             req.session.location = currentLocation;
-            req.session.onWifi = true;
+            req.session.onWifi = !!bindRouter;
             req.session.ssidshow = req.session.ssidshow || getRealSSID(req);
             
             console.log(`✅ REAL User ${user.name} logged in:`, {
-                mac: currentMAC,
-                router: currentRouterID
+                mac: bindMAC,
+                router: bindRouter
             });
             
             try {
                 const now = new Date();
                 const usageUntil = new Date(user.usage_until);
                 
-                if (usageUntil > now) {
+                if (bindMAC && bindRouter && usageUntil > now) {
                     const uptime = Math.max(0, (usageUntil - now) / 1000);
-                    await mikrotikService.addUserToRouter(currentMAC, currentRouterID, uptime, 0);
+                    await mikrotikService.addUserToRouter(bindMAC, bindRouter, uptime, 0);
                     console.log(`🔗 Premium user connected to router: ${uptime} seconds`);
-                } else if (user.free_bytes > 0) {
-                    await mikrotikService.addUserToRouter(currentMAC, currentRouterID, 0, user.free_bytes);
+                } else if (bindMAC && bindRouter && user.free_bytes > 0) {
+                    await mikrotikService.addUserToRouter(bindMAC, bindRouter, 0, user.free_bytes);
                     console.log(`🔗 Free data user connected to router: ${user.free_bytes} bytes`);
                 }
             } catch (routerError) {
                 console.warn('⚠️ Router connection after login failed:', routerError.message);
             }
             
-            if (isApiRequest(req)) {
-                return res.json({ success: true });
-            }
-            
-            res.redirect('/hotspot/dashboard');
+            return res.json({ success: true });
             
         } catch (error) {
             console.error('❌ REAL Login error:', error);
-            if (isApiRequest(req)) {
-                return res.status(500).json({ error: 'Tatizo limetokea. Tafadhali jaribu tena.' });
-            }
-            res.render('hotspot/login', { 
-                errors: { general: 'Tatizo limetokea. Tafadhali jaribu tena.' },
-                formData: req.body,
-                mac: req.session.mac,
-                location: req.session.location,
-                ssidshow: req.session.ssidshow
-            });
+            return res.status(500).json({ error: 'Tatizo limetokea. Tafadhali jaribu tena.' });
         }
-    },
-    
-    // Show registration form
-    signup(req, res) {
-        if (!req.session.mac) {
-            return res.redirect('/hotspot');
-        }
-        
-        if (req.session.hotbando_user) {
-            return res.redirect('/hotspot/dashboard');
-        }
-        
-        res.render('hotspot/signup', {
-            mac: req.session.mac,
-            location: req.session.location,
-            ssidshow: req.session.ssidshow,
-            error: null
-        });
     },
     
     // Process user registration - REAL DEVICE INFO
@@ -395,16 +281,7 @@ const hotspotController = {
             }
             
             if (Object.keys(errors).length > 0) {
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ error: Object.values(errors)[0] });
-                }
-                return res.render('hotspot/signup', { 
-                    errors, 
-                    formData: req.body,
-                    mac: req.session.mac,
-                    location: req.session.location,
-                    ssidshow: req.session.ssidshow
-                });
+                return res.status(400).json({ error: Object.values(errors)[0] });
             }
             
             const [existingUsers] = await db.execute(
@@ -413,30 +290,29 @@ const hotspotController = {
             );
             
             if (existingUsers.length > 0) {
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
-                }
-                errors.phone_number = 'Neno la siri au namba ya simu si sahihi.';
-                return res.render('hotspot/signup', { 
-                    errors, 
-                    formData: req.body,
-                    mac: req.session.mac,
-                    location: req.session.location,
-                    ssidshow: req.session.ssidshow
-                });
+                return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
             }
             
             const hashedPassword = await bcrypt.hash(password, 12);
             
-            const clientMAC = req.session.mac || null;
-            const location = req.session.location || null;
-            const routerID = req.session.routerID || null;
+            const routerID = await resolveRegisteredRouter(req.body.router_id || getRealRouterID(req));
+            let clientMAC = normalizeMAC(req.body.mac) || getRealClientMAC(req) || normalizeMAC(req.session.mac) || null;
+            if (!clientMAC && routerID) {
+                clientMAC = await mikrotikService.resolveClientMAC(routerID, req.ip);
+            }
+            const location = routerID ? await getRealLocation(routerID) : (req.session.location || null);
             const clientIP = req.ip || null;
             
+            // Admin-facing setting is `default_free_data_mb` (see schema.sql).
+            // Keep `free_data_per_user` as a legacy fallback; stored value is bytes.
             const [settings] = await db.execute(
-                'SELECT setting_value FROM system_settings WHERE setting_key = "free_data_per_user"'
+                `SELECT setting_key, setting_value FROM system_settings
+                 WHERE setting_key IN ('default_free_data_mb', 'free_data_per_user')`
             );
-            const freeBytes = settings.length > 0 ? parseInt(settings[0].setting_value) : 10485760;
+            const settingMap = Object.fromEntries(settings.map(s => [s.setting_key, s.setting_value]));
+            const freeBytes = settingMap.free_data_per_user
+                ? parseInt(settingMap.free_data_per_user, 10)
+                : (settingMap.default_free_data_mb ? parseInt(settingMap.default_free_data_mb, 10) * 1024 * 1024 : 10485760);
             
             const now = new Date();
             const [result] = await db.execute(
@@ -463,104 +339,43 @@ const hotspotController = {
             req.session.mac = clientMAC;
             req.session.routerID = routerID;
             req.session.location = location;
-            req.session.onWifi = true;
+            req.session.onWifi = !!routerID;
             req.session.ssidshow = req.session.ssidshow || getRealSSID(req);
             
             console.log(`✅ REAL New user registered:`, {
                 name,
                 phone: phone_number,
                 mac: clientMAC,
+                router: routerID,
                 freeBytes: freeBytes
             });
             
-            try {
-                await mikrotikService.addUserToRouter(clientMAC, routerID, 0, freeBytes);
-                console.log(`🔗 New user connected to router with ${freeBytes} bytes free data`);
-            } catch (routerError) {
-                console.warn('⚠️ Router connection after registration failed:', routerError.message);
+            let routerConnected = false;
+            if (clientMAC && routerID) {
+                try {
+                    routerConnected = await mikrotikService.addUserToRouter(clientMAC, routerID, 0, freeBytes);
+                    if (routerConnected) {
+                        console.log(`🔗 New user connected to router with ${freeBytes} bytes free data`);
+                    }
+                } catch (routerError) {
+                    console.warn('⚠️ Router connection after registration failed:', routerError.message);
+                }
+            } else {
+                console.warn('⚠️ Registration has no router/MAC binding; device will need to reconnect from HotBando WiFi.');
             }
             
-            if (isApiRequest(req)) {
-                return res.json({ success: true });
-            }
-            
-            res.redirect('/hotspot/dashboard');
+            return res.json({
+                success: true,
+                routerConnected,
+                mac: clientMAC,
+                routerID,
+                freeBytes
+            });
             
         } catch (error) {
             console.error('❌ REAL Registration error:', error);
-            if (isApiRequest(req)) {
-                return res.status(500).json({ error: 'Tatizo limetokea wakati wa usajili. Tafadhali jaribu tena.' });
-            }
-            res.render('hotspot/signup', { 
-                errors: { general: 'Tatizo limetokea wakati wa usajili. Tafadhali jaribu tena.' },
-                formData: req.body,
-                mac: req.session.mac,
-                location: req.session.location,
-                ssidshow: req.session.ssidshow
-            });
+            return res.status(500).json({ error: 'Tatizo limetokea wakati wa usajili. Tafadhali jaribu tena.' });
         }
-    },
-    
-    // User dashboard - REAL DEVICE INFO
-    async dashboard(req, res) {
-        if (!req.session.hotbando_user) {
-            return res.redirect('/hotspot/login');
-        }
-        
-        const user = req.session.hotbando_user;
-        const now = new Date();
-        const usageUntil = new Date(user.usage_until);
-        const isActive = now < usageUntil;
-        const remainingSeconds = isActive ? Math.max(0, (usageUntil - now) / 1000) : 0;
-        const freeMB = user.free_bytes / (1024 * 1024);
-        
-        const [todayViews] = await db.execute(
-            'SELECT COUNT(*) as count FROM ad_views WHERE user_id = ? AND DATE(created_at) = CURDATE()',
-            [user.id]
-        );
-        
-        const [adLimitSetting] = await db.execute(
-            'SELECT setting_value FROM system_settings WHERE setting_key = "daily_ad_limit"'
-        );
-        const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
-        
-        const routerStatus = await mikrotikService.checkRouterStatus(req.session.routerID || 'router-default');
-        
-        let connectedUsers = 0;
-        try {
-            const sessions = await mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
-            connectedUsers = sessions.length;
-        } catch (error) {
-            console.warn('⚠️ Could not get connected users count:', error.message);
-        }
-        
-        const adsWatchedToday = todayViews[0].count;
-        const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
-        
-        // ADD THIS LINE - Provide mac address
-        const mac = req.session.mac || user.mac_address || '00:00:00:00:00:00';
-        
-        res.render('hotspot/dashboard', {
-            user,
-            location: req.session.location,
-            routerID: req.session.routerID,
-            ssidshow: req.session.ssidshow,
-            isActive,
-            remainingTime: formatRemainingTime(remainingSeconds),
-            freeMB: freeMB.toFixed(2),
-            clientIP: req.session.clientIP || req.ip,
-            clientMAC: req.session.mac,
-            mac: mac,
-            adsWatchedToday,
-            adsRemaining,
-            dailyAdLimit,
-            canWatchAds: adsRemaining > 0,
-            routerStatus: routerStatus.status,
-            connectedUsers: connectedUsers,
-            routerMessage: routerStatus.isOnline ? 
-                `Mtandao upo tayari (${connectedUsers} watumiaji wanaotumia)` : 
-                'Kuna changamoto ndogo kwenye mtandao, lakini bado unaweza kutumia internet'
-        });
     },
     
     // Connect to internet - REAL ROUTER CONNECTION
@@ -574,19 +389,42 @@ const hotspotController = {
                 });
             }
             
-            const mac = user.mac_address;
-            const routerID = user.last_router_id;
+            let mac = normalizeMAC(user.mac_address) || normalizeMAC(req.session.mac);
+            let routerID = await resolveRegisteredRouter(req.session.routerID) ||
+                await resolveRegisteredRouter(user.last_router_id);
+
+            if (!mac && routerID) {
+                mac = await mikrotikService.resolveClientMAC(routerID, req.ip);
+            }
+            if (!mac || !routerID) {
+                return res.json({
+                    success: false,
+                    message: 'Kifaa hiki hakionekani kwenye Mtandao wa HotBando. Tafadhali unganishe kwenye WiFi ya HotBando kisha ujaribu tena.'
+                });
+            }
+
+            // Refresh from DB so ad rewards / vouchers credited after login
+            // are reflected even if the session copy is stale.
+            try {
+                const [fresh] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
+                if (fresh.length > 0) {
+                    const { password: _p, ...safe } = fresh[0];
+                    req.session.hotbando_user = safe;
+                    Object.assign(user, safe);
+                }
+            } catch (_) { /* keep session copy */ }
+
             const now = new Date();
             let uptime = 0;
             let bytes = 0;
             let connectionType = 'none';
             
-            const usageUntil = new Date(user.usage_until);
-            if (usageUntil > now) {
+            const usageUntil = user.usage_until ? new Date(user.usage_until) : null;
+            if (usageUntil && usageUntil > now) {
                 uptime = Math.max(0, (usageUntil - now) / 1000);
                 connectionType = 'premium';
-            } else if (user.free_bytes > 0) {
-                bytes = user.free_bytes;
+            } else if (Number(user.free_bytes) > 0) {
+                bytes = Number(user.free_bytes);
                 connectionType = 'free';
             } else {
                 return res.json({ 
@@ -607,6 +445,7 @@ const hotspotController = {
                 console.log(`🔗 REAL Router connection:`, {
                     user: user.name,
                     mac: mac,
+                    router: routerID,
                     type: connectionType,
                     success: routerSuccess
                 });
@@ -617,11 +456,15 @@ const hotspotController = {
                 routerMessage = 'Imeshindikana kuunganisha kwenye router.';
             }
             
-            if (bytes > 0) {
+            if (routerSuccess) {
                 await db.execute(
-                    'UPDATE users SET last_free_used = ? WHERE id = ?',
-                    [now, user.id]
+                    'UPDATE users SET mac_address = ?, last_router_id = ?, last_free_used = ?, updated_at = NOW() WHERE id = ?',
+                    [mac, routerID, now, user.id]
                 );
+                req.session.mac = mac;
+                req.session.routerID = routerID;
+                req.session.hotbando_user.mac_address = mac;
+                req.session.hotbando_user.last_router_id = routerID;
             }
             
             res.json({ 
@@ -676,19 +519,40 @@ const hotspotController = {
                 });
             }
             
-            // PREFER VIDEO ADS FIRST
-            const [videoAds] = await db.execute(
-                'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 AND video_url IS NOT NULL AND video_url != "" ORDER BY RAND() LIMIT 1'
-            );
-            
-            let ads = videoAds;
-            
-            // If no video ads, get any ad
-            if (ads.length === 0) {
-                const [allAds] = await db.execute(
-                    'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 ORDER BY RAND() LIMIT 1'
+            let ads = [];
+
+            // The SPA lets the customer choose an ad from the list. Start that
+            // specific ad so completeAd() can verify it was actually served.
+            const requestedAdId = parseInt(req.query.ad_id || req.body?.ad_id, 10);
+            if (requestedAdId) {
+                const [requestedAds] = await db.execute(
+                    'SELECT * FROM ads WHERE id = ? AND approved = 1 AND is_active = 1 LIMIT 1',
+                    [requestedAdId]
                 );
-                ads = allAds;
+                ads = requestedAds;
+                if (ads.length === 0) {
+                    return res.json({
+                        success: false,
+                        adsWatchedToday: todayViews[0].count,
+                        adsRemaining: Math.max(0, dailyAdLimit - todayViews[0].count),
+                        message: 'Tangazo hilo halipo au halijaidhinishwa.'
+                    });
+                }
+            } else {
+                // PREFER VIDEO ADS FIRST
+                const [videoAds] = await db.execute(
+                    'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 AND video_url IS NOT NULL AND video_url != "" ORDER BY RAND() LIMIT 1'
+                );
+
+                ads = videoAds;
+
+                // If no video ads, get any ad
+                if (ads.length === 0) {
+                    const [allAds] = await db.execute(
+                        'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 ORDER BY RAND() LIMIT 1'
+                    );
+                    ads = allAds;
+                }
             }
             
             if (ads.length === 0) {
@@ -912,15 +776,36 @@ const hotspotController = {
             }
             
             // Update session data
-            req.session.hotbando_user.free_bytes += ad.reward_bytes;
+            const newFreeBytes = Number(user.free_bytes) + Number(ad.reward_bytes);
+            req.session.hotbando_user.free_bytes = newFreeBytes;
+
+            // Push the new allowance to the router too. Without this the DB
+            // shows the extra MBs but RouterOS keeps the old byte cap.
+            let routerConnected = false;
+            try {
+                const mac = normalizeMAC(user.mac_address) || normalizeMAC(req.session.mac);
+                const routerID = await resolveRegisteredRouter(req.session.routerID) ||
+                    await resolveRegisteredRouter(user.last_router_id);
+                if (mac && routerID) {
+                    const usageUntil = user.usage_until ? new Date(user.usage_until) : null;
+                    const isPaid = usageUntil && usageUntil > new Date();
+                    const uptime = isPaid ? Math.max(0, (usageUntil - new Date()) / 1000) : 0;
+                    routerConnected = await mikrotikService.addUserToRouter(
+                        mac, routerID, uptime, isPaid ? 0 : newFreeBytes
+                    );
+                }
+            } catch (routerErr) {
+                console.warn('⚠️ Could not extend router data after ad:', routerErr.message);
+            }
             
             const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
-            const newTotalMB = Math.round((user.free_bytes + ad.reward_bytes) / (1024 * 1024));
+            const newTotalMB = Math.round(newFreeBytes / (1024 * 1024));
             
             res.json({ 
                 success: true, 
                 addedMB: rewardMB,
                 totalMB: newTotalMB,
+                routerConnected,
                 adsWatchedToday: views[0].count + 1,
                 adsRemaining: Math.max(0, dailyAdLimit - (views[0].count + 1)),
                 message: `Umepata ${rewardMB}MB ya data bure kutoka kwa ${ad.title}!`
@@ -933,99 +818,6 @@ const hotspotController = {
                 message: 'Imeshindikana kukamilisha tangazo.' 
             });
         }
-    },
-    
-    // Show subscription page
-    async subscription(req, res) {
-        if (!req.session.hotbando_user) {
-            return res.redirect('/hotspot/login');
-        }
-        
-        const user = req.session.hotbando_user;
-        const now = new Date();
-        const usageUntil = new Date(user.usage_until);
-        const isExpired = now > usageUntil;
-        const remainingSeconds = isExpired ? 0 : Math.max(0, (usageUntil - now) / 1000);
-        
-        // Calculate freeMB
-        const freeMB = Math.round(user.free_bytes / (1024 * 1024));
-        
-        const [packages] = await db.execute('SELECT * FROM packages WHERE is_active = 1');
-        
-        const [vouchers] = await db.execute(`
-            SELECT v.voucher_code, p.name as package_name, v.price 
-            FROM vouchers v 
-            JOIN packages p ON v.package_id = p.id 
-            WHERE v.is_used = 0 AND v.expires_at > NOW() 
-            LIMIT 10
-        `);
-        
-        res.render('hotspot/subscription', {
-            user,
-            location: req.session.location,
-            routerID: req.session.routerID,
-            ssidshow: req.session.ssidshow,
-            isExpired,
-            remainingTime: formatRemainingTime(remainingSeconds),
-            freeMB: freeMB,
-            packages,
-            vouchers,
-            clientIP: req.session.clientIP || req.ip,
-            clientMAC: req.session.mac
-        });
-    },
-    
-    // Advertise page - SASHA URIASISHI KWA VIDEO UPLOAD
-    async advertise(req, res) {
-        if (!req.session.hotbando_user) {
-            return res.redirect('/hotspot/login');
-        }
-        
-        const user = req.session.hotbando_user;
-        
-        // Get available video ads
-        const [videoAds] = await db.execute(`
-            SELECT a.*, u.name as sponsor_name,
-                   COUNT(av.id) as views_count
-            FROM ads a
-            LEFT JOIN users u ON a.sponsor_id = u.id
-            LEFT JOIN ad_views av ON a.id = av.ad_id
-            WHERE a.approved = 1 AND a.is_active = 1 
-            AND a.video_url IS NOT NULL AND a.video_url != ''
-            GROUP BY a.id
-            ORDER BY a.created_at DESC
-            LIMIT 10
-        `);
-        
-        const [todayViews] = await db.execute(
-            'SELECT COUNT(*) as count FROM ad_views WHERE user_id = ? AND DATE(created_at) = CURDATE()',
-            [user.id]
-        );
-        
-        const [adLimitSetting] = await db.execute(
-            'SELECT setting_value FROM system_settings WHERE setting_key = "daily_ad_limit"'
-        );
-        const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
-        
-        const adsWatchedToday = todayViews[0].count;
-        const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
-        
-        res.render('hotspot/advertise', {
-            mac: req.session.mac,
-            location: req.session.location,
-            ssidshow: req.session.ssidshow,
-            user: user,
-            videoAds: videoAds || [],
-            adsWatchedToday: adsWatchedToday,
-            adsRemaining: adsRemaining,
-            dailyAdLimit: dailyAdLimit,
-            canWatchAds: adsRemaining > 0
-        });
-    },
-    
-    // Empty page
-    empty(req, res) {
-        res.render('hotspot/empty');
     },
     
     // Logout - REAL ROUTER DISCONNECTION
@@ -1383,29 +1175,6 @@ const hotspotController = {
   },
 
   /**
-   * Render users management page
-   */
-  async renderUsersPage(req, res) {
-    try {
-      console.log('👥 Rendering users management page');
-      
-      return res.render('admin/users', {
-        title: 'User Management',
-        activePage: 'users',
-        userName: req.session.admin_user?.name || 'Admin'
-      });
-    } catch (error) {
-      console.error('❌ Error rendering users page:', error);
-      return res.render('admin/users', {
-        title: 'User Management',
-        activePage: 'users',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Failed to load page'
-      });
-    }
-  },
-
-  /**
    * Unsuspend a customer (additional function for completeness)
    */
   async unsuspendCustomer(req, res) {
@@ -1509,23 +1278,11 @@ const hotspotController = {
             const user = req.session.hotbando_user;
             
             if (!user) {
-                if (isApiRequest(req)) {
-                    return res.status(401).json({ success: 'error', message: 'Umelazimika kuingia kwenye akaunti yako.' });
-                }
-                return res.json({ 
-                    success: 'error', 
-                    message: 'Umelazimika kuingia kwenye akaunti yako.' 
-                });
+                return res.status(401).json({ success: 'error', message: 'Umelazimika kuingia kwenye akaunti yako.' });
             }
             
             if (!voucherCode) {
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ success: 'error', message: 'Tafadhali ingiza namba ya vocha.' });
-                }
-                return res.json({ 
-                    success: 'error', 
-                    message: 'Tafadhali ingiza namba ya vocha.' 
-                });
+                return res.status(400).json({ success: 'error', message: 'Tafadhali ingiza namba ya vocha.' });
             }
             
             const now = new Date();
@@ -1536,13 +1293,7 @@ const hotspotController = {
             );
             
             if (vouchers.length === 0) {
-                if (isApiRequest(req)) {
-                    return res.status(400).json({ success: 'error', message: 'Voucher sio sahihi, imetumika, au imekwisha muda wake.' });
-                }
-                return res.json({ 
-                    success: 'error', 
-                    message: 'Voucher sio sahihi, imetumika, au imekwisha muda wake.' 
-                });
+                return res.status(400).json({ success: 'error', message: 'Voucher sio sahihi, imetumika, au imekwisha muda wake.' });
             }
             
             const vouch = vouchers[0];
@@ -1553,8 +1304,7 @@ const hotspotController = {
                 [now, user.id, vouch.id]
             );
             if (redeemResult.affectedRows === 0) {
-                const msg = 'Voucher imekwisha kutumika na mtu mwingine.';
-                return isApiRequest(req) ? res.status(400).json({ success: 'error', message: msg }) : res.json({ success: 'error', message: msg });
+                return res.status(400).json({ success: 'error', message: 'Voucher imekwisha kutumika na mtu mwingine.' });
             }
 
             let newUsageUntil;
@@ -1578,14 +1328,29 @@ const hotspotController = {
             const { password: _pw2, ...safeUpdated } = updatedUser[0];
             req.session.hotbando_user = safeUpdated;
 
-            // Auto-connect to router after voucher redemption
-            const mac = user.mac_address;
-            const routerID = user.last_router_id;
+            // Auto-connect to router after voucher redemption. Use the fresh
+            // DB row so a binding repaired during this request is honoured.
+            let mac = normalizeMAC(updatedUser[0].mac_address) || normalizeMAC(req.session.mac);
+            let routerID = await resolveRegisteredRouter(req.session.routerID) ||
+                await resolveRegisteredRouter(updatedUser[0].last_router_id);
+            if (!mac && routerID) {
+                mac = await mikrotikService.resolveClientMAC(routerID, req.ip);
+            }
+
+            let routerConnected = false;
             if (mac && routerID) {
                 try {
                     const uptime = Math.max(0, (newUsageUntil.getTime() - now.getTime()) / 1000);
-                    await mikrotikService.addUserToRouter(mac, routerID, uptime, 0);
+                    routerConnected = await mikrotikService.addUserToRouter(mac, routerID, uptime, 0);
                     console.log(`🔗 Auto-connected ${user.name} after voucher redemption`);
+                    await db.execute(
+                        'UPDATE users SET mac_address = ?, last_router_id = ?, updated_at = NOW() WHERE id = ?',
+                        [mac, routerID, user.id]
+                    );
+                    req.session.mac = mac;
+                    req.session.routerID = routerID;
+                    req.session.hotbando_user.mac_address = mac;
+                    req.session.hotbando_user.last_router_id = routerID;
                 } catch (routerErr) {
                     console.warn('⚠️ Auto-connect after voucher failed (non-critical):', routerErr.message);
                 }
@@ -1595,9 +1360,12 @@ const hotspotController = {
             
             res.json({ 
                 success: 'success', 
-                message: 'Voucher imefanikiwa! Umefunguliwa kutumia mtandao.',
+                message: routerConnected
+                    ? 'Voucher imefanikiwa! Umefunguliwa kutumia mtandao.'
+                    : 'Voucher imehifadhiwa. Bonyeza "Wasiliana na Mtandao" kukamilisha muunganisho.',
                 package: vouch.package_name,
                 until: newUsageUntil,
+                routerConnected,
                 duration: formatRemainingTime(vouch.duration_hours * 3600)
             });
             
@@ -1693,15 +1461,44 @@ const hotspotController = {
             const [updatedUser] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
             const { password: _pw2, ...safeUpdated } = updatedUser[0];
             req.session.hotbando_user = safeUpdated;
+
+            // Activate the package on the router as part of the purchase so it
+            // is not left as a DB-only entitlement.
+            let mac = normalizeMAC(updatedUser[0].mac_address) || normalizeMAC(req.session.mac);
+            let routerID = await resolveRegisteredRouter(req.session.routerID) ||
+                await resolveRegisteredRouter(updatedUser[0].last_router_id);
+            if (!mac && routerID) {
+                mac = await mikrotikService.resolveClientMAC(routerID, req.ip);
+            }
+            let routerConnected = false;
+            if (mac && routerID) {
+                try {
+                    const uptime = Math.max(0, (newUsageUntil.getTime() - now.getTime()) / 1000);
+                    routerConnected = await mikrotikService.addUserToRouter(mac, routerID, uptime, 0);
+                    await db.execute(
+                        'UPDATE users SET mac_address = ?, last_router_id = ?, updated_at = NOW() WHERE id = ?',
+                        [mac, routerID, user.id]
+                    );
+                    req.session.mac = mac;
+                    req.session.routerID = routerID;
+                    req.session.hotbando_user.mac_address = mac;
+                    req.session.hotbando_user.last_router_id = routerID;
+                } catch (routerErr) {
+                    console.warn('⚠️ Auto-connect after package purchase failed:', routerErr.message);
+                }
+            }
             
             console.log(`✅ User ${user.name} purchased package ${pkg.name} for TSH ${pkg.price}`);
             
             res.json({ 
                 success: 'success', 
-                message: `Kifurushi cha ${pkg.name} kimenunuliwa kikamilifu!`,
+                message: routerConnected
+                    ? `Kifurushi cha ${pkg.name} kimenunuliwa kikamilifu!`
+                    : `Kifurushi cha ${pkg.name} kimehifadhiwa. Bonyeza "Wasiliana na Mtandao" kukamilisha muunganisho.`,
                 package: pkg.name,
                 until: newUsageUntil,
                 amount: pkg.price,
+                routerConnected,
                 duration: formatRemainingTime(pkg.duration_hours * 3600)
             });
             
@@ -1882,4 +1679,4 @@ const hotspotController = {
 };
 
 module.exports = hotspotController;
-module.exports.helpers = { getRealClientMAC, getRealRouterID, getRealSSID, getRealLocation, formatRemainingTime, isApiRequest };
+module.exports.helpers = { getRealClientMAC, getRealRouterID, getRealSSID, getRealLocation, formatRemainingTime };

@@ -195,11 +195,24 @@ async function fetchList() {
   }
 }
 
-function playAd(ad) {
+async function playAd(ad) {
   if (adsRemaining.value <= 0) return
-  selectedAd.value = ad
   message.value = ''
   messageError.value = false
+  try {
+    // Tell the server which ad is starting. complete-ad requires this
+    // server-side start marker, otherwise the reward is rejected.
+    const r = await hotspotGet('/get-ad', { params: { ad_id: ad.id } })
+    if (!r.success || !r.ad) {
+      message.value = r.message || 'Imeshindikana kuanzisha tangazo.'
+      messageError.value = true
+      return
+    }
+    selectedAd.value = r.ad
+  } catch (e) {
+    message.value = e.response?.data?.error || 'Imeshindikana kuanzisha tangazo.'
+    messageError.value = true
+  }
 }
 
 function backToList() {
@@ -210,7 +223,8 @@ function backToList() {
 
 async function completeAd() {
   if (!selectedAd.value) return
-  const watched = videoRef.value?.currentTime || 0
+  // Image ads complete via the timer, so there is no video currentTime.
+  const watched = videoRef.value?.currentTime || selectedAd.value.duration || 0
   const adId = selectedAd.value.id
   try {
     const r = await hotspotPost('/complete-ad', { ad_id: adId, watched_duration: Math.round(watched) })

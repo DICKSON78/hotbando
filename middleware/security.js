@@ -39,7 +39,8 @@ const csrfProtection = {
             return next();
         }
 
-        const token = req.body._csrf || req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
+        const token = req.body._csrf || req.body._token ||
+            req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
         const sessionToken = req.session.csrfToken;
 
         if (!token || !sessionToken || token !== sessionToken) {
@@ -159,10 +160,11 @@ const securityHeaders = (req, res, next) => {
     // Content Security Policy - Allow Tailwind CDN, Leaflet.js, OpenStreetMap and inline styles
     res.setHeader('Content-Security-Policy',
         "default-src 'self'; " +
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivrjs.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
         "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivrjs.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://unpkg.com; " +
         "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; " +
         "img-src 'self' data: https: blob: https://*.tile.openstreetmap.org https://*.openstreetmap.org; " +
+        "media-src 'self' https: blob:; " +
         "connect-src 'self' https://*.tile.openstreetmap.org https://cdn.jsdelivr.net https://unpkg.com; " +
         "frame-ancestors 'none'; " +
         "base-uri 'self'; " +

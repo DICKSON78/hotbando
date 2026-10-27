@@ -47,6 +47,7 @@ export const useHotspotStore = defineStore('hotspot', {
       this.routerID = ''
       this.ssidshow = ''
       this.location = ''
+      this.onWifi = false
     }
   }
 })

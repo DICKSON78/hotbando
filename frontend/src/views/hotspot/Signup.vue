@@ -74,8 +74,6 @@ const referralCode = ref('')
 const error = ref('')
 const loading = ref(false)
 
-store.init()
-
 async function handleRegister() {
   if (password.value !== passwordConfirm.value) {
     error.value = 'Passwords do not match'
@@ -91,7 +89,9 @@ async function handleRegister() {
       email: email.value,
       password: password.value,
       password_confirm: passwordConfirm.value,
-      referral_code: referralCode.value
+      referral_code: referralCode.value,
+      router_id: store.routerID || '',
+      mac: store.mac || ''
     })
     await store.refreshUser()
     router.replace('/hotspot/dashboard')

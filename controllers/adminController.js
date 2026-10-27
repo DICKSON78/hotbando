@@ -1,6 +1,7 @@
 // controllers/adminController.js - KAMILI 100% - IMEBORESHEWA - KILA KITU KIPO
 const db = require('../config/database');
 const mikrotikService = require('../utils/mikrotik');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 
@@ -224,48 +225,7 @@ class AdminController {
     }
   }
 
-  async renderDashboardPage(req, res) {
-    try {
-      const data = await AdminController.getDashboardData(req);
-      return res.render('admin/dashboard', {
-        title: 'Dashibodi',
-        activePage: 'dashboard',
-        userName: req.session.admin_user?.name || 'Admin',
-        ...data
-      });
-    } catch (error) {
-      console.error('Hitilafu katika render dashboard:', error);
-      return res.render('admin/dashboard', {
-        title: 'Dashibodi',
-        activePage: 'dashboard',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Imeshindikana kupakia data ya dashboard'
-      });
-    }
-  }
-
   // ==================== VIDEO UPLOAD METHODS ====================
-  async renderUploadVideoPage(req, res) {
-    try {
-      const [sponsors] = await db.execute('SELECT id, name FROM users WHERE role = "sponsor"');
-      return res.render('admin/upload-video', {
-        title: 'Pakia Video',
-        activePage: 'upload-video',
-        userName: req.session.admin_user?.name || 'Admin',
-        sponsors: sponsors || []
-      });
-    } catch (error) {
-      console.error('Hitilafu wakati wa kupakia ukurasa wa upload:', error);
-      return res.render('admin/upload-video', {
-        title: 'Pakia Video',
-        activePage: 'upload-video',
-        userName: req.session.admin_user?.name || 'Admin',
-        sponsors: [],
-        error: 'Imeshindikana kupakia ukurasa'
-      });
-    }
-  }
-
   async uploadVideo(req, res) {
     try {
       console.log('Kupakia video mpya...');
@@ -629,87 +589,6 @@ class AdminController {
   }
 
   // ==================== ANALYTICS METHODS ====================
-  async renderAnalyticsPage(req, res) {
-    try {
-      const [totalViews] = await db.execute(`
-        SELECT COUNT(*) as count FROM ad_views
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      `);
-      const [completion] = await db.execute(`
-        SELECT
-          CASE
-            WHEN COUNT(*) = 0 THEN 0
-            ELSE ROUND(AVG(CASE WHEN av.watched_duration >= a.duration THEN 1 ELSE 0 END) * 100, 2)
-          END as rate
-        FROM ad_views av
-        JOIN ads a ON av.ad_id = a.id
-        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      `);
-      const [avgWatchTime] = await db.execute(`
-        SELECT COALESCE(AVG(watched_duration), 0) as avgTime
-        FROM ad_views
-        WHERE watched_duration > 0
-        AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      `);
-
-      const salesTrend = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        const [daily] = await db.execute(
-          `SELECT COALESCE(SUM(price), 0) as total FROM vouchers WHERE is_used = 1 AND DATE(used_at) = ?`,
-          [dateStr]
-        );
-        salesTrend.push({
-          date: dateStr,
-          total: parseFloat(daily[0].total) || 0
-        });
-      }
-
-      const [popularPackages] = await db.execute(`
-        SELECT p.name, COUNT(*) as count,
-               ROUND((COUNT(*) / (SELECT COUNT(*) FROM vouchers WHERE is_used = 1) * 100), 2) as percentage
-        FROM vouchers v
-        JOIN packages p ON v.package_id = p.id
-        WHERE v.is_used = 1
-        GROUP BY p.name
-        ORDER BY count DESC
-        LIMIT 5
-      `);
-
-      const [viewsByLocation] = await db.execute(`
-        SELECT u.location, COUNT(av.id) as count,
-               ROUND((COUNT(av.id) / (SELECT COUNT(*) FROM ad_views) * 100), 2) as percentage
-        FROM ad_views av
-        JOIN users u ON av.user_id = u.id
-        WHERE av.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-        GROUP BY u.location
-        ORDER BY count DESC
-        LIMIT 5
-      `);
-
-      return res.render('admin/analytics', {
-        title: 'Takwimu za Matangazo',
-        activePage: 'analytics',
-        userName: req.session.admin_user?.name,
-        totalViews: totalViews[0].count || 0,
-        completionRate: completion[0].rate || 0,
-        avgWatchTime: Math.round(avgWatchTime[0].avgTime || 0),
-        salesTrend,
-        popularPackages: popularPackages || [],
-        viewsByLocation: viewsByLocation || []
-      });
-    } catch (error) {
-      console.error('Hitilafu katika analytics page:', error);
-      return res.render('admin/analytics', {
-        title: 'Takwimu za Matangazo',
-        activePage: 'analytics',
-        userName: req.session.admin_user?.name,
-        error: 'Imeshindikana kupakia data ya takwimu'
-      });
-    }
-  }
   async getAnalyticsStats(req, res) {
     try {
         const [totalViews] = await db.execute(`
@@ -1849,128 +1728,6 @@ async getAdViewsForAnalytics(req, res) {
     }
   }
 
-  // ==================== RENDER PAGE METHODS ====================
-  async renderVideoAdsPage(req, res) {
-    try {
-      return res.render('admin/video-ads', {
-        title: 'Matangazo ya Video',
-        activePage: 'video-ads',
-        userName: req.session.admin_user?.name || 'Admin'
-      });
-    } catch (error) {
-      console.error('Hitilafu katika video ads page:', error);
-      return res.render('admin/video-ads', {
-        title: 'Matangazo ya Video',
-        activePage: 'video-ads',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Imeshindikana kupakia ukurasa'
-      });
-    }
-  }
-
-  async renderVouchersPage(req, res) {
-    try {
-      return res.render('admin/vouchers', {
-        title: 'Usimamizi wa Vouchers',
-        activePage: 'vouchers',
-        userName: req.session.admin_user?.name || 'Admin'
-      });
-    } catch (error) {
-      console.error('Hitilafu katika vouchers page:', error);
-      return res.render('admin/vouchers', {
-        title: 'Usimamizi wa Vouchers',
-        activePage: 'vouchers',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Imeshindikana kupakia ukurasa'
-      });
-    }
-  }
-
-  async renderUsersPage(req, res) {
-    try {
-      return res.render('admin/users', {
-        title: 'Usimamizi wa Watumiaji',
-        activePage: 'users',
-        userName: req.session.admin_user?.name || 'Admin'
-      });
-    } catch (error) {
-      console.error('Hitilafu katika users page:', error);
-      return res.render('admin/users', {
-        title: 'Usimamizi wa Watumiaji',
-        activePage: 'users',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Imeshindikana kupakia ukurasa'
-      });
-    }
-  }
-
-  async renderReportsPage(req, res) {
-    try {
-      return res.render('admin/reports', {
-        title: 'Ripoti za Mfumo',
-        activePage: 'reports',
-        userName: req.session.admin_user?.name || 'Admin'
-      });
-    } catch (error) {
-      console.error('Hitilafu katika reports page:', error);
-      return res.render('admin/reports', {
-        title: 'Ripoti za Mfumo',
-        activePage: 'reports',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Imeshindikana kupakia ukurasa'
-      });
-    }
-  }
-
-  async renderSettingsPage(req, res) {
-    try {
-      return res.render('admin/settings', {
-        title: 'Mipangilio ya Mfumo',
-        activePage: 'settings',
-        userName: req.session.admin_user?.name || 'Admin'
-      });
-    } catch (error) {
-      console.error('Hitilafu katika settings page:', error);
-      return res.render('admin/settings', {
-        title: 'Mipangilio ya Mfumo',
-        activePage: 'settings',
-        userName: req.session.admin_user?.name || 'Admin',
-        error: 'Imeshindikana kupakia ukurasa'
-      });
-    }
-  }
-
-  async renderMyAdsPage(req, res) {
-    try {
-      const [ads] = await db.execute(`
-        SELECT a.*,
-               COUNT(av.id) as views_count,
-               COALESCE(SUM(av.data_earned), 0) as total_data_earned
-        FROM ads a
-        LEFT JOIN ad_views av ON a.id = av.ad_id
-        WHERE a.sponsor_id = ?
-        GROUP BY a.id
-        ORDER BY a.created_at DESC
-      `, [req.session.admin_user.id]);
-
-      return res.render('admin/my-ads', {
-        title: 'Matangazo Yangu',
-        activePage: 'my-ads',
-        userName: req.session.admin_user?.name || 'Admin',
-        myAdsList: ads || []
-      });
-    } catch (error) {
-      console.error('Hitilafu katika render my-ads:', error);
-      return res.render('admin/my-ads', {
-        title: 'Matangazo Yangu',
-        activePage: 'my-ads',
-        userName: req.session.admin_user?.name || 'Admin',
-        myAdsList: [],
-        error: 'Imeshindikana kupakia matangazo yako'
-      });
-    }
-  }
-
   async getMyAdsAPI(req, res) {
     try {
       const [ads] = await db.execute(`
@@ -2338,6 +2095,47 @@ async getAdViewsForAnalytics(req, res) {
         message: 'Imeshindwa kupata VPS guide',
         error: error.message
       });
+    }
+  }
+
+  /**
+   * Change the logged-in admin's password (Vue SPA endpoint).
+   */
+  async changePassword(req, res) {
+    try {
+      const { current_password, new_password, confirm_password } = req.body;
+      const adminId = req.session.admin_user?.id;
+
+      if (!adminId) {
+        return res.status(401).json({ success: false, message: 'Admin access required' });
+      }
+      if (!current_password || !new_password || !confirm_password) {
+        return res.status(400).json({ success: false, message: 'Jaza sehemu zote.' });
+      }
+      if (new_password !== confirm_password) {
+        return res.status(400).json({ success: false, message: 'Neno la siri jipya halifanani.' });
+      }
+      if (new_password.length < 8) {
+        return res.status(400).json({ success: false, message: 'Neno la siri linapaswa kuwa na herufi angalau 8.' });
+      }
+
+      const [users] = await db.execute('SELECT password FROM users WHERE id = ?', [adminId]);
+      if (users.length === 0) {
+        return res.status(401).json({ success: false, message: 'Admin access required' });
+      }
+
+      const isCurrentValid = await bcrypt.compare(current_password, users[0].password);
+      if (!isCurrentValid) {
+        return res.status(400).json({ success: false, message: 'Neno la siri la sasa sio sahihi.' });
+      }
+
+      const newHash = await bcrypt.hash(new_password, 12);
+      await db.execute('UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?', [newHash, adminId]);
+
+      return res.json({ success: true, message: 'Neno la siri limebadilishwa.' });
+    } catch (error) {
+      console.error('Admin password change error:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kubadilisha neno la siri.' });
     }
   }
 }

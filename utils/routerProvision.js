@@ -476,7 +476,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip hotspot remove [find]
 /ip hotspot profile remove [find name="hotbando-profile"]
 /ip hotspot profile add name="hotbando-profile" \\
-  login-by=http-pap,http-chap \\
+  login-by=http-pap,http-chap,mac \\
   html-directory=hotspot \\
   use-radius=yes radius-accounting=yes radius-interim-update=30s \\
   radius-mac-format=XX:XX:XX:XX:XX:XX \\
@@ -552,7 +552,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=https://${SERVER_PUBLIC_IP}/hotspot?router_id=${routerID}'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
+:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=https://${SERVER_PUBLIC_IP}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 :put "============================================="
