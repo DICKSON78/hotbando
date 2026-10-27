@@ -53,7 +53,10 @@ async function install() {
   installing.value = true
   try {
     await prompt.prompt()
-    const choice = await prompt.userChoice.catch(() => null)
+    const choice = await Promise.race([
+      prompt.userChoice.catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 20000))
+    ])
     if (choice && choice.outcome === 'accepted') {
       canInstall.value = false
     }

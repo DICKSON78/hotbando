@@ -1,4 +1,4 @@
-const CACHE = 'hotbando-v6';
+const CACHE = 'hotbando-v7';
 
 self.addEventListener('install', (e) => {
     self.skipWaiting();
