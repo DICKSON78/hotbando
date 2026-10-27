@@ -1,5 +1,6 @@
 -- Add pesapal to payment_method ENUM
 ALTER TABLE payment_requests MODIFY COLUMN payment_method ENUM('mpesa','tigopesa','airtelmoney','pesapal') NOT NULL;
+ALTER TABLE transactions MODIFY COLUMN payment_method ENUM('mpesa','tigopesa','airtelmoney','bank','cash','system','pesapal') NULL;
 
 -- Create payments table if not exists
 CREATE TABLE IF NOT EXISTS `payments` (

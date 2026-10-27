@@ -440,7 +440,7 @@ CREATE TABLE IF NOT EXISTS `transactions` (
   `processed_at` DATETIME NULL,
 
   -- Payment details (for deposits/withdrawals)
-  `payment_method` ENUM('mpesa', 'tigopesa', 'airtelmoney', 'bank', 'cash', 'system') NULL,
+  `payment_method` ENUM('mpesa', 'tigopesa', 'airtelmoney', 'bank', 'cash', 'system', 'pesapal') NULL,
   `payment_reference` VARCHAR(255) NULL,
   `payment_phone` VARCHAR(20) NULL,
 

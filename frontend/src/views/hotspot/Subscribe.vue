@@ -6,6 +6,22 @@
       <p class="text-sm text-white/50">Nunua kifurushi cha mtandao</p>
     </div>
 
+    <div v-if="returnStatus" class="mx-4 mt-3 rounded-2xl border p-4" :class="returnStatus === 'completed' ? 'bg-green-500/10 border-green-500/30' : returnStatus === 'pending' ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-red-500/10 border-red-500/30'">
+      <div class="flex items-start gap-3">
+        <i class="fa-solid mt-0.5" :class="returnStatus === 'completed' ? 'fa-circle-check text-green-400' : returnStatus === 'pending' ? 'fa-clock text-yellow-400' : 'fa-circle-exclamation text-red-400'"></i>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-white">{{ returnStatus === 'completed' ? 'Payment Complete' : returnStatus === 'pending' ? 'Payment Pending' : 'Payment Failed' }}</p>
+          <p class="text-xs text-white/60 mt-1">{{ returnMessage }}</p>
+          <div v-if="returnVoucher" class="mt-3 rounded-xl bg-black/30 border border-white/10 p-3 text-center">
+            <p class="text-[10px] tracking-widest text-white/50">VOUCHER CODE</p>
+            <p class="text-base font-bold tracking-wider text-[#FF7A30] mt-1">{{ returnVoucher }}</p>
+            <button class="pay-copy mt-2" @click="copyReturnVoucher"><i class="fa-solid fa-copy"></i> {{ returnCopied ? 'Copied!' : 'Copy Voucher' }}</button>
+          </div>
+          <button class="ig-btn ig-btn-primary text-xs mt-3 px-4 py-2" @click="router.push('/hotspot/dashboard')">Go to Dashboard</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="loading" class="text-center py-12 text-white/40"><i class="fas fa-spinner fa-spin text-2xl"></i></div>
 
     <div v-else>
@@ -89,7 +105,7 @@
         </div>
 
         <div class="mt-3">
-          <PhoneInput :initialDigits="myPhone" @change="v => payerPhone = v" label="Namba ya simu kwa malipo (push)" hint="Tutakutumia push ya malipo" />
+          <PhoneInput :initialDigits="myPhone" @change="v => payerPhone = v" label="Namba ya simu kwa malipo" hint="Utapitishwa kwenye ukurasa salama wa PesaPal" />
         </div>
 
         <div v-if="buyMode === 'gift'" class="pay-gift-note">
@@ -98,10 +114,9 @@
         </div>
 
         <button class="pay-start" :disabled="processing" @click="startPayment">
-          <i v-if="polling" class="fas fa-spinner fa-spin"></i>
-          <i v-else-if="processing" class="fas fa-spinner fa-spin"></i>
-          <i v-else class="fa-solid fa-mobile-screen-button"></i>
-          {{ polling ? 'Inasubiri malipo... (Angalia simu)' : processing ? 'Inatuma push...' : 'Lipia kwa Mobile Money' }}
+          <i v-if="processing" class="fas fa-spinner fa-spin"></i>
+          <i v-else class="fa-solid fa-lock"></i>
+          {{ processing ? 'Inaelekeza PesaPal...' : 'Lipia kwa PesaPal' }}
         </button>
 
         <p v-if="modalMsg" class="pay-msg mt-3" :class="modalError ? 'pay-msg-err' : 'pay-msg-ok'">{{ modalMsg }}</p>
@@ -119,12 +134,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { hotspotGet, hotspotPost } from '../../api/client'
 import { apiPost, apiGet } from '../../api/client'
 import PhoneInput from '../../components/PhoneInput.vue'
 
+const route = useRoute()
 const router = useRouter()
 const packages = ref([])
 const loading = ref(true)
@@ -138,12 +154,14 @@ const buyMode = ref('me')
 const payerPhone = ref('')
 const myPhone = ref('')
 const processing = ref(false)
-const polling = ref(false)
 const modalMsg = ref('')
 const modalError = ref(false)
 const generatedVoucher = ref('')
 const copied = ref(false)
-let pollTimer = null
+const returnStatus = ref('')
+const returnMessage = ref('')
+const returnVoucher = ref('')
+const returnCopied = ref(false)
 
 onMounted(async () => {
   try {
@@ -161,11 +179,40 @@ onMounted(async () => {
       payerPhone.value = phone
     }
   } catch {}
+  await handlePaymentReturn()
 })
 
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
-
 const featured = computed(() => packages.value[0] || null)
+
+async function handlePaymentReturn() {
+  const tracking = route.query.order_tracking_id
+  if (!tracking) return
+  try {
+    const r = await apiGet(`/payments/status/${encodeURIComponent(tracking)}`)
+    if (r.status === 'completed') {
+      returnStatus.value = 'completed'
+      returnMessage.value = r.message || 'Malipo yamekamilika!'
+      returnVoucher.value = r.voucher || ''
+    } else if (r.status === 'failed') {
+      returnStatus.value = 'failed'
+      returnMessage.value = r.message || 'Malipo hayajakamilika. Tafadhali jaribu tena.'
+    } else {
+      returnStatus.value = 'pending'
+      returnMessage.value = r.message || 'Malipo bado hayajakamilika. Tafadhali subiri kidogo kisha fungua ukurasa huu tena.'
+    }
+  } catch (e) {
+    returnStatus.value = 'failed'
+    returnMessage.value = e.response?.data?.error || 'Imeshindikana kuthibitisha malipo.'
+  }
+}
+
+async function copyReturnVoucher() {
+  try {
+    await navigator.clipboard.writeText(returnVoucher.value)
+    returnCopied.value = true
+    setTimeout(() => { returnCopied.value = false }, 2000)
+  } catch {}
+}
 
 function formatPrice(v) { return Number(v || 0).toLocaleString() }
 
@@ -195,8 +242,7 @@ function openModal(pkg) {
 }
 
 function closeModal() {
-  if (polling.value || processing.value) return
-  if (pollTimer) clearInterval(pollTimer)
+  if (processing.value) return
   showModal.value = false
   selectedPackage.value = null
 }
@@ -207,7 +253,7 @@ function toLocalPhone(p) {
 }
 
 async function startPayment() {
-  if (polling.value) return
+  if (processing.value) return
   const phone = toLocalPhone(payerPhone.value)
   if (!/^0[0-9]{9}$/.test(phone)) {
     modalMsg.value = 'Tafadhali ingiza namba ya simu sahihi.'
@@ -219,60 +265,36 @@ async function startPayment() {
   modalError.value = false
   generatedVoucher.value = ''
   try {
-    const r = await apiPost('/clickpesa/pay', {
-      amount: selectedPackage.value.price,
-      phoneNumber: phone,
-      purpose: 'package_purchase',
+    const r = await apiPost('/payments/initiate', {
       package_id: selectedPackage.value.id,
+      phone_number: phone,
       gift: buyMode.value === 'gift',
+      return_path: buyMode.value === 'gift' ? '/hotspot/subscribe' : '/hotspot/dashboard',
     })
-    if (r.success && r.orderReference) {
-      processing.value = false
-      polling.value = true
-      modalMsg.value = 'Tafadhali angalia simu yako na weka PIN kukamilisha malipo'
-      modalError.value = false
-      startPolling(r.orderReference)
-    } else {
-      modalMsg.value = r.error || 'Imeshindikana. Jaribu tena.'
-      modalError.value = true
-      processing.value = false
+    if (r.success && r.redirect_url) {
+      window.location.assign(r.redirect_url)
+      return
     }
+    if (r.success && r.voucher) {
+      generatedVoucher.value = r.voucher
+      modalMsg.value = r.message || 'Voucher imegeneratiwa!'
+      processing.value = false
+      return
+    }
+    if (r.success && r.activated) {
+      modalMsg.value = r.message || 'Kifurushi kimewashwa!'
+      processing.value = false
+      setTimeout(() => router.push('/hotspot/dashboard'), 1500)
+      return
+    }
+    modalMsg.value = r.error || 'Imeshindikana. Jaribu tena.'
+    modalError.value = true
+    processing.value = false
   } catch (e) {
     modalMsg.value = e.response?.data?.error || 'Error. Please try again.'
     modalError.value = true
     processing.value = false
   }
-}
-
-function startPolling(orderRef) {
-  if (pollTimer) clearInterval(pollTimer)
-  let attempts = 0
-  pollTimer = setInterval(async () => {
-    attempts++
-    if (attempts > 60) {
-      clearInterval(pollTimer)
-      polling.value = false
-      modalMsg.value = 'Muda umekwisha. Malipo hayajakamilika.'
-      modalError.value = true
-      return
-    }
-    try {
-      const r = await apiGet(`/clickpesa/confirm/${orderRef}`)
-      if (r.success && r.status === 'completed') {
-        clearInterval(pollTimer)
-        polling.value = false
-        if (r.voucher) {
-          generatedVoucher.value = r.voucher
-          modalMsg.value = 'Malipo yamekamilika! Voucher imegeneratiwa.'
-        } else if (r.activated) {
-          modalMsg.value = r.message || 'Kifurushi kimewashwa!'
-        } else {
-          modalMsg.value = r.message || 'Malipo yamekamilika!'
-        }
-        modalError.value = false
-      }
-    } catch (_) {}
-  }, 5000)
 }
 
 async function copyVoucher() {

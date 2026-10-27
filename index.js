@@ -154,7 +154,7 @@ const investorRoutes = require('./routes/investor');
 const resellerRoutes = require('./routes/reseller');
 const clickpesaRoutes = require('./routes/clickpesa');
 const hqRoutes = require('./routes/hq');
-const paymentController = require('./controllers/paymentController');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 // Vue SPA build — served for ALL portals
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
@@ -200,6 +200,7 @@ app.use('/api/admin/business', businessRoutes);
 app.use('/api/investor', investorRoutes);
 app.use('/api/reseller', resellerRoutes);
 app.use('/api/clickpesa', clickpesaRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Public packages listing (used by reseller portal)
 app.get('/api/packages', async (req, res) => {
@@ -212,10 +213,7 @@ app.get('/api/packages', async (req, res) => {
   }
 });
 
-// PesaPal webhooks (must be raw/query based - handled in controller)
-app.get('/api/payments/callback', paymentController.paymentCallback);
-app.get('/api/payments/ipn', paymentController.paymentIPN);
-app.post('/api/payments/ipn', paymentController.paymentIPN);
+// PesaPal routes are mounted at /api/payments (callback + IPN are public)
 
 // ==================== Website / portal auth API (JSON) ====================
 
