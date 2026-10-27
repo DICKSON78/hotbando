@@ -1,135 +1,118 @@
 const axios = require('axios');
-const crypto = require('crypto');
-const logger = require('./logger');
 
-const SANDBOX = 'https://cybqa.pesapal.com/v3';
+// PesaPal API 3.0 base URLs
+// https://developer.pesapal.com/how-to-integrate/e-commerce/api-30-json/api-reference
+const SANDBOX = 'https://cybqa.pesapal.com/pesapalv3';
 const LIVE = 'https://pay.pesapal.com/v3';
 
 let _baseURL, _consumerKey, _consumerSecret, _token, _tokenExpiry;
-let _ipnSecretKey = process.env.PESAPAL_IPN_SECRET || '';
 
-function init({ consumer_key, consumer_secret, env, callback_url, ipn_url, ipn_secret }) {
+function init({ consumer_key, consumer_secret, env, callback_url, ipn_url }) {
+  const baseURL = env === 'live' ? LIVE : SANDBOX;
+  if (_baseURL !== baseURL || _consumerKey !== consumer_key || _consumerSecret !== consumer_secret) {
+    _token = null;
+    _tokenExpiry = 0;
+  }
   _consumerKey = consumer_key;
   _consumerSecret = consumer_secret;
-  _baseURL = env === 'live' ? LIVE : SANDBOX;
+  _baseURL = baseURL;
   if (callback_url) process.env.PESAPAL_CALLBACK_URL = callback_url;
   if (ipn_url) process.env.PESAPAL_IPN_URL = ipn_url;
-  if (ipn_secret) _ipnSecretKey = ipn_secret;
 }
 
-/**
- * Verify PesaPal IPN notification signature
- * PesaPal v3 uses HMAC-SHA512 with the IPN secret key
- */
-function verifyIPNSignature(orderTrackingId, merchantReference, status, signature) {
-  if (!_ipnSecretKey) {
-    logger.warn('PesaPal IPN secret key not configured - skipping verification');
-    return true; // Allow if not configured (dev mode)
-  }
-
-  try {
-    const payload = `${orderTrackingId}${merchantReference || ''}${status || ''}`;
-    const expectedSignature = crypto
-      .createHmac('sha512', _ipnSecretKey)
-      .update(payload)
-      .digest('hex');
-    
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signature || '', 'hex'),
-      Buffer.from(expectedSignature, 'hex')
-    );
-    
-    if (!isValid) {
-      logger.warn('PesaPal IPN signature mismatch', { orderTrackingId });
-    }
-    return isValid;
-  } catch (error) {
-    logger.error('IPN signature verification error', { error: error.message });
-    return false;
-  }
-}
-
-/**
- * Verify PesaPal callback signature (for redirect callbacks)
- */
-function verifyCallbackSignature(orderTrackingId, status, signature) {
-  if (!_ipnSecretKey) {
-    return true;
-  }
-
-  try {
-    const payload = `${orderTrackingId}${status || ''}`;
-    const expectedSignature = crypto
-      .createHmac('sha512', _ipnSecretKey)
-      .update(payload)
-      .digest('hex');
-    
-    return crypto.timingSafeEqual(
-      Buffer.from(signature || '', 'hex'),
-      Buffer.from(expectedSignature, 'hex')
-    );
-  } catch (error) {
-    logger.error('Callback signature verification error', { error: error.message });
-    return false;
-  }
+function jsonHeaders(token) {
+  return {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
 async function _getToken() {
   if (_token && _tokenExpiry && Date.now() < _tokenExpiry) return _token;
 
-  const { data } = await axios.post(`${_baseURL}/api/Auth/RequestToken`, {
-    consumer_key: _consumerKey,
-    consumer_secret: _consumerSecret,
-  });
+  const { data } = await axios.post(
+    `${_baseURL}/api/Auth/RequestToken`,
+    {
+      consumer_key: _consumerKey,
+      consumer_secret: _consumerSecret,
+    },
+    { headers: jsonHeaders(), timeout: 20000 }
+  );
+
+  if (!data?.token) {
+    const message = data?.error?.message || data?.message || 'PesaPal did not return an access token';
+    throw new Error(message);
+  }
+
   _token = data.token;
-  _tokenExpiry = Date.now() + 3500 * 1000;
+  // PesaPal API 3.0 tokens expire after 5 minutes. Prefer the server-provided
+  // expiry and keep a small safety margin; fall back to four minutes.
+  const serverExpiry = data.expiryDate ? Date.parse(data.expiryDate) : NaN;
+  _tokenExpiry = Number.isFinite(serverExpiry)
+    ? Math.max(Date.now() + 60 * 1000, serverExpiry - 30 * 1000)
+    : Date.now() + 4 * 60 * 1000;
   return _token;
 }
 
 async function registerIPN(url) {
   const token = await _getToken();
-  const { data } = await axios.post(`${_baseURL}/api/URLSetup/RegisterIPN`, {
-    url,
-    ipn_notification_type: 'GET',
-  }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+  const { data } = await axios.post(
+    `${_baseURL}/api/URLSetup/RegisterIPN`,
+    { url, ipn_notification_type: 'GET' },
+    { headers: jsonHeaders(token), timeout: 20000 }
+  );
+  return data;
+}
+
+async function getIPNList() {
+  const token = await _getToken();
+  const { data } = await axios.get(
+    `${_baseURL}/api/URLSetup/GetIpnList`,
+    { headers: jsonHeaders(token), timeout: 20000 }
+  );
   return data;
 }
 
 async function submitOrder({ id, amount, description, callback_url, notification_id, email, phone, firstName, lastName }) {
   const token = await _getToken();
-  const { data } = await axios.post(`${_baseURL}/api/Transactions/SubmitOrderRequest`, {
-    id,
-    currency: 'TZS',
-    amount,
-    description,
-    callback_url: callback_url || process.env.PESAPAL_CALLBACK_URL || '',
-    notification_id,
-    billing_address: {
-      email_address: email || '',
-      phone_number: phone || '',
-      country_code: 'TZ',
-      first_name: firstName || '',
-      last_name: lastName || '',
-      line_1: 'HotBando',
+  const { data } = await axios.post(
+    `${_baseURL}/api/Transactions/SubmitOrderRequest`,
+    {
+      id,
+      currency: 'TZS',
+      amount: Number(amount),
+      description: String(description || '').slice(0, 100),
+      redirect_mode: 'TOP_WINDOW',
+      callback_url: callback_url || process.env.PESAPAL_CALLBACK_URL || '',
+      notification_id,
+      billing_address: {
+        email_address: email || '',
+        phone_number: phone || '',
+        country_code: 'TZ',
+        first_name: firstName || '',
+        last_name: lastName || '',
+        line_1: 'HotBando',
+      },
     },
-  }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+    { headers: jsonHeaders(token), timeout: 20000 }
+  );
   return data;
 }
 
 async function getPaymentStatus(orderTrackingId) {
   const token = await _getToken();
-  const { data } = await axios.get(`${_baseURL}/api/Transactions/GetTransactionStatus`, {
-    params: { orderTrackingId },
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const { data } = await axios.get(
+    `${_baseURL}/api/Transactions/GetTransactionStatus`,
+    { params: { orderTrackingId }, headers: jsonHeaders(token), timeout: 20000 }
+  );
   return data;
 }
 
-module.exports = { 
-  init, 
-  registerIPN, 
-  submitOrder, 
+module.exports = {
+  init,
+  registerIPN,
+  getIPNList,
+  submitOrder,
   getPaymentStatus,
-  verifyIPNSignature,
-  verifyCallbackSignature
 };

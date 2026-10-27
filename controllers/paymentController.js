@@ -102,7 +102,6 @@ function configurePesapal(config) {
     env: config.pesapal_env || 'sandbox',
     callback_url: config.pesapal_callback_url,
     ipn_url: config.pesapal_ipn_url,
-    ipn_secret: config.pesapal_ipn_secret || undefined,
   });
 }
 
@@ -450,27 +449,29 @@ async function paymentCallback(req, res) {
 async function paymentIPN(req, res) {
   const payload = { ...(req.query || {}), ...(req.body || {}) };
   const orderTrackingId = payload.OrderTrackingId || payload.orderTrackingId;
-  if (!orderTrackingId) return res.status(400).send('Missing tracking ID');
+  const merchantReference = payload.OrderMerchantReference || payload.MerchantReference || null;
+  const ipnResponse = (ipnStatus) => ({
+    orderNotificationType: 'IPNCHANGE',
+    orderTrackingId: orderTrackingId || null,
+    orderMerchantReference: merchantReference,
+    status: ipnStatus,
+  });
+
+  if (!orderTrackingId) return res.status(400).json(ipnResponse(500));
 
   try {
     await initPesapalFromSettings();
-    const merchantReference = payload.OrderMerchantReference || payload.MerchantReference;
-    const notificationStatus = payload.OrderNotificationType || payload.Status;
-    const signature = payload.Signature || payload.signature;
-
-    if (!pesapal.verifyIPNSignature(orderTrackingId, merchantReference, notificationStatus, signature)) {
-      logger.warn('Invalid IPN signature:', { orderTrackingId, ip: req.ip });
-      return res.status(403).send('Invalid signature');
-    }
 
     const [existing] = await db.execute(
       'SELECT id, status FROM payment_requests WHERE merchant_request_id = ?',
       [orderTrackingId]
     );
     if (existing.length && existing[0].status === 'completed') {
-      return res.status(200).send('OK');
+      return res.status(200).json(ipnResponse(200));
     }
 
+    // Per PesaPal API 3.0, IPN/callback payloads do not contain the final
+    // status. Always fetch it directly from PesaPal using OrderTrackingId.
     const status = await pesapal.getPaymentStatus(orderTrackingId);
     if (Number(status.status_code) === 1) {
       const [requests] = await db.execute(
@@ -486,10 +487,11 @@ async function paymentIPN(req, res) {
         [String(status.payment_status_description || 'PesaPal reported failure').slice(0, 500), orderTrackingId]
       );
     }
-    res.status(200).send('OK');
+
+    return res.status(200).json(ipnResponse(200));
   } catch (e) {
     logger.error('IPN error:', e.message);
-    res.status(500).send('Error');
+    return res.status(500).json(ipnResponse(500));
   }
 }
 
