@@ -130,6 +130,18 @@
         </div>
       </div>
     </div>
+
+    <PesapalCheckoutModal
+      :show="showCheckout"
+      title="Complete package payment"
+      :checkout-url="checkoutUrl"
+      :order-tracking-id="checkoutTracking"
+      :amount="checkoutAmount"
+      success-message="Payment received. Your package is being activated."
+      @close="closeCheckout"
+      @completed="onCheckoutCompleted"
+      @failed="onCheckoutFailed"
+    />
   </div>
 </template>
 
@@ -139,6 +151,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { hotspotGet, hotspotPost } from '../../api/client'
 import { apiPost, apiGet } from '../../api/client'
 import PhoneInput from '../../components/PhoneInput.vue'
+import PesapalCheckoutModal from '../../components/PesapalCheckoutModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,6 +175,10 @@ const returnStatus = ref('')
 const returnMessage = ref('')
 const returnVoucher = ref('')
 const returnCopied = ref(false)
+const showCheckout = ref(false)
+const checkoutUrl = ref('')
+const checkoutTracking = ref('')
+const checkoutAmount = ref(0)
 
 onMounted(async () => {
   try {
@@ -247,6 +264,24 @@ function closeModal() {
   selectedPackage.value = null
 }
 
+function onCheckoutCompleted(payload) {
+  returnStatus.value = 'completed'
+  returnMessage.value = payload?.message || 'Malipo yamekamilika!'
+  returnVoucher.value = payload?.voucher || ''
+}
+
+function onCheckoutFailed(payload) {
+  returnStatus.value = 'failed'
+  returnMessage.value = payload?.message || 'Malipo hayajakamilika. Tafadhali jaribu tena.'
+}
+
+function closeCheckout() {
+  showCheckout.value = false
+  checkoutUrl.value = ''
+  checkoutTracking.value = ''
+  checkoutAmount.value = 0
+}
+
 function toLocalPhone(p) {
   if (!p) return ''
   return p.startsWith('+255') ? '0' + p.slice(4) : p.replace(/\D/g, '')
@@ -272,7 +307,12 @@ async function startPayment() {
       return_path: buyMode.value === 'gift' ? '/hotspot/subscribe' : '/hotspot/dashboard',
     })
     if (r.success && r.redirect_url) {
-      window.location.assign(r.redirect_url)
+      checkoutUrl.value = r.redirect_url
+      checkoutTracking.value = r.order_tracking_id || ''
+      checkoutAmount.value = Number(selectedPackage.value?.price || 0)
+      showModal.value = false
+      showCheckout.value = true
+      processing.value = false
       return
     }
     if (r.success && r.voucher) {

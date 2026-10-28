@@ -32,6 +32,7 @@ const navItems = [
   { path: '/admin/assets', label: 'Assets & Inventory', icon: 'fas fa-boxes' },
 
   { divider: 'FINANCE' },
+  { path: '/admin/payments', label: 'All Payments', icon: 'fas fa-receipt' },
   { path: '/admin/finance', label: 'Finance', icon: 'fas fa-chart-line' },
   { path: '/admin/revenue', label: 'Revenue', icon: 'fas fa-coins' },
   { path: '/admin/wallet', label: 'Wallet', icon: 'fas fa-wallet' },
@@ -67,6 +68,7 @@ const pageTitle = computed(() => {
     'locations': 'Locations',
     'assets': 'Assets & Inventory',
     'finance': 'Financial Management',
+    'payments': 'All Payments & Business Processes',
     'revenue': 'Revenue',
     'wallet': 'Wallet',
     'withdrawals': 'Withdrawals',

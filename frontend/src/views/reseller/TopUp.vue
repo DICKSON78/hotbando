@@ -33,6 +33,18 @@
         </button>
       </div>
     </div>
+
+    <PesapalCheckoutModal
+      :show="showCheckout"
+      title="Top up reseller wallet"
+      :checkout-url="checkoutUrl"
+      :order-tracking-id="checkoutTracking"
+      :amount="checkoutAmount"
+      success-message="Payment received. Your wallet is being topped up."
+      @close="closeCheckout"
+      @completed="onCheckoutCompleted"
+      @failed="onCheckoutFailed"
+    />
   </div>
 </template>
 
@@ -41,6 +53,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { resellerGet } from '../../api/reseller'
 import { apiPost, apiGet } from '../../api/client'
+import PesapalCheckoutModal from '../../components/PesapalCheckoutModal.vue'
 
 const route = useRoute()
 const amount = ref(10000)
@@ -50,6 +63,10 @@ const error = ref('')
 const success = ref('')
 const currentBalance = ref(0)
 const quickAmounts = [5000, 10000, 20000, 50000, 100000, 200000]
+const showCheckout = ref(false)
+const checkoutUrl = ref('')
+const checkoutTracking = ref('')
+const checkoutAmount = ref(0)
 
 onMounted(async () => {
   await loadBalance()
@@ -104,11 +121,32 @@ async function submitTopup() {
       return_path: '/reseller/topup',
     })
     if (r.success && r.redirect_url) {
-      window.location.assign(r.redirect_url)
+      checkoutUrl.value = r.redirect_url
+      checkoutTracking.value = r.order_tracking_id || ''
+      checkoutAmount.value = Number(amount.value || 0)
+      showCheckout.value = true
+      loading.value = false
       return
     }
     error.value = r.error || 'Error'
     loading.value = false
   } catch (e) { error.value = e.response?.data?.error || e.message || 'Network error'; loading.value = false }
+}
+
+async function onCheckoutCompleted(payload) {
+  success.value = payload?.message || 'Malipo yamekamilika! Salio limeongezwa.'
+  error.value = ''
+  await loadBalance()
+}
+
+function onCheckoutFailed(payload) {
+  error.value = payload?.message || 'Malipo hayajakamilika. Tafadhali jaribu tena.'
+}
+
+function closeCheckout() {
+  showCheckout.value = false
+  checkoutUrl.value = ''
+  checkoutTracking.value = ''
+  checkoutAmount.value = 0
 }
 </script>

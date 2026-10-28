@@ -59,6 +59,7 @@ const routes = [
       { path: 'withdrawals', name: 'withdrawals', component: () => import('../views/admin/Withdrawals.vue') },
       { path: 'campaigns', name: 'campaigns', component: () => import('../views/admin/Campaigns.vue') },
       { path: 'revenue', name: 'revenue', component: () => import('../views/admin/Revenue.vue') },
+      { path: 'payments', name: 'payments', component: () => import('../views/admin/Payments.vue') },
       { path: 'wallet', name: 'wallet', component: () => import('../views/admin/Wallet.vue') },
       { path: 'revenue-share', name: 'revenue-share', component: () => import('../views/admin/RevenueShare.vue') },
       { path: 'notifications', name: 'notifications', component: () => import('../views/admin/Notifications.vue') },

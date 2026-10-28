@@ -24,6 +24,18 @@
         <p v-if="depositMsg" class="text-sm mt-2" :class="depositError ? 'text-red-500' : 'text-emerald-500'">{{ depositMsg }}</p>
       </div>
     </div>
+
+    <PesapalCheckoutModal
+      :show="showCheckout"
+      title="Deposit to sponsor wallet"
+      :checkout-url="checkoutUrl"
+      :order-tracking-id="checkoutTracking"
+      :amount="checkoutAmount"
+      success-message="Payment received. Your wallet is being topped up."
+      @close="closeCheckout"
+      @completed="onCheckoutCompleted"
+      @failed="onCheckoutFailed"
+    />
   </div>
 </template>
 
@@ -31,6 +43,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { apiGet, apiPost } from '../../api/client'
+import PesapalCheckoutModal from '../../components/PesapalCheckoutModal.vue'
 
 const route = useRoute()
 const wallet = ref({})
@@ -39,6 +52,10 @@ const phone = ref('')
 const depositing = ref(false)
 const depositMsg = ref('')
 const depositError = ref(false)
+const showCheckout = ref(false)
+const checkoutUrl = ref('')
+const checkoutTracking = ref('')
+const checkoutAmount = ref(0)
 
 function formatMoney(n) { return 'TSh ' + (Number(n || 0).toLocaleString()) }
 
@@ -93,7 +110,11 @@ async function deposit() {
       return_path: '/sponsor/wallet',
     })
     if (r.success && r.redirect_url) {
-      window.location.assign(r.redirect_url)
+      checkoutUrl.value = r.redirect_url
+      checkoutTracking.value = r.order_tracking_id || ''
+      checkoutAmount.value = Number(amount.value || 0)
+      showCheckout.value = true
+      depositing.value = false
       return
     }
     depositMsg.value = r.error || 'Error'
@@ -104,5 +125,24 @@ async function deposit() {
     depositError.value = true
     depositing.value = false
   }
+}
+
+async function onCheckoutCompleted(payload) {
+  depositMsg.value = payload?.message || 'Malipo yamekamilika! Fedha zimeongezwa.'
+  depositError.value = false
+  amount.value = ''
+  try { wallet.value = await apiGet('/wallet/balance') } catch {}
+}
+
+function onCheckoutFailed(payload) {
+  depositMsg.value = payload?.message || 'Malipo hayajakamilika. Tafadhali jaribu tena.'
+  depositError.value = true
+}
+
+function closeCheckout() {
+  showCheckout.value = false
+  checkoutUrl.value = ''
+  checkoutTracking.value = ''
+  checkoutAmount.value = 0
 }
 </script>

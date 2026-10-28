@@ -540,6 +540,421 @@ router.get('/revenue', async (req, res) => {
   }
 });
 
+// ==================== UNIFIED PAYMENTS LEDGER ====================
+// Consolidates every money movement across the platform: gateway checkouts,
+// wallet ledger entries, reseller withdrawals, partner revenue shares and
+// bank invoices. HQ uses this as the single source of truth.
+router.get('/payments', async (req, res) => {
+  try {
+    const db = require('../config/database');
+    const {
+      from, to,
+      source = 'all',
+      status = 'all',
+      role = 'all',
+      q = '',
+      page = 1,
+      limit = 50
+    } = req.query;
+
+    const dateStart = from ? `${from} 00:00:00` : null;
+    const dateEnd = to ? `${to} 23:59:59` : null;
+    const BUSINESS_ROLES = ['admin', 'super_admin', 'sponsor', 'bank_partner', 'franchise_owner', 'reseller'];
+
+    const whereDate = (column, params) => {
+      let sql = '';
+      if (dateStart) { sql += ` AND ${column} >= ?`; params.push(dateStart); }
+      if (dateEnd) { sql += ` AND ${column} <= ?`; params.push(dateEnd); }
+      return sql;
+    };
+
+    const normalizeStatus = (value) => {
+      const v = String(value || '').toLowerCase();
+      if (['completed', 'success', 'settled', 'paid', 'processed'].includes(v)) return 'completed';
+      if (['pending', 'processing', 'approved', 'sent', 'draft', 'unknown'].includes(v)) return 'pending';
+      if (['failed', 'rejected', 'cancelled', 'canceled', 'timeout', 'overdue', 'reversed'].includes(v)) return 'failed';
+      return v || 'pending';
+    };
+
+    const rows = [];
+    const push = (row) => rows.push(row);
+
+    // 1) PesaPal + legacy mobile-money payment requests
+    if (source === 'all' || source === 'pesapal' || source === 'mobile_money') {
+      const params = [];
+      let sql = `SELECT pr.id, pr.user_id, pr.payment_method, pr.amount, pr.phone_number,
+                        pr.reference_number, pr.merchant_request_id, pr.status, pr.status_message,
+                        pr.callback_data, pr.completed_at, pr.created_at,
+                        u.name AS user_name, u.role AS user_role, u.company_name
+                 FROM payment_requests pr
+                 LEFT JOIN users u ON pr.user_id = u.id
+                 WHERE 1=1`;
+      sql += whereDate('pr.created_at', params);
+      sql += ' ORDER BY pr.created_at DESC LIMIT 3000';
+      const [list] = await db.execute(sql, params);
+      for (const pr of list) {
+        const src = pr.payment_method === 'pesapal' ? 'pesapal' : 'mobile_money';
+        if (source !== 'all' && source !== src) continue;
+        let data = {};
+        try {
+          data = typeof pr.callback_data === 'string' ? JSON.parse(pr.callback_data) : (pr.callback_data || {});
+        } catch (_) { data = {}; }
+        const purpose = data.type === 'wallet_topup'
+          ? 'Wallet top-up'
+          : data.gift
+            ? 'Gift voucher'
+            : data.package_id
+              ? 'Package purchase'
+              : 'Payment';
+        push({
+          id: `${src}-${pr.id}`,
+          source: src,
+          direction: 'inflow',
+          reference: pr.reference_number || pr.merchant_request_id || `PR-${pr.id}`,
+          user_id: pr.user_id,
+          user_name: pr.user_name || 'Customer',
+          user_role: pr.user_role || 'customer',
+          business_name: pr.company_name || '',
+          phone: pr.phone_number,
+          amount: Number(pr.amount || 0),
+          currency: 'TZS',
+          status: normalizeStatus(pr.status),
+          raw_status: String(pr.status || '').toUpperCase(),
+          purpose,
+          payment_method: pr.payment_method,
+          created_at: pr.created_at,
+          completed_at: pr.completed_at
+        });
+      }
+    }
+
+    // 2) ClickPesa transactions
+    if (source === 'all' || source === 'clickpesa') {
+      const params = [];
+      let sql = `SELECT ct.id, ct.user_id, ct.order_reference, ct.amount, ct.phone, ct.purpose,
+                        ct.status, ct.channel, ct.created_at, ct.updated_at,
+                        u.name AS user_name, u.role AS user_role, u.company_name
+                 FROM clickpesa_transactions ct
+                 LEFT JOIN users u ON ct.user_id = u.id
+                 WHERE 1=1`;
+      sql += whereDate('ct.created_at', params);
+      sql += ' ORDER BY ct.created_at DESC LIMIT 3000';
+      const [list] = await db.execute(sql, params);
+      for (const ct of list) {
+        const purposeMap = {
+          package_purchase: 'Package purchase',
+          gift_purchase: 'Gift voucher',
+          wallet_topup: 'Wallet top-up',
+          reseller_topup: 'Reseller wallet top-up',
+          sponsor_deposit: 'Sponsor deposit',
+          payment: 'Payment'
+        };
+        push({
+          id: `clickpesa-${ct.id}`,
+          source: 'clickpesa',
+          direction: 'inflow',
+          reference: ct.order_reference || `CP-${ct.id}`,
+          user_id: ct.user_id,
+          user_name: ct.user_name || 'Customer',
+          user_role: ct.user_role || 'customer',
+          business_name: ct.company_name || '',
+          phone: ct.phone,
+          amount: Number(ct.amount || 0),
+          currency: 'TZS',
+          status: normalizeStatus(ct.status),
+          raw_status: String(ct.status || '').toUpperCase(),
+          purpose: purposeMap[ct.purpose] || ct.purpose || 'Payment',
+          payment_method: 'clickpesa',
+          created_at: ct.created_at,
+          completed_at: ['SUCCESS', 'SETTLED'].includes(String(ct.status || '').toUpperCase()) ? ct.updated_at : null
+        });
+      }
+    }
+
+    // 3) Internal wallet ledger. Skip gateway duplicates and WDR-% rows
+    //    because those are represented by their own source records.
+    if (source === 'all' || source === 'wallet') {
+      const params = [];
+      let sql = `SELECT t.id, t.user_id, t.transaction_type, t.amount, t.currency,
+                        t.payment_method, t.payment_reference, t.reference_type, t.reference_id,
+                        t.description, t.status, t.processed_at, t.created_at,
+                        u.name AS user_name, u.role AS user_role, u.company_name
+                 FROM transactions t
+                 LEFT JOIN users u ON t.user_id = u.id
+                 WHERE NOT (t.transaction_type = 'withdrawal' AND t.payment_reference LIKE 'WDR-%')
+                   AND NOT (t.transaction_type = 'revenue_share' AND t.reference_type = 'payout')
+                   AND NOT (t.transaction_type = 'deposit' AND t.payment_reference IS NOT NULL AND (
+                     EXISTS (SELECT 1 FROM payment_requests pr WHERE pr.reference_number = t.payment_reference)
+                     OR EXISTS (SELECT 1 FROM clickpesa_transactions ct WHERE ct.order_reference = t.payment_reference)
+                   ))`;
+      sql += whereDate('t.created_at', params);
+      sql += ' ORDER BY t.created_at DESC LIMIT 3000';
+      const [list] = await db.execute(sql, params);
+      for (const t of list) {
+        const type = t.transaction_type;
+        const direction = ['withdrawal', 'refund', 'commission', 'revenue_share'].includes(type)
+          ? 'outflow'
+          : 'inflow';
+        const purposeMap = {
+          deposit: 'Wallet deposit',
+          withdrawal: 'Wallet withdrawal',
+          campaign_charge: 'Campaign charge',
+          refund: 'Wallet refund',
+          commission: 'Commission',
+          revenue_share: 'Revenue share'
+        };
+        push({
+          id: `wallet-${t.id}`,
+          source: 'wallet',
+          direction,
+          reference: t.payment_reference || `TXN-${t.id}`,
+          user_id: t.user_id,
+          user_name: t.user_name || 'User',
+          user_role: t.user_role || 'customer',
+          business_name: t.company_name || '',
+          phone: null,
+          amount: Number(t.amount || 0),
+          currency: t.currency || 'TZS',
+          status: normalizeStatus(t.status),
+          raw_status: String(t.status || '').toUpperCase(),
+          purpose: purposeMap[type] || type,
+          payment_method: t.payment_method || 'system',
+          created_at: t.created_at,
+          completed_at: t.processed_at
+        });
+      }
+    }
+
+    // 4) Reseller withdrawals (payouts leaving the platform)
+    if (source === 'all' || source === 'withdrawal') {
+      const params = [];
+      let sql = `SELECT rw.id, rw.user_id, rw.reseller_id, rw.amount, rw.payment_method,
+                        rw.payment_phone, rw.status, rw.processed_at, rw.notes, rw.created_at,
+                        u.name AS user_name, u.role AS user_role, u.company_name
+                 FROM reseller_withdrawals rw
+                 LEFT JOIN users u ON rw.user_id = u.id
+                 WHERE 1=1`;
+      sql += whereDate('rw.created_at', params);
+      sql += ' ORDER BY rw.created_at DESC LIMIT 3000';
+      const [list] = await db.execute(sql, params);
+      for (const rw of list) {
+        push({
+          id: `withdrawal-${rw.id}`,
+          source: 'withdrawal',
+          direction: 'outflow',
+          reference: `WDR-${rw.id}`,
+          user_id: rw.user_id,
+          user_name: rw.user_name || 'Reseller',
+          user_role: rw.user_role || 'reseller',
+          business_name: rw.company_name || '',
+          phone: rw.payment_phone,
+          amount: Number(rw.amount || 0),
+          currency: 'TZS',
+          status: normalizeStatus(rw.status),
+          raw_status: String(rw.status || '').toUpperCase(),
+          purpose: 'Reseller withdrawal',
+          payment_method: rw.payment_method || 'mobile_money',
+          created_at: rw.created_at,
+          completed_at: rw.processed_at
+        });
+      }
+    }
+
+    // 5) Partner revenue shares (partner payouts)
+    if (source === 'all' || source === 'revenue_share') {
+      const params = [];
+      let sql = `SELECT prs.id, prs.partner_id AS user_id, prs.partner_type, prs.period_start,
+                        prs.period_end, prs.total_revenue, prs.share_amount, prs.share_percentage,
+                        prs.status, prs.paid_at, prs.payment_reference, prs.created_at,
+                        u.name AS user_name, u.role AS user_role, u.company_name
+                 FROM partner_revenue_shares prs
+                 LEFT JOIN users u ON prs.partner_id = u.id
+                 WHERE 1=1`;
+      sql += whereDate('prs.created_at', params);
+      sql += ' ORDER BY prs.created_at DESC LIMIT 3000';
+      const [list] = await db.execute(sql, params);
+      for (const prs of list) {
+        push({
+          id: `revenue-share-${prs.id}`,
+          source: 'revenue_share',
+          direction: 'outflow',
+          reference: prs.payment_reference || `RS-${prs.id}`,
+          user_id: prs.user_id,
+          user_name: prs.user_name || 'Partner',
+          user_role: prs.user_role || prs.partner_type,
+          business_name: prs.company_name || '',
+          phone: null,
+          amount: Number(prs.share_amount || 0),
+          currency: 'TZS',
+          status: normalizeStatus(prs.status),
+          raw_status: String(prs.status || '').toUpperCase(),
+          purpose: `Partner revenue share (${String(prs.partner_type || '').replace(/_/g, ' ')})`,
+          payment_method: 'system',
+          created_at: prs.created_at,
+          completed_at: prs.paid_at
+        });
+      }
+    }
+
+    // 6) Bank partner invoices (HQ receivables)
+    if (source === 'all' || source === 'invoice') {
+      const params = [];
+      let sql = `SELECT i.id, i.user_id, i.invoice_number, i.total_amount, i.currency,
+                        i.status, i.due_date, i.paid_at, i.payment_reference, i.created_at,
+                        u.name AS user_name, u.role AS user_role, u.company_name
+                 FROM invoices i
+                 LEFT JOIN users u ON i.user_id = u.id
+                 WHERE 1=1`;
+      sql += whereDate('i.created_at', params);
+      sql += ' ORDER BY i.created_at DESC LIMIT 3000';
+      const [list] = await db.execute(sql, params);
+      for (const inv of list) {
+        push({
+          id: `invoice-${inv.id}`,
+          source: 'invoice',
+          direction: 'inflow',
+          reference: inv.invoice_number || `INV-${inv.id}`,
+          user_id: inv.user_id,
+          user_name: inv.user_name || 'Bank partner',
+          user_role: inv.user_role || 'bank_partner',
+          business_name: inv.company_name || '',
+          phone: null,
+          amount: Number(inv.total_amount || 0),
+          currency: inv.currency || 'TZS',
+          status: normalizeStatus(inv.status),
+          raw_status: String(inv.status || '').toUpperCase(),
+          purpose: 'Bank partner invoice',
+          payment_method: 'invoice',
+          created_at: inv.created_at,
+          completed_at: inv.paid_at
+        });
+      }
+    }
+
+    // Apply ledger filters
+    let filtered = rows.filter((row) => {
+      if (status !== 'all' && row.status !== status) return false;
+      if (role !== 'all' && row.user_role !== role) return false;
+      return true;
+    });
+
+    const needle = String(q || '').trim().toLowerCase();
+    if (needle) {
+      filtered = filtered.filter((row) => [
+        row.user_name, row.business_name, row.phone, row.reference, row.purpose, row.raw_status
+      ].some((value) => String(value || '').toLowerCase().includes(needle)));
+    }
+
+    filtered.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    const isSettled = (row) => row.status === 'completed';
+    const sum = (list) => list.reduce((total, row) => total + Number(row.amount || 0), 0);
+
+    const inflow = filtered.filter((row) => row.direction === 'inflow');
+    const outflow = filtered.filter((row) => row.direction === 'outflow');
+    const pending = filtered.filter((row) => row.status === 'pending');
+    const failed = filtered.filter((row) => row.status === 'failed');
+
+    const settledInflow = sum(inflow.filter(isSettled));
+    const settledOutflow = sum(outflow.filter(isSettled));
+
+    const groupBy = (list, keyFn) => {
+      const map = new Map();
+      for (const row of list) {
+        const key = keyFn(row);
+        if (!map.has(key)) {
+          map.set(key, { key, count: 0, inflow: 0, outflow: 0, pending: 0, failed: 0, total: 0 });
+        }
+        const agg = map.get(key);
+        agg.count += 1;
+        agg.total += Number(row.amount || 0);
+        if (row.status === 'completed') {
+          if (row.direction === 'inflow') agg.inflow += Number(row.amount || 0);
+          else agg.outflow += Number(row.amount || 0);
+        }
+        if (row.status === 'pending') agg.pending += 1;
+        if (row.status === 'failed') agg.failed += 1;
+      }
+      return Array.from(map.values()).sort((a, b) => (b.inflow + b.outflow) - (a.inflow + a.outflow));
+    };
+
+    // Business accounts: every partner/business user plus their ledger totals
+    const [accountRows] = await db.execute(
+      `SELECT u.id, u.name, u.phone_number, u.email, u.role, u.company_name,
+              u.is_active, u.created_at,
+              w.balance AS wallet_balance, w.total_deposited, w.total_spent, w.total_withdrawn,
+              r.balance AS reseller_balance, r.total_earned, r.status AS reseller_status, r.tier
+       FROM users u
+       LEFT JOIN wallets w ON w.user_id = u.id
+       LEFT JOIN resellers r ON r.user_id = u.id
+       WHERE u.role IN (${BUSINESS_ROLES.map(() => '?').join(',')})
+       ORDER BY u.created_at DESC`,
+      BUSINESS_ROLES
+    );
+
+    const perUser = new Map();
+    for (const row of filtered) {
+      if (!row.user_id) continue;
+      if (!perUser.has(row.user_id)) {
+        perUser.set(row.user_id, { inflow: 0, outflow: 0, pending: 0, count: 0, last_activity: null });
+      }
+      const agg = perUser.get(row.user_id);
+      agg.count += 1;
+      if (row.status === 'completed') {
+        if (row.direction === 'inflow') agg.inflow += Number(row.amount || 0);
+        else agg.outflow += Number(row.amount || 0);
+      }
+      if (row.status === 'pending') agg.pending += 1;
+      if (!agg.last_activity || new Date(row.created_at) > new Date(agg.last_activity)) {
+        agg.last_activity = row.created_at;
+      }
+    }
+
+    const accounts = accountRows.map((account) => {
+      const agg = perUser.get(account.id) || { inflow: 0, outflow: 0, pending: 0, count: 0, last_activity: null };
+      return {
+        ...account,
+        wallet_balance: Number(account.wallet_balance || 0),
+        reseller_balance: account.reseller_balance === null ? null : Number(account.reseller_balance || 0),
+        ledger: agg
+      };
+    });
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const total = filtered.length;
+    const paged = filtered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+
+    res.json({
+      success: true,
+      payments: paged,
+      pagination: {
+        page: pageNum,
+        limit: pageSize,
+        total,
+        pages: Math.max(1, Math.ceil(total / pageSize))
+      },
+      summary: {
+        inflow: settledInflow,
+        outflow: settledOutflow,
+        net: settledInflow - settledOutflow,
+        pending_amount: sum(pending),
+        pending_count: pending.length,
+        failed_count: failed.length,
+        total_count: total
+      },
+      bySource: groupBy(filtered, (row) => row.source),
+      byRole: groupBy(filtered, (row) => row.user_role || 'customer'),
+      byStatus: groupBy(filtered, (row) => row.status),
+      accounts,
+      filters: { from: from || '', to: to || '', source, status, role, q }
+    });
+  } catch (error) {
+    console.error('Unified payments API error:', error.message);
+    res.status(500).json({ error: 'Failed to load unified payments ledger' });
+  }
+});
+
 router.get('/clickpesa-balance', async (req, res) => {
   try {
     const clickpesa = require('../utils/clickpesa');
