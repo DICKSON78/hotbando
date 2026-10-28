@@ -1,78 +1,38 @@
-const CACHE = 'hotbando-v8';
+// This worker provides notifications only. The captive portal must always
+// load the current network version so it cannot get stuck on cached app code.
+const CACHE = 'hotbando-v9';
 
-self.addEventListener('install', (e) => {
-    self.skipWaiting();
-    e.waitUntil(
-        caches.open(CACHE).then((cache) => cache.addAll(['/hotspot/', '/logo.png'])).catch(() => {})
-    );
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
 });
 
-self.addEventListener('activate', (e) => {
-    e.waitUntil(
-        caches.keys().then((keys) =>
-            Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-        )
-    );
-    self.clients.claim();
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('hotbando-')).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
 });
 
-self.addEventListener('fetch', (e) => {
-    const url = new URL(e.request.url);
-    if (url.origin !== self.location.origin) return;
+self.addEventListener('push', (event) => {
+  let data = { title: 'HotBando', body: 'Angalia data yako!' };
+  try { data = { ...data, ...(event.data?.json() || {}) }; } catch (_) { /* use the default notification */ }
+  event.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body,
+    icon: '/logo.png',
+    badge: '/logo.png',
+    vibrate: [200, 100, 200],
+    data: { url: data.url || '/hotspot/' },
+  }));
+});
 
-    // App shell (navigations) — network-first so new releases show immediately.
-    if (url.pathname.startsWith('/hotspot/') || url.pathname.startsWith('/reseller/')) {
-        e.respondWith(
-            fetch(e.request)
-                .then((res) => {
-                    if (res.ok) {
-                        const copy = res.clone();
-                        caches.open(CACHE).then((cache) => cache.put(e.request, copy));
-                    }
-                    return res;
-                })
-                .catch(() => caches.match(e.request))
-        );
-        return;
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/hotspot/';
+  event.waitUntil(self.clients.matchAll({ type: 'window' }).then((clients) => {
+    for (const client of clients) {
+      if (client.url.includes(self.location.host) && 'focus' in client) return client.focus();
     }
-
-    // Hashed build assets are immutable — cache-first with background refresh.
-    if (url.pathname.startsWith('/assets/')) {
-        e.respondWith(
-            caches.match(e.request).then((cached) =>
-                cached ||
-                fetch(e.request).then((res) => {
-                    if (res.ok) {
-                        const copy = res.clone();
-                        caches.open(CACHE).then((cache) => cache.put(e.request, copy));
-                    }
-                    return res;
-                })
-            )
-        );
-    }
-});
-
-self.addEventListener('push', (e) => {
-    const data = e.data?.json() || { title: 'HotBando', body: 'Angalia data yako!' };
-    self.registration.showNotification(data.title, {
-        body: data.body,
-        icon: '/logo.png',
-        badge: '/logo.png',
-        vibrate: [200, 100, 200],
-        data: { url: data.url || '/hotspot/' },
-    });
-});
-
-self.addEventListener('notificationclick', (e) => {
-    e.notification.close();
-    const url = e.notification.data?.url || '/hotspot/';
-    e.waitUntil(clients.matchAll({ type: 'window' }).then((clientList) => {
-        for (const client of clientList) {
-            if (client.url.includes(self.location.host) && 'focus' in client) {
-                return client.focus();
-            }
-        }
-        if (clients.openWindow) return clients.openWindow(url);
-    }));
+    return self.clients.openWindow ? self.clients.openWindow(url) : undefined;
+  }));
 });
