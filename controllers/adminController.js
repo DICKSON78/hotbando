@@ -1344,28 +1344,39 @@ async getAdViewsForAnalytics(req, res) {
 
   async getAllRoutersStatus(req, res) {
     try {
-      const [routers] = await db.execute('SELECT router_id, router_name FROM mikrotiks');
+      const [routers] = await db.execute(`
+        SELECT m.router_id, m.router_name, m.setup_status, m.wireguard_configured,
+               (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id
+                 AND u.usage_until > NOW() AND u.role = 'customer') AS active_users
+        FROM mikrotiks m
+      `);
+      const wireguardService = require('../utils/wireguard');
+      const wgResult = await wireguardService.getWireGuardPeers();
+      const wgPeers = new Map((wgResult.peers || []).map(peer => [String(peer.routerId), peer]));
       const statusPromises = routers.map(async (router) => {
         try {
           const health = await mikrotikService.getRouterHealth(router.router_id);
+          const tunnelOnline = wgPeers.get(String(router.router_id))?.status === 'online';
+          const isOnline = health.status === 'online' || tunnelOnline;
           return {
             routerId: router.router_id,
             routerName: router.router_name,
-            isOnline: health.status === 'online',
-            activeUsers: health.connectedUsers || 0,
+            isOnline,
+            activeUsers: health.status === 'online' ? (health.connectedUsers || 0) : (isOnline ? Number(router.active_users) || 0 : 0),
             cpu: health.cpu || 0,
             memory: health.memory || 0,
-            uptime: health.uptime || 'N/A'
+            uptime: health.uptime || (tunnelOnline ? 'WireGuard connected' : 'N/A')
           };
         } catch (e) {
+          const tunnelOnline = wgPeers.get(String(router.router_id))?.status === 'online';
           return {
             routerId: router.router_id,
             routerName: router.router_name,
-            isOnline: false,
-            activeUsers: 0,
+            isOnline: tunnelOnline,
+            activeUsers: tunnelOnline ? Number(router.active_users) || 0 : 0,
             cpu: 0,
             memory: 0,
-            uptime: 'N/A'
+            uptime: tunnelOnline ? 'WireGuard connected' : 'N/A'
           };
         }
       });

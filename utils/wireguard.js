@@ -324,26 +324,36 @@ ${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}
             } catch (e) { /* use database status if host status is unavailable */ }
 
             const [peers] = await db.execute(`
-                SELECT router_id, router_name, wireguard_ip, wireguard_public_key, status, last_seen
+                SELECT router_id, router_name, wireguard_ip, wireguard_public_key, status, last_seen,
+                       wireguard_configured, setup_status
                 FROM mikrotiks
                 WHERE wireguard_configured = 1 OR wireguard_ip IS NOT NULL
                 ORDER BY wireguard_ip
             `);
+            const configuredPeers = peers.filter(p => Number(p.wireguard_configured) === 1 && p.setup_status === 'configured');
+            const singleActiveConfiguredRouter = runtimeStatus?.running && Number(runtimeStatus.activePeers) === 1 && configuredPeers.length === 1
+                ? configuredPeers[0].router_id
+                : null;
             return {
                 success: true,
                 peers: peers.map(p => {
                     const handshake = Number(runtimeStatus?.peerHandshakes?.[p.wireguard_public_key]) || 0;
                     const handshakeIsFresh = handshake > 0 && (Date.now() / 1000 - handshake) <= 180;
                     const hasHandshakeData = !!runtimeStatus?.peerHandshakes;
+                    const activeBySinglePeerCount = p.router_id === singleActiveConfiguredRouter;
+                    const peerIsOnline = hasHandshakeData
+                        ? runtimeStatus.running && handshakeIsFresh
+                        : activeBySinglePeerCount;
+                    const observedAt = Number(runtimeStatus?.updatedAt) || 0;
                     return {
                         routerId: p.router_id,
                         name: p.router_name,
                         wgIp: p.wireguard_ip,
                         publicKey: p.wireguard_public_key,
-                        status: hasHandshakeData
-                            ? (runtimeStatus.running && handshakeIsFresh ? 'online' : 'offline')
-                            : p.status,
-                        lastSeen: handshake > 0 ? new Date(handshake * 1000).toISOString() : p.last_seen
+                        status: peerIsOnline ? 'online' : (hasHandshakeData ? 'offline' : p.status),
+                        lastSeen: handshake > 0
+                            ? new Date(handshake * 1000).toISOString()
+                            : (activeBySinglePeerCount && observedAt ? new Date(observedAt * 1000).toISOString() : p.last_seen)
                     };
                 })
             };
