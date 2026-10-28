@@ -60,11 +60,35 @@ function logout() {
   auth.logout().then(() => window.location.href = '/')
 }
 
+let deferredPrompt = null
+
 onMounted(async () => {
   // Swap manifest for PWA installability of reseller app
   const link = document.querySelector('link[rel="manifest"]')
   if (link) link.href = '/reseller-manifest.json'
   document.title = 'HotBando Reseller'
+
+  // Auto-prompt PWA install when available
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault()
+    deferredPrompt = e
+    // Auto prompt after a short delay
+    setTimeout(() => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt()
+        deferredPrompt.userChoice.then((choice) => {
+          if (choice.outcome === 'accepted') {
+            console.log('Reseller PWA installed')
+          }
+          deferredPrompt = null
+        }).catch(() => { deferredPrompt = null })
+      }
+    }, 1500)
+  })
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null
+  })
 
   if (!(await auth.checkSession())) { window.location.href = '/login'; return }
   fetchNotifications()

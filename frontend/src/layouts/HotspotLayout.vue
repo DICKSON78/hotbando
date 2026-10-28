@@ -1,16 +1,16 @@
 <template>
-  <div v-if="!store.initialized" class="min-h-screen bg-[#fafafa] flex items-center justify-center">
+  <div v-if="!store.initialized" class="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
     <div class="text-center">
       <img src="/logo.png" class="h-14 mx-auto mb-4" alt="HotBando">
       <div class="w-8 h-8 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin mx-auto"></div>
     </div>
   </div>
 
-  <div v-else-if="isPublic" class="min-h-screen bg-[#fafafa]">
+  <div v-else-if="isPublic" class="min-h-screen bg-[#0a0a0f]">
     <router-view />
   </div>
 
-  <div v-else class="min-h-screen bg-[#fafafa]">
+  <div v-else class="min-h-screen bg-[#0a0a0f]">
     <div class="ig-app">
       <main class="ig-main">
         <router-view />
