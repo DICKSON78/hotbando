@@ -182,65 +182,6 @@ router.get('/payments', async (req, res) => {
 
 router.get('/clickpesa-balance', clickpesaController.getBalance);
 
-router.get('/revenue', async (req, res) => {
-  try {
-    const filters = [];
-    const values = [];
-    if (req.query.from) { filters.push('c.created_at >= ?'); values.push(req.query.from); }
-    if (req.query.to) { filters.push('c.created_at < DATE_ADD(?, INTERVAL 1 DAY)'); values.push(req.query.to); }
-    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-    const [transactions] = await db.execute(`
-      SELECT c.id, c.order_reference, c.user_id, c.amount, c.phone, c.purpose, c.status, c.channel, c.created_at,
-             u.name AS user_name
-      FROM clickpesa_transactions c LEFT JOIN users u ON u.id = c.user_id
-      ${where} ORDER BY c.created_at DESC LIMIT 500
-    `, values);
-    const [summaryRows] = await db.execute(`
-      SELECT COALESCE(SUM(CASE WHEN UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED') THEN amount ELSE 0 END), 0) AS revenue,
-             COUNT(*) AS orders
-      FROM clickpesa_transactions c ${where}
-    `, values);
-    const [todayRows] = await db.execute(`
-      SELECT COALESCE(SUM(amount), 0) AS revenue FROM clickpesa_transactions
-      WHERE DATE(created_at) = CURDATE() AND UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED')
-    `);
-    const [voucherRows] = await db.execute(`
-      SELECT COUNT(*) AS total FROM payments p
-      WHERE p.status = 'completed' AND p.package_id IS NOT NULL
-        ${req.query.from ? 'AND p.created_at >= ?' : ''}
-        ${req.query.to ? 'AND p.created_at < DATE_ADD(?, INTERVAL 1 DAY)' : ''}
-    `, [...(req.query.from ? [req.query.from] : []), ...(req.query.to ? [req.query.to] : [])]);
-    const [chartRows] = await db.execute(`
-      SELECT DATE(created_at) AS day, COALESCE(SUM(amount), 0) AS total
-      FROM clickpesa_transactions
-      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-        AND UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED')
-      GROUP BY DATE(created_at) ORDER BY day
-    `);
-    const daily = new Map(chartRows.map(row => [String(row.day).slice(0, 10), Number(row.total || 0)]));
-    const labels = [];
-    const data = [];
-    for (let offset = 6; offset >= 0; offset--) {
-      const day = new Date();
-      day.setDate(day.getDate() - offset);
-      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-      labels.push(key);
-      data.push(daily.get(key) || 0);
-    }
-    res.json({
-      transactions,
-      totalRevenue: Number(summaryRows[0].revenue || 0),
-      todayRevenue: Number(todayRows[0].revenue || 0),
-      totalOrders: Number(summaryRows[0].orders || 0),
-      vouchersSold: Number(voucherRows[0].total || 0),
-      chartData: { labels, data }
-    });
-  } catch (error) {
-    console.error('Admin revenue error:', error);
-    res.status(500).json({ error: 'Failed to load revenue data' });
-  }
-});
-
 router.get('/withdrawals', async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);

@@ -66,21 +66,9 @@ exports.initiatePayment = async (req, res) => {
     }
 
     await db.execute(
-      'INSERT INTO clickpesa_transactions (order_reference, user_id, amount, phone, purpose, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [user?.id || null, orderReference, amount, phone, purposeFinal, 'PENDING']
-    ).catch(() => {
-      db.execute(
-        'INSERT INTO clickpesa_transactions (order_reference, user_id, amount, phone, purpose, status, extra_data) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [orderReference, user?.id || null, amount, phone, purposeFinal, 'PENDING', JSON.stringify(extraData)]
-      );
-    });
-
-    try {
-      await db.execute(
-        'UPDATE clickpesa_transactions SET extra_data = ? WHERE order_reference = ?',
-        [JSON.stringify(extraData), orderReference]
-      );
-    } catch (_) {}
+      'INSERT INTO clickpesa_transactions (order_reference, user_id, amount, phone, purpose, status, extra_data) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [orderReference, user?.id || null, amount, phone, purposeFinal, 'PENDING', JSON.stringify(extraData)]
+    );
 
     const result = await clickpesa.initiateUSSDPush({
       amount,
@@ -230,86 +218,26 @@ exports.getBalance = async (req, res) => {
 };
 
 async function processAndActivate(orderReference) {
+  const conn = await db.getConnection();
   try {
-    const [rows] = await db.execute(
-      'SELECT * FROM clickpesa_transactions WHERE order_reference = ? AND processed = 0',
-      [orderReference]
-    );
-    if (!rows.length) {
-      const [existing] = await db.execute('SELECT extra_data FROM clickpesa_transactions WHERE order_reference = ?', [orderReference]);
-      if (existing.length) {
-        const extra = existing[0].extra_data ? (typeof existing[0].extra_data === 'string' ? JSON.parse(existing[0].extra_data) : existing[0].extra_data) : {};
-        if (extra.gift && extra.voucher_code) return { voucher: extra.voucher_code, message: 'Voucher imegeneratiwa!' };
-      }
-      return { message: 'Malipo yamekamilika!' };
-    }
-
-    const tx = rows[0];
-    const purpose = tx.purpose;
-    const userId = tx.user_id;
-    const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
-    let result = {};
-
-    if (purpose === 'wallet_topup' && userId) {
-      const [existing] = await db.execute('SELECT id FROM transactions WHERE reference = ?', [orderReference]);
-      if (!existing.length) {
-        await db.execute('UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE user_id = ?', [tx.amount, userId]);
-        await db.execute('INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-          [userId, 'deposit', tx.amount, orderReference, 'Wallet top-up via ClickPesa']);
-      }
-      result = { message: 'Salio limeongezwa!' };
-    } else if (purpose === 'package_purchase' && userId) {
-      const packageId = extra.package_id;
-      const isGift = extra.gift;
-
-      // Server-side amount validation: verify amount matches package price
-      if (packageId) {
-        const [pkgs] = await db.execute('SELECT price FROM packages WHERE id = ?', [packageId]);
-        if (pkgs.length) {
-          const expectedAmount = Number(pkgs[0].price);
-          if (Number(tx.amount) !== expectedAmount) {
-            logger.warn(`Amount mismatch: paid=${tx.amount}, expected=${expectedAmount}, pkg=${packageId}, ref=${orderReference}`);
-            // Still process — amount was validated at initiation, but double-check here
-          }
-        }
-      }
-
-      if (isGift) {
-        const voucherCode = generateVoucherCode();
-        const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
-        await db.execute(
-          'INSERT INTO vouchers (voucher_code, package_id, price, is_used, expires_at, created_at) VALUES (?, ?, ?, 0, ?, NOW())',
-          [voucherCode, packageId, tx.amount, expiresAt]
-        );
-        extra.voucher_code = voucherCode;
-        await db.execute('UPDATE clickpesa_transactions SET extra_data = ? WHERE order_reference = ?',
-          [JSON.stringify(extra), orderReference]);
-        result = { voucher: voucherCode, message: 'Voucher imegeneratiwa!' };
-        logger.info(`Gift voucher generated: ${voucherCode} for package #${packageId}`);
-      } else if (packageId) {
-        await _activatePackage(userId, packageId, tx.amount, extra);
-        result = { activated: true, message: 'Kifurushi kimewashwa! Umeunganishwa kwenye mtandao.' };
-      }
-    } else if (purpose === 'reseller_topup' && userId) {
-      const [existing] = await db.execute('SELECT id FROM transactions WHERE reference = ?', [orderReference]);
-      if (!existing.length) {
-        await db.execute('UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE user_id = ?', [tx.amount, userId]);
-        await db.execute('INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-          [userId, 'deposit', tx.amount, orderReference, 'Reseller wallet top-up via ClickPesa']);
-      }
-      result = { message: 'Salio la wallet limeongezwa!' };
-    } else if (purpose === 'sponsor_deposit' && userId) {
-      await db.execute('UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE user_id = ?', [tx.amount, userId]);
-      await db.execute('INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [userId, 'deposit', tx.amount, orderReference, 'Sponsor deposit via ClickPesa']);
-      result = { message: 'Fedha zimeongezwa kwenye wallet!' };
-    }
-
-    await db.execute('UPDATE clickpesa_transactions SET processed = 1 WHERE order_reference = ?', [orderReference]);
+    const { fulfillClickPesaPayment } = require('../services/paymentFulfillment');
+    await conn.beginTransaction();
+    const [rows] = await conn.execute('SELECT amount, clickpesa_id FROM clickpesa_transactions WHERE order_reference = ? FOR UPDATE', [orderReference]);
+    if (!rows.length) throw new Error(`ClickPesa order not found: ${orderReference}`);
+    const result = await fulfillClickPesaPayment({
+      orderReference,
+      amount: rows[0].amount,
+      currency: 'TZS',
+      providerRef: rows[0].clickpesa_id,
+    }, conn);
+    await conn.commit();
     return result;
   } catch (error) {
+    await conn.rollback();
     logger.error('Process and activate error', { error: error.message, orderReference });
     return { message: 'Malipo yamekamilika' };
+  } finally {
+    conn.release();
   }
 }
 

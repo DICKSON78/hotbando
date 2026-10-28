@@ -171,6 +171,7 @@ const clickpesaRoutes = require('./routes/clickpesa');
 const webhookRoutes = require('./routes/webhooks');
 const partnerRoutes = require('./routes/partners');
 const hqRoutes = require('./routes/hq');
+const legacyAdminRoutes = require('./routes/adminLegacy');
 const paymentRoutes = require('./routes/paymentRoutes');
 
 // Vue SPA build — served for ALL portals
@@ -199,6 +200,9 @@ function serveSPA(req, res) {
 app.use('/api/hotspot', hotspotApiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/hq', hqRoutes);
+// Keep the pre-SPA admin API routes available while newer admin modules are
+// migrated. The focused admin router above owns current finance endpoints.
+app.use('/api/admin', legacyAdminRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/revenue-share', revenueShareRoutes);

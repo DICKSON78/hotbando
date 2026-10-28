@@ -47,6 +47,29 @@ async function activatePackage(userId, packageId, amount, extraData = {}, conn =
   }
 }
 
+async function creditWallet(userId, amount, orderReference, description, executor) {
+  // A wallet is created on first deposit; locking the row serializes concurrent credits.
+  await executor.execute(
+    'INSERT INTO wallets (user_id, balance, total_deposited) VALUES (?, 0, 0) ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)',
+    [userId]
+  );
+  const [walletRows] = await executor.execute('SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE', [userId]);
+  if (!walletRows.length) throw new Error(`Wallet could not be created for user ${userId}`);
+  const wallet = walletRows[0];
+  const before = Number(wallet.balance || 0);
+  const credit = Number(amount);
+  const after = before + credit;
+  await executor.execute(
+    'UPDATE wallets SET balance = ?, total_deposited = total_deposited + ?, updated_at = NOW() WHERE id = ?',
+    [after, credit, wallet.id]
+  );
+  await executor.execute(
+    `INSERT INTO transactions (wallet_id, user_id, transaction_type, amount, balance_before, balance_after, currency, reference_type, description, status, processed_at, payment_method, payment_reference, created_at)
+     VALUES (?, ?, 'deposit', ?, ?, ?, 'TZS', 'payment', ?, 'completed', NOW(), 'system', ?, NOW())`,
+    [wallet.id, userId, credit, before, after, description, orderReference]
+  );
+}
+
 async function fulfillClickPesaPayment({ orderReference, amount, currency, providerRef }, conn) {
   const executor = conn || db;
   // Find transaction
@@ -78,12 +101,7 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
   let result = {};
 
   if (purpose === 'wallet_topup' && userId) {
-    const [existing] = await executor.execute('SELECT id FROM transactions WHERE reference = ? FOR UPDATE', [orderReference]);
-    if (!existing.length) {
-      await executor.execute('UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE user_id = ?', [tx.amount, userId]);
-      await executor.execute('INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [userId, 'deposit', tx.amount, orderReference, 'Wallet top-up via ClickPesa']);
-    }
+    await creditWallet(userId, tx.amount, orderReference, 'Wallet top-up via ClickPesa', executor);
     result = { message: 'Salio limeongezwa!' };
   } else if (purpose === 'package_purchase' && userId) {
     const packageId = extra.package_id;
@@ -104,17 +122,10 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
       result = { activated: true, message: 'Kifurushi kimewashwa! Umeunganishwa kwenye mtandao.' };
     }
   } else if (purpose === 'reseller_topup' && userId) {
-    const [existing] = await executor.execute('SELECT id FROM transactions WHERE reference = ? FOR UPDATE', [orderReference]);
-    if (!existing.length) {
-      await executor.execute('UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE user_id = ?', [tx.amount, userId]);
-      await executor.execute('INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [userId, 'deposit', tx.amount, orderReference, 'Reseller wallet top-up via ClickPesa']);
-    }
+    await creditWallet(userId, tx.amount, orderReference, 'Reseller wallet top-up via ClickPesa', executor);
     result = { message: 'Salio la wallet limeongezwa!' };
   } else if (purpose === 'sponsor_deposit' && userId) {
-    await executor.execute('UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE user_id = ?', [tx.amount, userId]);
-    await executor.execute('INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-      [userId, 'deposit', tx.amount, orderReference, 'Sponsor deposit via ClickPesa']);
+    await creditWallet(userId, tx.amount, orderReference, 'Sponsor deposit via ClickPesa', executor);
     result = { message: 'Fedha zimeongezwa kwenye wallet!' };
   }
 

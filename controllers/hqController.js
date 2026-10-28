@@ -601,7 +601,14 @@ const hqController = {
 
   async getFinancialDashboard(req, res) {
     try {
-      const [revResult] = await db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE transaction_type = 'revenue_share'");
+      // Recognize collected sales from gateway settlement records. Revenue-share
+      // entries are partner payouts, not sales revenue.
+      const [clickRevenue] = await db.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM clickpesa_transactions WHERE UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED')"
+      );
+      const [pesapalRevenue] = await db.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM payment_requests WHERE status = 'completed' AND payment_method = 'pesapal'"
+      );
       const [expResult] = await db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE status = 'approved'");
       const [budgetResult] = await db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM budgets");
       const [budgetSpent] = await db.execute(
@@ -609,7 +616,7 @@ const hqController = {
          WHERE e.status = 'approved'`
       );
 
-      const totalRevenue = revResult[0].total;
+      const totalRevenue = Number(clickRevenue[0].total || 0) + Number(pesapalRevenue[0].total || 0);
       const totalExpenses = expResult[0].total;
       const budgetTotal = budgetResult[0].total;
       const budgetUsed = budgetSpent[0].total;
