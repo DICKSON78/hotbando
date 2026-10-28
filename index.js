@@ -37,9 +37,6 @@ app.use((req, res, next) => {
 });
 app.use(securityHeaders);
 
-// Rate limiting for API endpoints (generous: hotspots share IPs via NAT/CGNAT)
-app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
-
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -81,6 +78,21 @@ app.use(session({
         path: '/'
     },
     name: 'hotbando.sid'
+}));
+
+// Hotspot and partner clients often share a public IP through NAT/CGNAT.
+// Limit authenticated traffic per account so one busy client cannot throttle
+// every dashboard behind the same address. Unauthenticated traffic retains a
+// generous per-IP ceiling; login routes also have their own account limits.
+app.use('/api/', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1200,
+    key: (req) => {
+        const session = req.session || {};
+        const account = session.hotbando_user || session.admin_user || session.sponsor_user ||
+            session.bank_user || session.franchise_user || session.reseller_user || session.investor_user;
+        return account?.id ? `account:${account.role || 'customer'}:${account.id}` : '';
+    }
 }));
 
 // Make CSRF token available to all views
@@ -271,7 +283,7 @@ app.get('/api/me', (req, res) => {
 // POST /api/login — JSON login for all partner/admin accounts
 app.post('/api/login',
   rateLimit({ windowMs: 15 * 60 * 1000, max: 30, key: (req) => (req.body && req.body.email) || '' }),
-  rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }),
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }),
   async (req, res) => {
     try {
         const { email, password } = req.body || {};

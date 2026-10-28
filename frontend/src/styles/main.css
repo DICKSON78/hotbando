@@ -308,18 +308,19 @@ select.form-input option {
 /* ===== Client Portal — Instagram light theme (brand #FF7A30) ===== */
 .ig-app {
   display: flex; flex-direction: column; height: 100dvh; max-width: 470px;
-  margin: 0 auto; background: #fff; border-left: 1px solid #dbdbdb; border-right: 1px solid #dbdbdb;
+  margin: 0 auto; background: #0a0a0f; border-left: 1px solid #1e1e2a; border-right: 1px solid #1e1e2a; color-scheme: dark;
 }
 .ig-header {
   display: flex; align-items: center; justify-content: space-between; height: 52px;
-  padding: 0 16px; background: #fff; border-bottom: 1px solid #dbdbdb; flex-shrink: 0;
+  padding: 0 16px; background: #111118; border-bottom: 1px solid #1e1e2a; flex-shrink: 0;
 }
 .ig-wordmark { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: #FF7A30; }
 .ig-header-btn { font-size: 21px; color: #262626; background: none; border: none; cursor: pointer; padding: 0; }
 .ig-main { flex: 1; overflow-y: auto; background: #0a0a0f; -webkit-overflow-scrolling: touch; }
 .ig-nav {
-  display: flex; align-items: center; justify-content: space-around; background: #fff;
-  border-top: 1px solid #dbdbdb; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-around; background: #111118 !important;
+  color: #f0f0f5; border-top: 1px solid #1e1e2a; padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  flex-shrink: 0; isolation: isolate;
 }
 .ig-nav-item {
   display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: none;

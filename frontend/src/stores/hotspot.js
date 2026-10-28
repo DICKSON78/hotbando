@@ -9,13 +9,24 @@ export const useHotspotStore = defineStore('hotspot', {
     ssidshow: '',
     location: '',
     onWifi: false,
-    user: null
+    user: null,
+    initPromise: null,
+    initParamsKey: ''
   }),
   getters: {
     isLoggedIn: (state) => !!state.user
   },
   actions: {
     async init(params = {}) {
+      const explicitRouterID = params.routerID || params.routerid || params.router_id || ''
+      const paramsKey = String(explicitRouterID)
+      if (this.initialized && (!explicitRouterID || this.initParamsKey === paramsKey)) return
+      if (this.initPromise && this.initParamsKey === paramsKey) return this.initPromise
+      this.initParamsKey = paramsKey
+      this.initPromise = this.loadSession(params)
+      try { await this.initPromise } finally { this.initPromise = null }
+    },
+    async loadSession(params) {
       try {
         const r = await hotspotGet('/session', { params })
         this.mac = r.mac || ''
@@ -43,6 +54,8 @@ export const useHotspotStore = defineStore('hotspot', {
     async logout() {
       try { await hotspotGet('/logout') } catch (e) { /* ignore */ }
       this.user = null
+      this.initialized = false
+      this.initParamsKey = ''
       this.mac = ''
       this.routerID = ''
       this.ssidshow = ''

@@ -4,7 +4,7 @@ const router = express.Router();
 const db = require('../config/database');
 const hotspotController = require('../controllers/hotspotController');
 const mikrotikService = require('../utils/mikrotik');
-const { getRealClientMAC, getRealRouterID, getRealSSID, getRealLocation, formatRemainingTime } = hotspotController.helpers;
+const { getRealClientMAC, getRealSSID, formatRemainingTime } = hotspotController.helpers;
 const { authRateLimit } = require('../middleware/security');
 
 function publicSessionUser(user) {
@@ -29,7 +29,11 @@ router.get('/session', async (req, res) => {
         for (const candidateRouter of candidates) {
             try {
                 const [routers] = await db.execute(
-                    'SELECT id, router_id, router_name, status, ssid, latitude, longitude FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                    `SELECT m.id, m.router_id, m.router_name, m.status, m.ssid, m.latitude, m.longitude,
+                            COALESCE(l.name, m.router_name, 'Tanzania') AS location
+                     FROM mikrotiks m
+                     LEFT JOIN locations l ON m.location_id = l.id
+                     WHERE m.router_id = ? AND m.is_active = 1`,
                     [candidateRouter]
                 );
                 if (routers.length > 0) {
@@ -40,13 +44,9 @@ router.get('/session', async (req, res) => {
         }
 
         let mac = getRealClientMAC(req) || req.session.mac || null;
-        if (!mac && registeredRouter) {
-            mac = await mikrotikService.resolveClientMAC(registeredRouter.router_id, req.ip);
-        }
-
         const ssidshow = getRealSSID(req);
         const location = registeredRouter
-            ? await getRealLocation(registeredRouter.router_id)
+            ? registeredRouter.location
             : (req.session.location || 'Tanzania');
 
         req.session.mac = mac || req.session.mac;
@@ -156,27 +156,6 @@ router.get('/dashboard', requireWifi, async (req, res) => {
         );
         const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
 
-        // MikroTik calls with fast timeout — don't block dashboard if router unreachable
-        let routerOnline = false;
-        let connectedUsers = 0;
-        try {
-            const routerPromise = mikrotikService.checkRouterStatus(req.session.routerID || 'router-default');
-            const result = await Promise.race([
-                routerPromise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Router timeout')), 5000))
-            ]);
-            routerOnline = result?.online || false;
-        } catch (_) {}
-
-        try {
-            const sessionsPromise = mikrotikService.getActiveSessions(req.session.routerID || 'router-default');
-            const sessions = await Promise.race([
-                sessionsPromise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Router timeout')), 5000))
-            ]);
-            connectedUsers = sessions?.length || 0;
-        } catch (_) {}
-
         const adsWatchedToday = todayViews[0].count;
         const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
 
@@ -197,17 +176,16 @@ router.get('/dashboard', requireWifi, async (req, res) => {
             mac: req.session.mac || user.mac_address || '00:00:00:00:00:00',
             clientIP: req.session.clientIP || req.ip,
             isActive,
+            remainingSeconds: Math.round(remainingSeconds),
             remainingTime: formatRemainingTime(remainingSeconds),
             freeMB: freeMB.toFixed(2),
             adsWatchedToday,
             adsRemaining,
             dailyAdLimit,
             canWatchAds: adsRemaining > 0,
-            routerStatus: routerOnline ? 'online' : 'offline',
-            connectedUsers,
-            routerMessage: routerOnline ?
-                `Mtandao upo tayari (${connectedUsers} watumiaji wanaotumia)` :
-                'Kuna changamoto ndogo kwenye mtandao, lakini bado unaweza kutumia internet'
+            routerStatus: 'registered',
+            connectedUsers: null,
+            routerMessage: 'Umeunganishwa kwenye mtandao wa HotBando.'
         });
     } catch (error) {
         console.error('❌ API dashboard error:', error);

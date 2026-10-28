@@ -389,13 +389,17 @@ const hotspotController = {
                 });
             }
             
-            let mac = normalizeMAC(user.mac_address) || normalizeMAC(req.session.mac);
+            // A captive portal redirect on another registered router carries
+            // the current station MAC. Prefer it over the account's previous
+            // router binding so an existing login can roam between hotspots.
             let routerID = await resolveRegisteredRouter(req.session.routerID) ||
                 await resolveRegisteredRouter(user.last_router_id);
 
+            let mac = normalizeMAC(req.session.mac);
             if (!mac && routerID) {
                 mac = await mikrotikService.resolveClientMAC(routerID, req.ip);
             }
+            if (!mac) mac = normalizeMAC(user.mac_address);
             if (!mac || !routerID) {
                 return res.json({
                     success: false,
@@ -476,7 +480,9 @@ const hotspotController = {
                 type: connectionType,
                 uptime,
                 bytes,
-                routerConnected: routerSuccess
+                routerConnected: routerSuccess,
+                mac: routerSuccess ? mac : null,
+                routerID: routerSuccess ? routerID : null
             });
             
         } catch (error) {

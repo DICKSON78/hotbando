@@ -20,6 +20,7 @@
         <div class="flex gap-2 mt-2">
           <router-link to="/hotspot/subscribe" class="ig-btn ig-btn-primary text-xs py-1.5 px-3">Buy Voucher</router-link>
           <router-link to="/hotspot/ads" class="ig-btn ig-btn-outline text-xs py-1.5 px-3">Watch Ads</router-link>
+          <button v-if="canEnableNotifications" class="ig-btn ig-btn-outline text-xs py-1.5 px-3" @click="enableNotifications">Enable alerts</button>
         </div>
       </div>
     </div>
@@ -105,12 +106,17 @@ const freeMB = ref(0)
 const adsRemaining = ref(0)
 const adsWatchedToday = ref(0)
 const connected = ref(false)
+const routerReady = ref(false)
 const connMsg = ref('')
 const connError = ref(false)
 const alertMsg = ref('')
 const alertType = ref('info')
 let lowBundleNotified = false
+let connectedNotified = false
+let outOfBundleNotified = false
 let pollTimer = null
+let countdownTimer = null
+let autoConnectAttempted = false
 
 function checkAlert() {
   const hasBundle = remainingSeconds.value > 0
@@ -126,20 +132,41 @@ function checkAlert() {
     alertMsg.value = 'Huna data. Nunua kifurushi au tazama matangazo kupata internet bure.'
     alertType.value = 'danger'
     lowBundleNotified = false
+    connectedNotified = false
+    if (!outOfBundleNotified) {
+      outOfBundleNotified = true
+      sendNotification('HotBando', alertMsg.value)
+    }
   } else {
-    alertMsg.value = ''
+    alertMsg.value = hasBundle
+      ? routerReady.value
+        ? `Umeunganishwa kwenye HotBando. Una ${remainingTime.value} iliyobaki kwenye kifurushi chako.`
+        : `Vocha yako bado inatumika. Tunathibitisha muunganisho wa router…`
+      : `Kifurushi kimeisha. Bado una ${freeMB.value} MB za bure; tazama matangazo kupata data zaidi.`
+    alertType.value = 'info'
     lowBundleNotified = false
+    outOfBundleNotified = false
+    if (routerReady.value && !connectedNotified) {
+      connectedNotified = true
+      if (hasBundle) sendNotification('HotBando', `Umeunganishwa. Muda uliobaki: ${remainingTime.value}.`)
+    }
   }
+}
+
+const canEnableNotifications = ref(typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default')
+
+async function enableNotifications() {
+  try {
+    const permission = await Notification.requestPermission()
+    canEnableNotifications.value = permission === 'default'
+    if (permission === 'granted') sendNotification('HotBando', alertMsg.value)
+  } catch (e) { /* notifications may be unavailable in captive browsers */ }
 }
 
 function sendNotification(title, body) {
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, { body, icon: '/logo.png' })
-    } else if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().then((p) => {
-        if (p === 'granted') new Notification(title, { body, icon: '/logo.png' })
-      })
     }
   } catch (e) { /* ignore */ }
 }
@@ -149,10 +176,14 @@ async function loadData() {
     const r = await hotspotGet('/dashboard', { params: { t: Date.now() } })
     if (r.redirect) { router.push('/hotspot/login'); return }
     user.value = r.user || null
+    remainingSeconds.value = Number(r.remainingSeconds) || 0
     remainingTime.value = r.remainingTime || '—'
-    freeMB.value = r.freeMB || 0
+    freeMB.value = r.freeMB ?? 0
     adsRemaining.value = r.adsRemaining || 0
     adsWatchedToday.value = r.adsWatchedToday || 0
+    const currentMac = normalizeMac(store.mac)
+    routerReady.value = !!currentMac && currentMac === normalizeMac(store.user?.mac_address) && String(store.routerID) === String(store.user?.last_router_id || '')
+    connected.value = (!!r.isActive || Number(r.user?.free_bytes) > 0) && routerReady.value
     checkAlert()
   } catch (e) {
     if (e.response?.status === 401) router.push('/hotspot/login')
@@ -162,33 +193,66 @@ async function loadData() {
 async function loadUsage() {
   try {
     const r = await hotspotGet('/usage')
-    freeMB.value = r.freeMB || freeMB.value
+    freeMB.value = r.freeMB ?? freeMB.value
     remainingTime.value = r.remainingTime || remainingTime.value
     remainingSeconds.value = r.remainingSeconds || 0
     checkAlert()
   } catch (e) { /* ignore polling errors */ }
 }
 
-onMounted(async () => {
-  // Request notification permission for bundle alerts
+function normalizeMac(value) {
+  return String(value || '').replace(/[^a-f\d]/gi, '').toLowerCase()
+}
+
+async function ensureRouterAccess() {
+  if (autoConnectAttempted || !store.onWifi || !store.routerID || !store.user) return
+  if (remainingSeconds.value <= 0 && Number(freeMB.value) <= 0) return
+  const currentMac = normalizeMac(store.mac)
+  const sameMac = !!currentMac && currentMac === normalizeMac(store.user.mac_address)
+  const sameRouter = String(store.routerID) === String(store.user.last_router_id || '')
+  if (sameMac && sameRouter) return
+
+  autoConnectAttempted = true
+  connMsg.value = 'Inaunganisha kifaa chako kwenye router hii…'
   try {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission()
+    const result = await hotspotPost('/connect')
+    connError.value = !result.success
+    connMsg.value = result.message || (result.success ? 'Umeunganishwa kwenye router hii.' : 'Imeshindikana kuunganisha kwenye router hii.')
+    if (result.success) {
+      store.mac = result.mac || store.mac
+      store.routerID = result.routerID || store.routerID
+      routerReady.value = true
+      connected.value = true
+      store.user = { ...store.user, mac_address: store.mac || store.user.mac_address, last_router_id: store.routerID }
+      checkAlert()
+      await loadData()
     }
-  } catch (e) {}
+  } catch (e) {
+    connError.value = true
+    connMsg.value = 'Imeshindikana kuunganisha kwenye router hii. Jaribu Connect tena.'
+  }
+}
+
+onMounted(async () => {
   await loadData()
-  // fetch remaining seconds initially
-  try {
-    const r = await hotspotGet('/usage')
-    remainingSeconds.value = r.remainingSeconds || 0
-    remainingTime.value = r.remainingTime || remainingTime.value
-    freeMB.value = r.freeMB || freeMB.value
+  // Do this in the background: render the account and bundle immediately,
+  // then bind the current station to a newly joined registered router.
+  ensureRouterAccess()
+  countdownTimer = setInterval(() => {
+    if (remainingSeconds.value > 0) remainingSeconds.value = Math.max(0, remainingSeconds.value - 1)
+    const days = Math.floor(remainingSeconds.value / 86400)
+    const hours = Math.floor((remainingSeconds.value % 86400) / 3600)
+    const minutes = Math.floor((remainingSeconds.value % 3600) / 60)
+    remainingTime.value = remainingSeconds.value <= 0 ? 'Hakuna muda uliobaki' : days ? `${days} siku ${hours} masaa` : hours ? `${hours} masaa ${minutes} dakika` : minutes ? `${minutes} dakika` : 'Chini ya dakika moja'
     checkAlert()
-  } catch (e) {}
-  pollTimer = setInterval(loadUsage, 15000)
+  }, 1000)
+  pollTimer = setInterval(loadUsage, 30000)
 })
 
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  if (countdownTimer) clearInterval(countdownTimer)
+})
 
 async function toggleConnection() {
   connMsg.value = ''
@@ -196,6 +260,12 @@ async function toggleConnection() {
     const endpoint = connected.value ? '/disconnect' : '/connect'
     const r = await hotspotPost(endpoint)
     connected.value = !!r.success
+    routerReady.value = !!r.success
+    if (r.success) {
+      store.mac = r.mac || store.mac
+      store.routerID = r.routerID || store.routerID
+      if (store.user) store.user = { ...store.user, mac_address: store.mac || store.user.mac_address, last_router_id: store.routerID }
+    }
     connMsg.value = r.message || ''
     connError.value = !r.success
     if (r.success) loadData()

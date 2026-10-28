@@ -89,6 +89,7 @@ const sanitizeBody = (req, res, next) => {
  * Rate Limiting
  */
 const rateLimitStore = new Map();
+let lastRateLimitCleanup = 0;
 
 const rateLimit = (options = {}) => {
     const windowMs = options.windowMs || 15 * 60 * 1000; // 15 minutes
@@ -105,11 +106,16 @@ const rateLimit = (options = {}) => {
         } catch (_) {}
         const now = Date.now();
         
-        // Clean old entries
-        for (const [key, value] of rateLimitStore.entries()) {
-            if (now - value.resetTime > windowMs) {
-                rateLimitStore.delete(key);
+        // Prune occasionally, using each bucket's own window. Applying the
+        // current middleware's window to every bucket can erase longer-lived
+        // login/API limits when a short-window limiter runs.
+        if (now - lastRateLimitCleanup > 60 * 1000) {
+            for (const [key, value] of rateLimitStore.entries()) {
+                if (now - value.resetTime > value.windowMs) {
+                    rateLimitStore.delete(key);
+                }
             }
+            lastRateLimitCleanup = now;
         }
 
         // Get or create rate limit entry
@@ -118,7 +124,8 @@ const rateLimit = (options = {}) => {
         if (!rateData || now - rateData.resetTime > windowMs) {
             rateData = {
                 count: 0,
-                resetTime: now
+                resetTime: now,
+                windowMs
             };
             rateLimitStore.set(identifier, rateData);
         }
@@ -302,5 +309,7 @@ const authAccount = (idField) => rateLimit({
     max: 30,
     key: (req) => (req.body && (req.body[idField] || req.body.phone_number || req.body.email)) || ''
 });
-const authIpCeil = rateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
+// Several customers may authenticate from one hotspot public IP. Keep
+// account-level protection strict while allowing normal shared-IP traffic.
+const authIpCeil = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 module.exports.authRateLimit = [authAccount('email'), authIpCeil];
