@@ -180,7 +180,7 @@ const props = defineProps({
   providerFee: { type: [Number, String], default: 0 },
   totalAmount: { type: [Number, String], default: 0 },
   successMessage: { type: String, default: 'Your payment was received.' },
-  pollInterval: { type: Number, default: 4000 },
+  pollInterval: { type: Number, default: 15000 },
   maxPollMs: { type: Number, default: 15 * 60 * 1000 }
 })
 
@@ -194,6 +194,7 @@ const iframeLoading = ref(true)
 let timer = null
 let startedAt = 0
 let pollCount = 0
+let statusRequestInFlight = false
 
 const finalMessage = ref('')
 
@@ -209,8 +210,9 @@ function stopPolling() {
 }
 
 async function checkStatus() {
-  if (!props.show || !props.orderTrackingId) return
+  if (!props.show || !props.orderTrackingId || statusRequestInFlight) return
   if (status.value === 'completed' || status.value === 'failed') return
+  statusRequestInFlight = true
   try {
     const r = await apiGet(`/clickpesa/status/${encodeURIComponent(props.orderTrackingId)}`)
     if (r.status === 'completed' || r.status === 'SUCCESS' || r.status === 'SETTLED') {
@@ -229,6 +231,7 @@ async function checkStatus() {
     // Network blips should not close the checkout. Keep polling.
     message.value = e.response?.data?.error || ''
   } finally {
+    statusRequestInFlight = false
     pollCount += 1
   }
 }

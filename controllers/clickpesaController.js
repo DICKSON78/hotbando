@@ -24,13 +24,31 @@ function normalizeTanzanianPhone(input) {
   return phone;
 }
 
+function normalizeProvider(value) {
+  const provider = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (['VODACOM', 'MPESA', 'MPESATZ', 'SAFARICOM'].includes(provider)) return 'MPESA';
+  if (['TIGO', 'YAS', 'MIXX', 'MIXXBYYAS', 'TIGOPESA'].includes(provider)) return 'TIGOPESA';
+  if (['AIRTEL', 'AIRTELMONEY'].includes(provider)) return 'AIRTELMONEY';
+  if (['HALOTEL', 'HALOPESA'].includes(provider)) return 'HALOPESA';
+  return provider;
+}
+
 function formatFeeQuote(preview, amount) {
-  const methods = Array.isArray(preview?.activeMethods) ? preview.activeMethods : [];
-  const senderProvider = String(preview?.sender?.accountProvider || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const available = methods.filter(method => String(method.status || '').toUpperCase() === 'AVAILABLE');
-  const selected = available.find(method => String(method.name || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === senderProvider)
+  const response = preview?.data && typeof preview.data === 'object' ? preview.data : preview;
+  const methods = Array.isArray(response?.activeMethods) ? response.activeMethods : [];
+  const senderProvider = normalizeProvider(response?.sender?.accountProvider || response?.sender?.provider || response?.accountProvider);
+  const available = methods.filter(method => ['AVAILABLE', 'ACTIVE', 'ENABLED'].includes(String(method.status || '').toUpperCase()));
+  const selected = available.find(method => normalizeProvider(method.name || method.provider) === senderProvider)
     || (available.length === 1 ? available[0] : null);
-  if (!selected) throw new Error('ClickPesa haikuweza kuthibitisha njia ya malipo kwa namba hii.');
+  if (!selected) {
+    logger.warn('ClickPesa could not match a mobile money method', {
+      senderProvider: senderProvider || 'unknown',
+      availableMethods: available.map(method => method.name || method.provider || 'unknown'),
+    });
+    throw new Error(available.length
+      ? 'ClickPesa imeshindwa kutambua mtandao wa namba hii. Hakikisha umeweka namba ya simu ya mobile money inayotumika Tanzania, kisha ujaribu tena.'
+      : 'ClickPesa haijaonyesha njia ya malipo inayopatikana kwa sasa. Hakikisha namba inatumika na ujaribu tena baada ya muda mfupi.');
+  }
   const fee = Number(selected.fee || 0);
   return {
     amount: Number(amount),
@@ -188,6 +206,31 @@ exports.checkStatus = async (req, res) => {
   try {
     const { orderReference } = req.params;
     if (!orderReference) return res.status(400).json({ error: 'Order reference inahitajika' });
+
+    const [orders] = await db.execute(
+      'SELECT status, processed, extra_data, updated_at FROM clickpesa_transactions WHERE order_reference = ?',
+      [orderReference]
+    );
+    if (!orders.length) return res.status(404).json({ error: 'Malipo hayajapatikana' });
+    const tx = orders[0];
+    const storedStatus = String(tx.status || '').toUpperCase();
+    if (tx.processed) {
+      const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
+      return res.json({
+        success: true,
+        status: ['SUCCESS', 'SETTLED', 'COMPLETED'].includes(storedStatus) ? 'completed' : storedStatus,
+        ...(extra.voucher_code ? { voucher: extra.voucher_code } : {}),
+        ...(extra.voucher_code ? { message: 'Malipo yamekamilika. Voucher yako iko tayari.' } : { message: 'Malipo yamekamilika!' }),
+      });
+    }
+    if (['SUCCESS', 'SETTLED', 'COMPLETED'].includes(storedStatus)) {
+      const activationResult = await processAndActivate(orderReference);
+      return res.json({ success: true, status: 'completed', activated: true, ...activationResult });
+    }
+    const ageMs = Date.now() - new Date(tx.updated_at).getTime();
+    if (ageMs >= 0 && ageMs < 60000) {
+      return res.json({ success: true, status: storedStatus || 'PROCESSING' });
+    }
 
     const result = await clickpesa.queryPaymentStatus(orderReference);
     const paymentData = Array.isArray(result) ? result[0] : result;

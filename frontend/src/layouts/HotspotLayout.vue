@@ -47,12 +47,6 @@ const publicRoutes = ['hotspot-index', 'hotspot-login', 'hotspot-signup']
 const authRoutes = ['hotspot-dashboard', 'hotspot-subscribe', 'hotspot-ads']
 const isPublic = computed(() => publicRoutes.includes(route.name))
 
-// Force a fresh load when the browser restores this page from bfcache
-// (e.g. pressing Back after logout), so the session is revalidated.
-window.addEventListener('pageshow', (e) => {
-  if (e.persisted) window.location.reload()
-})
-
 onMounted(async () => {
   await store.init(route.query)
   if (store.isLoggedIn && publicRoutes.includes(route.name)) {
