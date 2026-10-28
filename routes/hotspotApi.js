@@ -238,6 +238,7 @@ router.get('/usage', requireWifi, async (req, res) => {
             freeMB: (fresh.free_bytes / (1024 * 1024)).toFixed(2),
             free_bytes: fresh.free_bytes,
             isActive: now < usageUntil,
+            remainingSeconds: Math.round(remainingSeconds),
             remainingTime: formatRemainingTime(remainingSeconds),
             package: fresh.package,
             moneyspent: fresh.moneyspent

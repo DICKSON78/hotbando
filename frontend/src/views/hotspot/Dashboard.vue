@@ -12,6 +12,18 @@
       </span>
     </div>
 
+    <!-- Alert banner -->
+    <div v-if="alertMsg" class="mx-4 mt-3 rounded-2xl p-4 flex items-start gap-3" :style="alertType === 'warn' ? 'background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3)' : alertType === 'danger' ? 'background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3)' : 'background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3)'">
+      <i class="fas mt-0.5" :class="alertType === 'warn' ? 'fa-exclamation-triangle text-yellow-400' : alertType === 'danger' ? 'fa-times-circle text-red-400' : 'fa-info-circle text-blue-400'"></i>
+      <div class="flex-1">
+        <p class="text-sm font-semibold text-white">{{ alertMsg }}</p>
+        <div class="flex gap-2 mt-2">
+          <router-link to="/hotspot/subscribe" class="ig-btn ig-btn-primary text-xs py-1.5 px-3">Buy Voucher</router-link>
+          <router-link to="/hotspot/ads" class="ig-btn ig-btn-outline text-xs py-1.5 px-3">Watch Ads</router-link>
+        </div>
+      </div>
+    </div>
+
     <!-- Balance card -->
     <div class="mx-4 balance-card rounded-2xl p-5 text-white">
       <div class="flex items-center justify-between">
@@ -88,13 +100,49 @@ const router = useRouter()
 const store = useHotspotStore()
 const user = ref(null)
 const remainingTime = ref('—')
+const remainingSeconds = ref(0)
 const freeMB = ref(0)
 const adsRemaining = ref(0)
 const adsWatchedToday = ref(0)
 const connected = ref(false)
 const connMsg = ref('')
 const connError = ref(false)
+const alertMsg = ref('')
+const alertType = ref('info')
+let lowBundleNotified = false
 let pollTimer = null
+
+function checkAlert() {
+  const hasBundle = remainingSeconds.value > 0
+  const hasFree = parseFloat(freeMB.value) > 0
+  if (hasBundle && remainingSeconds.value <= 300) {
+    alertMsg.value = 'Bundle yako inaisha hivi karibuni! Nunua vocha au tazama matangazo kupata free internet.'
+    alertType.value = 'warn'
+    if (!lowBundleNotified) {
+      lowBundleNotified = true
+      sendNotification('HotBando', 'Bundle yako inaisha hivi karibuni. Nunua vocha au tazama matangazo.')
+    }
+  } else if (!hasBundle && !hasFree) {
+    alertMsg.value = 'Huna data. Nunua kifurushi au tazama matangazo kupata internet bure.'
+    alertType.value = 'danger'
+    lowBundleNotified = false
+  } else {
+    alertMsg.value = ''
+    lowBundleNotified = false
+  }
+}
+
+function sendNotification(title, body) {
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '/logo.png' })
+    } else if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then((p) => {
+        if (p === 'granted') new Notification(title, { body, icon: '/logo.png' })
+      })
+    }
+  } catch (e) { /* ignore */ }
+}
 
 async function loadData() {
   try {
@@ -105,6 +153,7 @@ async function loadData() {
     freeMB.value = r.freeMB || 0
     adsRemaining.value = r.adsRemaining || 0
     adsWatchedToday.value = r.adsWatchedToday || 0
+    checkAlert()
   } catch (e) {
     if (e.response?.status === 401) router.push('/hotspot/login')
   }
@@ -115,12 +164,28 @@ async function loadUsage() {
     const r = await hotspotGet('/usage')
     freeMB.value = r.freeMB || freeMB.value
     remainingTime.value = r.remainingTime || remainingTime.value
+    remainingSeconds.value = r.remainingSeconds || 0
+    checkAlert()
   } catch (e) { /* ignore polling errors */ }
 }
 
 onMounted(async () => {
+  // Request notification permission for bundle alerts
+  try {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  } catch (e) {}
   await loadData()
-  pollTimer = setInterval(loadUsage, 30000)
+  // fetch remaining seconds initially
+  try {
+    const r = await hotspotGet('/usage')
+    remainingSeconds.value = r.remainingSeconds || 0
+    remainingTime.value = r.remainingTime || remainingTime.value
+    freeMB.value = r.freeMB || freeMB.value
+    checkAlert()
+  } catch (e) {}
+  pollTimer = setInterval(loadUsage, 15000)
 })
 
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
