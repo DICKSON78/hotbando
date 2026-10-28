@@ -105,7 +105,7 @@
         </div>
 
         <div class="mt-3">
-          <PhoneInput :initialDigits="myPhone" @change="v => payerPhone = v" label="Namba ya simu kwa malipo" hint="Utapitishwa kwenye ukurasa salama wa PesaPal" />
+          <PhoneInput :initialDigits="myPhone" @change="v => payerPhone = v" label="Namba ya simu kwa malipo" hint="Utapokea ombi la malipo kwenye simu yako kupitia ClickPesa Push USSD." />
         </div>
 
         <div v-if="buyMode === 'gift'" class="pay-gift-note">
@@ -116,7 +116,7 @@
         <button class="pay-start" :disabled="processing" @click="startPayment">
           <i v-if="processing" class="fas fa-spinner fa-spin"></i>
           <i v-else class="fa-solid fa-lock"></i>
-          {{ processing ? 'Inaelekeza PesaPal...' : 'Lipia kwa PesaPal' }}
+          {{ processing ? 'Inatuma ombi la malipo...' : 'Lipia kwa ClickPesa Push USSD' }}
         </button>
 
         <p v-if="modalMsg" class="pay-msg mt-3" :class="modalError ? 'pay-msg-err' : 'pay-msg-ok'">{{ modalMsg }}</p>
@@ -133,7 +133,7 @@
 
     <ClickPesaCheckoutModal
       :show="showCheckout"
-      title="Complete package payment"
+      title="Thibitisha malipo ya ClickPesa"
       :checkout-url="checkoutUrl"
       :order-tracking-id="checkoutTracking"
       :amount="checkoutAmount"
@@ -300,31 +300,13 @@ async function startPayment() {
   modalError.value = false
   generatedVoucher.value = ''
   try {
-    let r
-    try {
-      r = await apiPost('/clickpesa/pay', {
-        purpose: 'package_purchase',
-        package_id: selectedPackage.value.id,
-        phoneNumber: phone,
-        gift: buyMode.value === 'gift',
-      })
-    } catch {
-      r = await apiPost('/payments/initiate', {
-        package_id: selectedPackage.value.id,
-        phone_number: phone,
-        gift: buyMode.value === 'gift',
-        return_path: buyMode.value === 'gift' ? '/hotspot/subscribe' : '/hotspot/dashboard',
-      })
-    }
-    if (r.success && (r.redirect_url || r.checkout_url)) {
-      checkoutUrl.value = r.redirect_url || r.checkout_url || ''
-      checkoutTracking.value = r.order_tracking_id || r.orderReference || ''
-      checkoutAmount.value = Number(selectedPackage.value?.price || 0)
-      showModal.value = false
-      showCheckout.value = true
-      processing.value = false
-      return
-    } else if (r.success && r.orderReference) {
+    const r = await apiPost('/clickpesa/pay', {
+      purpose: 'package_purchase',
+      package_id: selectedPackage.value.id,
+      phoneNumber: phone,
+      gift: buyMode.value === 'gift',
+    })
+    if (r.success && r.orderReference) {
       checkoutUrl.value = ''
       checkoutTracking.value = r.orderReference
       checkoutAmount.value = Number(selectedPackage.value?.price || 0)

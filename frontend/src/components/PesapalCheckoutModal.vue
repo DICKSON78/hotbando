@@ -94,7 +94,7 @@
               >
                 Close
               </button>
-              <a
+              <a v-if="checkoutUrl"
                 :href="checkoutUrl"
                 target="_blank"
                 rel="noopener"
@@ -136,7 +136,8 @@
           </div>
           <div class="shrink-0 flex items-center justify-between gap-2 px-4 py-2.5" style="background: #111118; border-top: 1px solid #1e1e2a">
             <span class="hidden sm:inline text-xs" style="color: #6b7280">
-              <i class="fa-solid fa-lock mr-1" style="color: #34d399"></i> Secure checkout
+              <i :class="checkoutUrl ? 'fa-solid fa-lock' : 'fa-solid fa-mobile-screen-button'" class="mr-1" style="color: #34d399"></i>
+              {{ checkoutUrl ? 'Secure checkout' : 'ClickPesa Push USSD' }}
             </span>
             <div class="flex items-center gap-2 ml-auto">
               <a
@@ -207,13 +208,7 @@ async function checkStatus() {
   if (!props.show || !props.orderTrackingId) return
   if (status.value === 'completed' || status.value === 'failed') return
   try {
-    // Try ClickPesa status first, fallback to legacy payments
-    let r
-    try {
-      r = await apiGet(`/clickpesa/status/${encodeURIComponent(props.orderTrackingId)}`)
-    } catch {
-      r = await apiGet(`/payments/status/${encodeURIComponent(props.orderTrackingId)}`)
-    }
+    const r = await apiGet(`/clickpesa/status/${encodeURIComponent(props.orderTrackingId)}`)
     if (r.status === 'completed' || r.status === 'SUCCESS' || r.status === 'SETTLED') {
       status.value = 'completed'
       finalMessage.value = r.message || props.successMessage
