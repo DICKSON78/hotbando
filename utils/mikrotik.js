@@ -153,7 +153,7 @@ class MikrotikService {
                 const loginBy = String(p['login-by'] || '')
                     .split(',').map(s => s.trim()).filter(Boolean);
                 const needsLogin = !loginBy.includes('mac');
-                const needsMode = p['mac-auth-mode'] !== 'as-username-and-password';
+                const needsMode = p['mac-auth-mode'] !== 'mac-as-username-and-password';
 
                 if (!needsLogin && !needsMode) {
                     hasMac = true;
@@ -166,7 +166,7 @@ class MikrotikService {
                     `=login-by=${loginBy.join(',')}`
                 ];
                 if (needsMode) {
-                    args.push('=mac-auth-mode=as-username-and-password');
+                    args.push('=mac-auth-mode=mac-as-username-and-password');
                 }
                 try {
                     await conn.write('/ip/hotspot/profile/set', args);
@@ -214,7 +214,12 @@ class MikrotikService {
 
             const limitBytes = bytes > 0 ? String(Math.floor(bytes)) : '0';
             const limitUptime = uptimeSeconds > 0 ? formatTime(uptimeSeconds) : '0s';
-            const profile = uptimeSeconds > 0 ? 'hotbando-paid' : 'hotbando-free';
+            let profile = uptimeSeconds > 0 ? 'hotbando-paid' : 'hotbando-free';
+            // Fall back to the built-in profile when the tier was never created.
+            try {
+                const profiles = await conn.write('/ip/hotspot/user/profile/print');
+                if (!profiles.some(p => p.name === profile)) profile = 'default';
+            } catch (e) { /* ignore */ }
 
             // Limits are mutually exclusive: a paid voucher is time-based,
             // free/ad data is byte-based. Clear the other limit so an old
@@ -240,7 +245,7 @@ class MikrotikService {
 
             if (existingUsers.length > 0) {
                 // Update the existing user, including name/password so
-                // mac-auth-mode=as-username-and-password can match it.
+                // mac-auth-mode=mac-as-username-and-password can match it.
                 const userId = existingUsers[0]['.id'];
                 const updateArgs = [
                     `=.id=${userId}`,
@@ -254,32 +259,26 @@ class MikrotikService {
                 await conn.write('/ip/hotspot/user/set', updateArgs);
                 console.log(`Updated hotspot user ${cleanMac} on ${routerID}: uptime=${limitUptime}, bytes=${limitBytes}, profile=${profile}`);
             } else {
-                // Create new MAC-based user. Try provisioned hotspot server
-                // first, then fall back to legacy server names.
-                const attempts = [
-                    { server: 'hotbando-server', profile },
-                    { server: 'hotspot1', profile: 'hotbando-default' }
-                ];
-                let added = false;
-                let lastErr = null;
-                for (const a of attempts) {
-                    const addArgs = [
-                        `=name=${cleanMac}`,
-                        `=password=${cleanMac}`,
-                        `=mac-address=${cleanMac}`,
-                        `=server=${a.server}`,
-                        `=profile=${a.profile}`,
-                        ...limitArgs
-                    ];
+                // Create new MAC-based user. Use whichever hotspot server and
+                // user profile actually exist on this router (legacy routers
+                // may only have "hotspot1" or the "default" profile).
+                let servers = [];
+                try { servers = await conn.write('/ip/hotspot/print'); } catch (e) { /* ignore */ }
+                const serverName = (servers.find(s => s.name === 'hotbando-server')
+                    || servers.find(s => s.name === 'hotspot1')
+                    || servers[0] || {}).name;
 
-                    try {
-                        await conn.write('/ip/hotspot/user/add', addArgs);
-                        added = true;
-                        console.log(`Added hotspot user ${cleanMac} to ${routerID} via ${a.server}/${a.profile}: uptime=${limitUptime}, bytes=${limitBytes}`);
-                        break;
-                    } catch (e) { lastErr = e; }
-                }
-                if (!added) throw lastErr || new Error('hotspot user add failed');
+                const addArgs = [
+                    `=name=${cleanMac}`,
+                    `=password=${cleanMac}`,
+                    `=mac-address=${cleanMac}`,
+                    ...limitArgs
+                ];
+                if (serverName) addArgs.push(`=server=${serverName}`);
+                if (profile) addArgs.push(`=profile=${profile}`);
+
+                await conn.write('/ip/hotspot/user/add', addArgs);
+                console.log(`Added hotspot user ${cleanMac} to ${routerID} via ${serverName || 'any'}/${profile || 'default'}: uptime=${limitUptime}, bytes=${limitBytes}`);
             }
 
             // RouterOS does not always apply new limits to an already-active

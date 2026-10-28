@@ -8,7 +8,6 @@
 #   <HOTBANDO_SERVER_IP>   — your HotBando server IP/domain
 #   <ROUTER_ID>            — router_id shown in HotBando admin (e.g. HB-AA001122)
 #   <RADIUS_SECRET>        — shared secret (same as RADIUS_SECRET in .env)
-#   <WAN_INTERFACE>        — interface connected to your modem (hAP: ether1)
 #   <HOTSPOT_INTERFACE>    — interface clients connect to.
 #                            On hAP the wifi is bridged, so use bridge1
 #                            (the bridge that already contains wlan1).
@@ -33,7 +32,23 @@
 # 1. NETWORK INTERFACE SETUP
 # ============================================================================
 # Make sure the hotspot interface exists (hAP: bridge1). Create it if missing.
-/interface bridge add name=<HOTSPOT_INTERFACE> disabled=no
+:do { /interface bridge add name=<HOTSPOT_INTERFACE> disabled=no } on-error={}
+
+# A hotspot created on a bridge PORT is bypassed by the bridge, so clients get
+# plain internet and never see the portal. Put every wireless radio inside the
+# hotspot bridge instead (legacy wlan* and RouterOS 7 wifi*).
+:do {
+  :foreach w in=[/interface wireless find] do={
+    :do { /interface bridge port remove [find interface=$w] } on-error={}
+    :do { /interface bridge port add bridge=<HOTSPOT_INTERFACE> interface=$w } on-error={}
+  }
+} on-error={}
+:do {
+  :foreach w in=[/interface wifi find] do={
+    :do { /interface bridge port remove [find interface=$w] } on-error={}
+    :do { /interface bridge port add bridge=<HOTSPOT_INTERFACE> interface=$w } on-error={}
+  }
+} on-error={}
 
 # Disable/remove old IPs + DHCP servers on the hotspot interface (clean start).
 # A leftover default DHCP server (192.168.88.x) is what makes clients stuck
@@ -82,9 +97,9 @@
 # 4. FIREWALL NAT (masquerade only — the hotspot redirects clients itself)
 # ============================================================================
 /ip firewall nat remove [find comment="HotBando masquerade"]
-/ip firewall nat add chain=srcnat out-interface=<WAN_INTERFACE> action=masquerade comment="HotBando masquerade"
+/ip firewall nat add chain=srcnat src-address=<HOTSPOT_CIDR> action=masquerade comment="HotBando masquerade"
 
-# Old builds added dstnat 80/443 rules with in-interface=<WAN_INTERFACE>.
+# Old builds added dstnat 80/443 rules with in-interface=ether1.
 # Those hijack inbound web traffic and are not needed; remove them.
 /ip firewall nat remove [find comment="HTTP redirect to hotspot"]
 /ip firewall nat remove [find comment="HTTPS redirect to hotspot"]
@@ -115,12 +130,13 @@
     radius-accounting=yes \
     radius-interim-update=30s \
     radius-mac-format=XX:XX:XX:XX:XX:XX \
-    mac-auth-mode=as-username-and-password \
-    trial-uptime=0s \
     hotspot-address=<HOTSPOT_IP> \
     dns-name="hotspot.hotbando.local" \
-    http-proxy=no \
     comment="HotBando hotspot profile"
+
+# mac-auth-mode is unavailable on very old RouterOS builds; set it separately
+# so the profile is still created (and the portal still works) if unsupported.
+:do { /ip hotspot profile set [find name="hotbando-profile"] mac-auth-mode=mac-as-username-and-password } on-error={}
 
 # Create hotspot server
 /ip hotspot remove [find name="hotbando-server"]
@@ -135,13 +151,18 @@
 # 6. WALLED GARDEN (allow access to login page before authentication)
 # ============================================================================
 /ip hotspot walled-garden remove [find]
+/ip hotspot walled-garden ip remove [find comment~"HotBando"]
 
 # Allow access to the HotBando server (hostname + optional www alias)
 /ip hotspot walled-garden add action=allow dst-host="<HOTBANDO_SERVER_IP>" comment="Allow HotBando server"
 /ip hotspot walled-garden add action=allow dst-host="www.<HOTBANDO_SERVER_IP>" comment="Allow HotBando server (www)"
+# If you access the portal by bare IP, also add it as an IP-level rule:
+# /ip hotspot walled-garden ip add action=accept dst-address=<HOTBANDO_SERVER_IP> comment="Allow HotBando server IP"
 
-# Allow access to DNS (needed before login)
-/ip hotspot walled-garden add action=allow dst-port=53 comment="Allow DNS"
+# Allow access to DNS (needed before login). IP rules use the "ip" submenu
+# and action=accept; dst-address/dst-port-53 are not HTTP-wallable.
+/ip hotspot walled-garden ip add action=accept protocol=udp dst-port=53 comment="HotBando DNS"
+/ip hotspot walled-garden ip add action=accept protocol=tcp dst-port=53 comment="HotBando DNS"
 
 # NOTE: never whitelist captive-portal probe domains here
 # (connectivitycheck.gstatic.com, captive.apple.com, msftconnecttest.com,
@@ -192,7 +213,7 @@
 /ip hotspot user profile add name="hotbando-free" \
     rate-limit="2M/2M 512K/512K 2000/2000" \
     idle-timeout=30m \
-    session-time-limit=2h \
+    session-timeout=2h \
     address-list="hotspot-free" \
     transparent-proxy=yes \
     comment="HotBando free tier"
@@ -201,7 +222,7 @@
 /ip hotspot user profile add name="hotbando-paid" \
     rate-limit="10M/10M 1M/1M 5000/5000" \
     idle-timeout=1h \
-    session-time-limit=24h \
+    session-timeout=24h \
     address-list="hotspot-paid" \
     transparent-proxy=yes \
     comment="HotBando paid tier"
@@ -210,7 +231,7 @@
 /ip hotspot user profile add name="hotbando-vip" \
     rate-limit="50M/50M 5M/5M 10000/10000" \
     idle-timeout=2h \
-    session-time-limit=168h \
+    session-timeout=168h \
     address-list="hotspot-vip" \
     transparent-proxy=yes \
     comment="HotBando VIP tier"

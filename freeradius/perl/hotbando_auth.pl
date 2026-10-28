@@ -1,7 +1,7 @@
 # HotBando FreeRADIUS Perl Authentication Module
 # Supports two auth methods used by the MikroTik hotspot:
 #
-#   1. MAC auth (mac-auth-mode=as-username-and-password):
+#   1. MAC auth (mac-auth-mode=mac-as-username-and-password):
 #      User-Name / User-Password = client MAC address.
 #      The MAC is matched against users.mac_address. If the user is
 #      entitled (active + usage_until in future OR free_bytes left),

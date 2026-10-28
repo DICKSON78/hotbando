@@ -104,6 +104,18 @@ async function configureRouter(routerID, options = {}) {
         }
     }
 
+    // RouterOS API has no "[find ...]" syntax: print the menu and remove by id.
+    async function removeByComment(menu, comment) {
+        try {
+            const rows = await conn.write(`${menu}/print`);
+            for (const r of rows) {
+                if (r.comment === comment) {
+                    await conn.write(`${menu}/remove`, [`=.id=${r['.id']}`]);
+                }
+            }
+        } catch (e) { /* menu not available on this RouterOS version */ }
+    }
+
     // A hotspot created directly on a bridge *port* (wlan1) is bypassed by the
     // bridge. Resolve the bridge that contains the radio and put the hotspot
     // there instead, otherwise clients get plain internet with no portal.
@@ -192,6 +204,48 @@ async function configureRouter(routerID, options = {}) {
         ]);
     }
 
+    // Force every client DNS query through the router so the entries above are
+    // actually used (clients otherwise keep using the upstream DNS from DHCP).
+    await removeByComment('/ip/firewall/nat', 'HotBando dns');
+    await run('Redirect DNS (UDP)', '/ip/firewall/nat/add', [
+        `=chain=dstnat`,
+        `=protocol=udp`,
+        `=dst-port=53`,
+        `=in-interface=${hotspotIface}`,
+        `=action=redirect`,
+        `=to-ports=53`,
+        `=comment=HotBando dns`
+    ]);
+    await run('Redirect DNS (TCP)', '/ip/firewall/nat/add', [
+        `=chain=dstnat`,
+        `=protocol=tcp`,
+        `=dst-port=53`,
+        `=in-interface=${hotspotIface}`,
+        `=action=redirect`,
+        `=to-ports=53`,
+        `=comment=HotBando dns`
+    ]);
+    // DNS from unauthorized clients must reach the router itself.
+    await removeByComment('/ip/firewall/filter', 'HotBando DNS');
+    await run('Accept DNS (UDP)', '/ip/firewall/filter/add', [
+        `=chain=input`,
+        `=protocol=udp`,
+        `=dst-port=53`,
+        `=in-interface=${hotspotIface}`,
+        `=action=accept`,
+        `=place-before=0`,
+        `=comment=HotBando DNS`
+    ]);
+    await run('Accept DNS (TCP)', '/ip/firewall/filter/add', [
+        `=chain=input`,
+        `=protocol=tcp`,
+        `=dst-port=53`,
+        `=in-interface=${hotspotIface}`,
+        `=action=accept`,
+        `=place-before=0`,
+        `=comment=HotBando DNS`
+    ]);
+
     // 5. Hotspot server + profile
     await run('Add hotspot server', '/ip/hotspot/add', [
         `=name=hotspot1`,
@@ -200,21 +254,73 @@ async function configureRouter(routerID, options = {}) {
         `=addresses-per-mac=1`,
         `=disabled=no`
     ]);
-    await run('Enable hotspot RADIUS in profile', '/ip/hotspot/profile/set', [
-        `=[find default=yes]`,
-        `=use-radius=yes`,
-        `=html-directory=hotspot`,
-        `=login-by=http-pap,http-chap`,
-        `=trial-uptime=0s`
-    ]);
+    // Resolve the profile id via the API (no "[find ...]" expressions).
+    let hotspotProfileId = null;
+    try {
+        const profiles = await conn.write('/ip/hotspot/profile/print');
+        const prof = profiles.find(p => p.default === 'true') || profiles[0];
+        if (prof) hotspotProfileId = prof['.id'];
+    } catch (e) { /* ignore */ }
+    if (hotspotProfileId) {
+        await run('Enable hotspot RADIUS in profile', '/ip/hotspot/profile/set', [
+            `=.id=${hotspotProfileId}`,
+            `=use-radius=yes`,
+            `=html-directory=hotspot`,
+            `=login-by=http-pap,http-chap`
+        ]);
+        // Disable any free trial period (property name differs between RouterOS
+        // versions, so try both and ignore failures).
+        for (const prop of ['trial-uptime-limit', 'trial-uptime']) {
+            try {
+                await conn.write('/ip/hotspot/profile/set', [`=.id=${hotspotProfileId}`, `=${prop}=0s`]);
+            } catch (e) { /* not supported on this RouterOS version */ }
+        }
+    }
+
+    // Local user profiles referenced when a portal user is authorised.
+    const localProfiles = [
+        ['hotbando-free', '3M/3M 512K/512K 2000/2000', '30m', '2h'],
+        ['hotbando-paid', '12M/12M 1M/1M 5000/5000', '1h', '24h'],
+        ['hotbando-vip', '50M/50M 5M/5M 10000/10000', '2h', '168h']
+    ];
+    try {
+        const existingProfiles = await conn.write('/ip/hotspot/user/profile/print');
+        for (const [name, rateLimit, idleTimeout, sessionTimeout] of localProfiles) {
+            if (existingProfiles.some(p => p.name === name)) continue;
+            await conn.write('/ip/hotspot/user/profile/add', [
+                `=name=${name}`,
+                `=rate-limit=${rateLimit}`,
+                `=idle-timeout=${idleTimeout}`,
+                `=session-timeout=${sessionTimeout}`,
+                `=comment=HotBando ${name.replace('hotbando-', '')}`
+            ]);
+        }
+    } catch (e) { /* ignore */ }
 
     // 6. Firewall: NAT masquerade + walled garden
     await run('Add NAT masquerade', '/ip/firewall/nat/add', [
         `=chain=srcnat`,
         `=src-address=${hotspotCidr}`,
-        `=out-interface=ether1`,
         `=action=masquerade`
     ]);
+
+    // Clear our previous walled-garden entries so re-running is idempotent.
+    try {
+        const wg = await conn.write('/ip/hotspot/walled-garden/print');
+        for (const r of wg) {
+            if (r.comment && r.comment.startsWith('HotBando')) {
+                await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${r['.id']}`]);
+            }
+        }
+    } catch (e) { /* ignore */ }
+    try {
+        const wgip = await conn.write('/ip/hotspot/walled-garden/ip/print');
+        for (const r of wgip) {
+            if (r.comment && r.comment.startsWith('HotBando')) {
+                await conn.write('/ip/hotspot/walled-garden/ip/remove', [`=.id=${r['.id']}`]);
+            }
+        }
+    } catch (e) { /* ignore */ }
 
     // The portal host (and bare server IP) must be reachable before login.
     const portalHost = (() => {
@@ -235,12 +341,25 @@ async function configureRouter(routerID, options = {}) {
         ]);
     }
     if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(serverIp)) {
-        await run('Allow portal IP', '/ip/hotspot/walled-garden/add', [
+        // IP-based walled-garden entries use a separate menu and action=accept.
+        await run('Allow portal IP', '/ip/hotspot/walled-garden/ip/add', [
             `=dst-address=${serverIp}`,
-            `=action=allow`,
+            `=action=accept`,
             `=comment=HotBando portal`
         ]);
     }
+    await run('Allow DNS (UDP)', '/ip/hotspot/walled-garden/ip/add', [
+        `=protocol=udp`,
+        `=dst-port=53`,
+        `=action=accept`,
+        `=comment=HotBando DNS`
+    ]);
+    await run('Allow DNS (TCP)', '/ip/hotspot/walled-garden/ip/add', [
+        `=protocol=tcp`,
+        `=dst-port=53`,
+        `=action=accept`,
+        `=comment=HotBando DNS`
+    ]);
 
     // 7. RADIUS server pointing to HotBando
     if (serverIP && radiusSecret) {

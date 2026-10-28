@@ -392,10 +392,9 @@ function serverWalledGardenRules() {
     const rules = [];
 
     // Allow the portal hostname(s). Captive clients may reach the portal via
-    // the configured host, the www alias, or the bare server IP.
-    if (SERVER_PUBLIC_IS_IP) {
-        rules.push(`/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_HOST} comment="HotBando server"`);
-    } else {
+    // the configured host or the www alias. These are HTTP-level rules, so they
+    // belong in /ip hotspot walled-garden (dst-address is read-only there).
+    if (!SERVER_PUBLIC_IS_IP) {
         rules.push(`/ip hotspot walled-garden add action=allow dst-host="${SERVER_PUBLIC_HOST}" comment="HotBando server"`);
         if (!/^www\./i.test(SERVER_PUBLIC_HOST)) {
             rules.push(`/ip hotspot walled-garden add action=allow dst-host="www.${SERVER_PUBLIC_HOST}" comment="HotBando server (www)"`);
@@ -409,9 +408,10 @@ function serverWalledGardenRules() {
         }
     }
 
-    const serverIp = process.env.SERVER_PUBLIC_IP || '';
-    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(serverIp) && serverIp !== SERVER_PUBLIC_HOST) {
-        rules.push(`/ip hotspot walled-garden add action=allow dst-address=${serverIp} comment="HotBando server IP"`);
+    // IP-level rules must use the separate menu, where the action is accept.
+    const serverIp = process.env.SERVER_PUBLIC_IP || SERVER_PUBLIC_HOST;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(serverIp)) {
+        rules.push(`/ip hotspot walled-garden ip add action=accept dst-address=${serverIp} comment="HotBando server IP"`);
     }
 
     return rules.join('\n');
@@ -548,7 +548,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip dns static add name="nmcheck.gnome.org" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
 
 /ip firewall nat remove [find comment="HotBando masquerade"]
-/ip firewall nat add chain=srcnat out-interface=$wanIface action=masquerade comment="HotBando masquerade"
+/ip firewall nat add chain=srcnat src-address=${hotspotCidr} action=masquerade comment="HotBando masquerade"
 # Remove the old, backwards WAN->hotspot redirects (they hijack inbound web
 # traffic and are not needed: the hotspot server redirects clients itself).
 /ip firewall nat remove [find comment="HotBando http"]
@@ -557,8 +557,9 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip firewall nat remove [find comment="HotBando dns"]
 /ip firewall nat add chain=dstnat protocol=udp dst-port=53 in-interface=$hotspotIface action=redirect to-ports=53 comment="HotBando dns"
 /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 in-interface=$hotspotIface action=redirect to-ports=53 comment="HotBando dns"
-/ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=$hotspotIface action=accept comment="HotBando DNS"
-/ip firewall filter add chain=input protocol=tcp dst-port=53 in-interface=$hotspotIface action=accept comment="HotBando DNS"
+/ip firewall filter remove [find comment="HotBando DNS"]
+/ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=$hotspotIface action=accept place-before=0 comment="HotBando DNS"
+/ip firewall filter add chain=input protocol=tcp dst-port=53 in-interface=$hotspotIface action=accept place-before=0 comment="HotBando DNS"
 
 /ip hotspot remove [find]
 /ip hotspot profile remove [find name="hotbando-profile"]
@@ -567,15 +568,20 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
   html-directory=hotspot \\
   use-radius=yes radius-accounting=yes radius-interim-update=30s \\
   radius-mac-format=XX:XX:XX:XX:XX:XX \\
-  mac-auth-mode=as-username-and-password \\
-  trial-uptime=0s \\
   hotspot-address=${HOTSPOT_IP} dns-name="hotspot.hotbando.local" \\
   comment="HotBando hotspot profile"
+# mac-auth-mode is unavailable on very old RouterOS builds; set it separately
+# so the profile is still created (and the portal still works) if unsupported.
+:do { /ip hotspot profile set [find name="hotbando-profile"] mac-auth-mode=mac-as-username-and-password } on-error={}
 /ip hotspot add name="hotbando-server" interface=$hotspotIface address-pool=hotbando-pool profile=hotbando-profile disabled=no comment="HotBando hotspot server"
 
 /ip hotspot walled-garden remove [find]
+# IP-level rules live in the "ip" submenu, where the action is accept (not
+# allow). Clear our old entries first so re-provisioning is idempotent.
+/ip hotspot walled-garden ip remove [find comment~"HotBando"]
 ${serverWalledGardenRules()}
-/ip hotspot walled-garden add action=allow dst-port=53 comment="HotBando DNS"
+/ip hotspot walled-garden ip add action=accept protocol=udp dst-port=53 comment="HotBando DNS"
+/ip hotspot walled-garden ip add action=accept protocol=tcp dst-port=53 comment="HotBando DNS"
 # IMPORTANT: never whitelist the OS captive-portal probe hosts
 # (connectivitycheck.gstatic.com, captive.apple.com, msftconnecttest.com,
 # detectportal.firefox.com, ...). Whitelisting them lets the phone's probe
@@ -602,9 +608,9 @@ ${serverWalledGardenRules()}
 /radius incoming set accept=yes port=1700
 
 /ip hotspot user profile remove [find]
-/ip hotspot user profile add name="hotbando-free" rate-limit="3M/3M 512K/512K 2000/2000" idle-timeout=30m session-time-limit=2h comment="HotBando free"
-/ip hotspot user profile add name="hotbando-paid" rate-limit="12M/12M 1M/1M 5000/5000" idle-timeout=1h session-time-limit=24h comment="HotBando paid"
-/ip hotspot user profile add name="hotbando-vip" rate-limit="50M/50M 5M/5M 10000/10000" idle-timeout=2h session-time-limit=168h comment="HotBando VIP"
+/ip hotspot user profile add name="hotbando-free" rate-limit="3M/3M 512K/512K 2000/2000" idle-timeout=30m session-timeout=2h comment="HotBando free"
+/ip hotspot user profile add name="hotbando-paid" rate-limit="12M/12M 1M/1M 5000/5000" idle-timeout=1h session-timeout=24h comment="HotBando paid"
+/ip hotspot user profile add name="hotbando-vip" rate-limit="50M/50M 5M/5M 10000/10000" idle-timeout=2h session-timeout=168h comment="HotBando VIP"
 
 /ip hotspot user remove [find]
 /ip hotspot user add name="admin" password="hotbando2024" profile=hotbando-vip server=hotbando-server comment="HotBando admin"

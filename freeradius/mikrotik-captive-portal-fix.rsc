@@ -21,27 +21,105 @@
 # ----------------------------------------------------------------------------
 :local hsIface ""
 :local hsIp ""
+:local hsCidr ""
 :local hsProfile ""
+:local hsOldIface ""
 
+# Find the existing hotspot server, if any.
 :foreach h in=[/ip hotspot find] do={
   :set hsIface [/ip hotspot get $h interface]
   :set hsProfile [/ip hotspot get $h profile]
   :do { /ip hotspot enable $h } on-error={}
 }
 
+# A hotspot created on a bridge PORT (e.g. wlan1) is bypassed by the bridge:
+# traffic is switched before it reaches the hotspot, so clients get plain
+# internet and never see the portal. Move it to the parent bridge.
+:if ([:len $hsIface] > 0) do={
+  :if ([:len [/interface bridge find name=$hsIface]] = 0) do={
+    :foreach p in=[/interface bridge port find interface=$hsIface] do={
+      :set hsOldIface $hsIface
+      :set hsIface [/interface bridge port get $p bridge]
+    }
+  }
+}
+
+# If there is no hotspot at all, use a bridge that exists on the router.
+:if ([:len $hsIface] = 0) do={
+  :if ([:len [/interface bridge find name="bridge-hotbando"]] > 0) do={
+    :set hsIface "bridge-hotbando"
+  } else={
+    :foreach b in=[/interface bridge find] do={ :set hsIface [/interface bridge get $b name] }
+  }
+}
+
+# Read the gateway/subnet from the final hotspot interface.
 :if ([:len $hsIface] > 0) do={
   :foreach a in=[/ip address find interface=$hsIface] do={
     :local addr [/ip address get $a address]
-    :set hsIp [:pick $addr 0 [:find $addr "/"]]
+    :local slash [:find $addr "/"]
+    :set hsIp [:pick $addr 0 $slash]
+    :set hsCidr $addr
+  }
+}
+
+# The address may still live on the old bridge port; move it to the bridge.
+:if ([:len $hsIp] = 0) do={
+  :if ([:len $hsOldIface] > 0) do={
+    :foreach a in=[/ip address find interface=$hsOldIface] do={
+      :local addr [/ip address get $a address]
+      :local slash [:find $addr "/"]
+      :set hsIp [:pick $addr 0 $slash]
+      :set hsCidr $addr
+      :do { /ip address remove $a } on-error={}
+    }
   }
 }
 :if ([:len $hsIp] = 0) do={ :set hsIp "10.5.50.1" }
+:if ([:len $hsCidr] = 0) do={ :set hsCidr "10.5.50.1/24" }
 
-:put ("HotBando repair: interface = " . $hsIface . ", gateway = " . $hsIp)
+# Make sure the bridge actually carries the gateway address.
+:if ([:len $hsIface] > 0) do={
+  :if ([:len [/ip address find interface=$hsIface]] = 0) do={
+    :do { /ip address add address=$hsCidr interface=$hsIface comment="HotBando hotspot gateway" } on-error={}
+  }
+}
+
+# Point the hotspot server at the bridge (and create one if it is missing).
+:if ([:len [/ip hotspot find]] > 0) do={
+  :if ([:len $hsIface] > 0) do={
+    :do { /ip hotspot set [find] interface=$hsIface } on-error={}
+  }
+} else={
+  :if ([:len $hsIface] > 0) do={
+    :local prof "default"
+    :if ([:len [/ip hotspot profile find name="hotbando-profile"]] > 0) do={
+      :set prof "hotbando-profile"
+    } else={
+      :do {
+        /ip hotspot profile add name="hotbando-profile" login-by=http-pap,http-chap,mac html-directory=hotspot use-radius=yes radius-accounting=yes radius-interim-update=30s radius-mac-format=XX:XX:XX:XX:XX:XX hotspot-address=$hsIp dns-name="hotspot.hotbando.local" comment="HotBando hotspot profile"
+        :set prof "hotbando-profile"
+      } on-error={}
+    }
+    :if ([:len $hsProfile] = 0) do={ :set hsProfile $prof }
+    :if ([:len [/ip pool find name="hotbando-pool"]] > 0) do={
+      :do { /ip hotspot add name="hotbando-server" interface=$hsIface address-pool=hotbando-pool profile=$prof disabled=no comment="HotBando hotspot server" } on-error={}
+    } else={
+      :do { /ip hotspot add name="hotbando-server" interface=$hsIface profile=$prof disabled=no comment="HotBando hotspot server" } on-error={}
+    }
+  }
+}
+
+:put ("HotBando repair: interface = " . $hsIface . ", gateway = " . $hsIp . ", subnet = " . $hsCidr)
 
 # Never hand out a free trial period: that lets clients browse without login.
+# Property names differ between RouterOS versions, so try both.
 :if ([:len $hsProfile] > 0) do={
-  :do { /ip hotspot profile set [find name=$hsProfile] trial-uptime=0s hotspot-address=$hsIp } on-error={}
+  :do { /ip hotspot profile set [find name=$hsProfile] login-by=http-pap,http-chap,mac } on-error={}
+  :do { /ip hotspot profile set [find name=$hsProfile] mac-auth-mode=mac-as-username-and-password } on-error={}
+  :do { /ip hotspot profile set [find name=$hsProfile] trial-uptime-limit=0s } on-error={}
+  :do { /ip hotspot profile set [find name=$hsProfile] trial-uptime=0s } on-error={}
+  :do { /ip hotspot profile set [find name=$hsProfile] hotspot-address=$hsIp } on-error={}
 }
 
 # ----------------------------------------------------------------------------
@@ -61,6 +139,20 @@
   }
 }
 
+# Same for any IP-level rules that whitelisted the probes.
+:foreach r in=[/ip hotspot walled-garden ip find] do={
+  :local dh [/ip hotspot walled-garden ip get $r dst-host]
+  :local c [/ip hotspot walled-garden ip get $r comment]
+  :if ($dh = "connectivitycheck.gstatic.com" || $dh = "connectivitycheck.android.com" || \
+       $dh = "captive.apple.com" || $dh = "msftconnecttest.com" || \
+       $dh = "www.msftconnecttest.com" || $dh = "msftncsi.com" || \
+       $dh = "www.msftncsi.com" || $dh = "www.google.com" || \
+       $dh = "generate_204" || $dh = "detectportal.firefox.com" || \
+       $dh = "nmcheck.gnome.org" || $c = "captive" || $c = "HotBando captive") do={
+    /ip hotspot walled-garden ip remove $r
+  }
+}
+
 # Allow the portal itself before login (hostname, www alias, bare IP).
 :if ([:len [/ip hotspot walled-garden find dst-host="<HOTBANDO_HOST>"]] = 0) do={
   /ip hotspot walled-garden add action=allow dst-host="<HOTBANDO_HOST>" comment="HotBando portal"
@@ -68,11 +160,16 @@
 :if ([:len [/ip hotspot walled-garden find dst-host="www.<HOTBANDO_HOST>"]] = 0) do={
   /ip hotspot walled-garden add action=allow dst-host="www.<HOTBANDO_HOST>" comment="HotBando portal"
 }
-:if ([:len [/ip hotspot walled-garden find dst-address="<HOTBANDO_IP>"]] = 0) do={
-  /ip hotspot walled-garden add action=allow dst-address=<HOTBANDO_IP> comment="HotBando portal IP"
+# IP-based rules use the separate "ip" submenu with action=accept.
+:if ([:len [/ip hotspot walled-garden ip find dst-address="<HOTBANDO_IP>"]] > 0) do={
+  /ip hotspot walled-garden ip remove [find dst-address="<HOTBANDO_IP>"]
 }
-:if ([:len [/ip hotspot walled-garden find dst-port=53]] = 0) do={
-  /ip hotspot walled-garden add action=allow dst-port=53 comment="HotBando DNS"
+/ip hotspot walled-garden ip add action=accept dst-address=<HOTBANDO_IP> comment="HotBando portal IP"
+:if ([:len [/ip hotspot walled-garden ip find protocol=udp dst-port=53]] = 0) do={
+  /ip hotspot walled-garden ip add action=accept protocol=udp dst-port=53 comment="HotBando DNS"
+}
+:if ([:len [/ip hotspot walled-garden ip find protocol=tcp dst-port=53]] = 0) do={
+  /ip hotspot walled-garden ip add action=accept protocol=tcp dst-port=53 comment="HotBando DNS"
 }
 
 # ----------------------------------------------------------------------------
@@ -97,6 +194,13 @@
   }
 }
 
+# Make sure the DHCP server on the hotspot interface is actually serving.
+:if ([:len $hsIface] > 0) do={
+  :foreach d in=[/ip dhcp-server find interface=$hsIface] do={
+    :do { /ip dhcp-server enable $d } on-error={}
+  }
+}
+
 # ----------------------------------------------------------------------------
 # 3. Remove the old WAN->hotspot dstnat hijacks, force client DNS to the router
 # ----------------------------------------------------------------------------
@@ -108,8 +212,18 @@
 /ip firewall nat add chain=dstnat protocol=udp dst-port=53 in-interface=$hsIface action=redirect to-ports=53 comment="HotBando dns"
 /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 in-interface=$hsIface action=redirect to-ports=53 comment="HotBando dns"
 
+# DNS from unauthorized clients must reach the router itself.
+/ip firewall filter remove [find comment="HotBando DNS"]
+:do {
+  /ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=$hsIface action=accept place-before=0 comment="HotBando DNS"
+  /ip firewall filter add chain=input protocol=tcp dst-port=53 in-interface=$hsIface action=accept place-before=0 comment="HotBando DNS"
+} on-error={}
+
+# Re-create masquerade bound to the hotspot subnet. The old script pinned it to
+# out-interface=ether1, which breaks on PPPoE/LTE/uplink-on-another-port setups.
+/ip firewall nat remove [find comment="HotBando masquerade"]
 :if ([:len [/ip firewall nat find chain=srcnat action=masquerade]] = 0) do={
-  /ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade comment="HotBando masquerade"
+  /ip firewall nat add chain=srcnat src-address=$hsCidr action=masquerade comment="HotBando masquerade"
 }
 
 # ----------------------------------------------------------------------------
@@ -119,6 +233,7 @@
   :do {
     :foreach w in=[/interface wireless find] do={
       :if ([:len [/interface bridge port find interface=$w bridge=$hsIface]] = 0) do={
+        :do { /interface bridge port remove [find interface=$w] } on-error={}
         :do { /interface bridge port add bridge=$hsIface interface=$w } on-error={}
       }
     }
@@ -126,6 +241,7 @@
   :do {
     :foreach w in=[/interface wifi find] do={
       :if ([:len [/interface bridge port find interface=$w bridge=$hsIface]] = 0) do={
+        :do { /interface bridge port remove [find interface=$w] } on-error={}
         :do { /interface bridge port add bridge=$hsIface interface=$w } on-error={}
       }
     }
@@ -148,7 +264,7 @@
 # 6. Re-enable the hotspot and restore the redirect page
 # ----------------------------------------------------------------------------
 /system scheduler remove [find name="hotbando-watchdog"]
-/system scheduler add name="hotbando-watchdog" interval=5m on-event={/ip hotspot set [find name=hotbando-server] disabled=no} comment="HotBando watchdog"
+/system scheduler add name="hotbando-watchdog" interval=5m on-event={:do {/ip hotspot enable [find]} on-error={}} comment="HotBando watchdog"
 
 :do { /file remove hotspot/login.html } on-error={}
 :local portalUrl "https://<HOTBANDO_HOST>/hotspot?router_id=<ROUTER_ID>&mac=\$(mac)&ip=\$(ip)"
