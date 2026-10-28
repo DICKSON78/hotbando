@@ -1,5 +1,6 @@
 // Idempotent schema upgrade for live branch and approximate coverage mapping.
 const db = require('../config/database');
+const { encrypt, isEncrypted } = require('../utils/encryption');
 
 async function ensureColumn(table, column, definition) {
   const [rows] = await db.execute(
@@ -23,6 +24,13 @@ async function migrate() {
   await ensureColumn('vouchers', 'payment_order_reference', 'VARCHAR(64) NULL');
   await ensureColumn('users', 'paid_bytes_remaining', 'BIGINT NOT NULL DEFAULT 0');
   await ensureColumn('users', 'paid_data_limit_bytes', 'BIGINT NOT NULL DEFAULT 0 COMMENT \'0 means unlimited data on the active package\'');
+  // Re-encrypt legacy router credentials with the stable deployment key.
+  const [routers] = await db.execute('SELECT id, password FROM mikrotiks');
+  for (const router of routers) {
+    if (router.password && !isEncrypted(router.password)) {
+      await db.execute('UPDATE mikrotiks SET password = ? WHERE id = ?', [encrypt(router.password), router.id]);
+    }
+  }
   // Activate the package's published quota for currently active paid users.
   // Previous releases did not account package bytes, so this starts the
   // enforcement counter at the entitlement limit when this migration runs.
