@@ -209,7 +209,7 @@ router.get('/clickpesa-balance', clickpesaController.getBalance);
 
 router.get('/withdrawals', async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const page = Math.min(1000000, Math.max(1, parseInt(req.query.page, 10) || 1));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const status = req.query.status || 'pending';
     const where = ["t.transaction_type = 'withdrawal'"];
@@ -217,13 +217,17 @@ router.get('/withdrawals', async (req, res) => {
     if (status !== 'all') { where.push('t.status = ?'); values.push(status); }
     const condition = where.join(' AND ');
     const [[countRow]] = await db.execute(`SELECT COUNT(*) AS total FROM transactions t WHERE ${condition}`, values);
+    // MySQL prepared execution on the production server rejects placeholders
+    // in LIMIT/OFFSET (ER_WRONG_ARGUMENTS). Both values are parsed/clamped
+    // integers above, so interpolate only these safe numeric values.
+    const offset = (page - 1) * limit;
     const [rows] = await db.execute(`
       SELECT t.id, t.user_id, t.amount, t.payment_phone, t.payment_method, t.payment_reference,
              t.status, t.created_at, COALESCE(u.name, CONCAT('User #', t.user_id)) AS user_name,
              u.phone_number, u.email, u.company_name
       FROM transactions t LEFT JOIN users u ON u.id = t.user_id
-      WHERE ${condition} ORDER BY t.created_at DESC LIMIT ? OFFSET ?
-    `, [...values, limit, (page - 1) * limit]);
+      WHERE ${condition} ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}
+    `, values);
     const pagination = { page, limit, total: Number(countRow.total || 0), pages: Math.max(1, Math.ceil(Number(countRow.total || 0) / limit)) };
     res.json({ success: true, data: rows, withdrawals: rows, pagination });
   } catch (error) {
