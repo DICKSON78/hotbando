@@ -2,6 +2,17 @@
   <SiteLayout>
     <!-- Hero -->
     <section class="relative overflow-hidden bg-gradient-to-b from-[#111118] via-[#0a0a0f] to-[#0a0a0f]">
+      <div class="absolute inset-0 pointer-events-none">
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" class="opacity-[0.05]">
+          <defs>
+            <pattern id="honeycomb-hero" x="0" y="0" width="56" height="97" patternUnits="userSpaceOnUse">
+              <path d="M28 0L56 16.2V48.5L28 64.7L0 48.5V16.2Z" fill="none" stroke="#FF7A30" stroke-width="1.5"/>
+              <path d="M28 32.4L56 48.6V80.9L28 97L0 80.9V48.6Z" fill="none" stroke="#FF7A30" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#honeycomb-hero)"/>
+        </svg>
+      </div>
       <div class="absolute -top-40 -left-40 w-[500px] h-[500px] bg-[#FF7A30]/15 rounded-full blur-3xl pointer-events-none"></div>
       <div class="absolute top-20 -right-40 w-[400px] h-[400px] bg-[#FF7A30]/10 rounded-full blur-3xl pointer-events-none"></div>
 
