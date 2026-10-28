@@ -12,6 +12,15 @@
       </span>
     </div>
 
+    <!-- Durable payment confirmations and other account messages -->
+    <div v-if="notifications.length" class="mx-4 mt-3 space-y-2">
+      <div v-for="item in notifications" :key="item.id" class="rounded-xl border border-[#262633] bg-[#111118] px-4 py-3">
+        <p class="text-sm font-semibold text-white">{{ item.title }}</p>
+        <p class="mt-1 text-xs text-white/60">{{ item.message }}</p>
+        <router-link v-if="item.action_url" :to="item.action_url" class="mt-2 inline-block text-xs font-semibold text-[#FF7A30]">{{ item.action_text || 'Fungua' }}</router-link>
+      </div>
+    </div>
+
     <!-- Alert banner -->
     <div v-if="alertMsg" class="mx-4 mt-3 rounded-2xl p-4 flex items-start gap-3" :style="alertType === 'warn' ? 'background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3)' : alertType === 'danger' ? 'background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3)' : 'background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3)'">
       <i class="fas mt-0.5" :class="alertType === 'warn' ? 'fa-exclamation-triangle text-yellow-400' : alertType === 'danger' ? 'fa-times-circle text-red-400' : 'fa-info-circle text-blue-400'"></i>
@@ -111,6 +120,7 @@ const connMsg = ref('')
 const connError = ref(false)
 const alertMsg = ref('')
 const alertType = ref('info')
+const notifications = ref([])
 let lowBundleNotified = false
 let connectedNotified = false
 let outOfBundleNotified = false
@@ -185,9 +195,17 @@ async function loadData() {
     routerReady.value = !!currentMac && currentMac === normalizeMac(store.user?.mac_address) && String(store.routerID) === String(store.user?.last_router_id || '')
     connected.value = (!!r.isActive || Number(r.user?.free_bytes) > 0) && routerReady.value
     checkAlert()
+    loadNotifications()
   } catch (e) {
     if (e.response?.status === 401) router.push('/hotspot/login')
   }
+}
+
+async function loadNotifications() {
+  try {
+    const r = await hotspotGet('/notifications')
+    notifications.value = Array.isArray(r.notifications) ? r.notifications : []
+  } catch (e) { /* account dashboard remains usable if messages are unavailable */ }
 }
 
 async function loadUsage() {

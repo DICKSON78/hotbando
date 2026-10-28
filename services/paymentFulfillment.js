@@ -82,21 +82,23 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
     return { alreadyProcessed: true };
   }
 
-  // Verify amount/currency if provided
+  const purpose = tx.purpose;
+  const userId = tx.user_id;
+  const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
+
+  // The package/wallet value stays at the order amount. ClickPesa adds the
+  // disclosed mobile-money fee to the payer's total, so accept either amount.
   const orderAmount = Number(tx.amount);
   const paidAmount = amount !== undefined && amount !== null ? Number(amount) : orderAmount;
+  const payerTotal = Number(extra.customer_total || orderAmount);
   const orderCurrency = tx.currency || 'TZS';
   const paidCurrency = currency || orderCurrency;
-  if (Math.abs(paidAmount - orderAmount) > 0.01) {
+  if (![orderAmount, payerTotal].some(expected => Math.abs(paidAmount - expected) <= 0.01)) {
     throw new Error('Amount mismatch');
   }
   if (paidCurrency !== orderCurrency) {
     throw new Error('Currency mismatch');
   }
-
-  const purpose = tx.purpose;
-  const userId = tx.user_id;
-  const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
 
   let result = {};
 
@@ -132,6 +134,21 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
   // Update transaction
   await executor.execute('UPDATE clickpesa_transactions SET status = ?, processed = 1, clickpesa_id = COALESCE(?, clickpesa_id) WHERE order_reference = ?',
     ['SUCCESS', providerRef || null, orderReference]);
+
+  if (userId) {
+    const isGift = purpose === 'package_purchase' && !!extra.gift;
+    const title = isGift ? 'Vocha yako iko tayari' : 'Malipo yamefanikiwa';
+    const details = result.voucher
+      ? `Malipo ya TSh ${orderAmount.toLocaleString()} yamepokelewa. Vocha yako: ${result.voucher}`
+      : purpose === 'package_purchase'
+        ? `Malipo ya TSh ${orderAmount.toLocaleString()} yamepokelewa na kifurushi kimewashwa.`
+        : `Malipo ya TSh ${orderAmount.toLocaleString()} yamepokelewa na fedha zimeongezwa kwenye wallet yako.`;
+    await executor.execute(
+      `INSERT INTO notifications (user_id, notification_type, title, message, action_url, action_text, created_at)
+       VALUES (?, 'success', ?, ?, ?, ?, NOW())`,
+      [userId, title, details, isGift ? '/hotspot/subscribe' : '/hotspot/dashboard', isGift ? 'Tazama vocha' : 'Fungua dashboard']
+    );
+  }
 
   // Record in payments ledger
   try {

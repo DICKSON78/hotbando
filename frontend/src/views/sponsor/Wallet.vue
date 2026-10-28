@@ -31,6 +31,8 @@
       :checkout-url="checkoutUrl"
       :order-tracking-id="checkoutTracking"
       :amount="checkoutAmount"
+      :provider-fee="checkoutFee"
+      :total-amount="checkoutTotal"
       success-message="Payment received. Your wallet is being topped up."
       @close="closeCheckout"
       @completed="onCheckoutCompleted"
@@ -56,6 +58,8 @@ const showCheckout = ref(false)
 const checkoutUrl = ref('')
 const checkoutTracking = ref('')
 const checkoutAmount = ref(0)
+const checkoutFee = ref(0)
+const checkoutTotal = ref(0)
 
 function formatMoney(n) { return 'TSh ' + (Number(n || 0).toLocaleString()) }
 
@@ -122,6 +126,8 @@ async function deposit() {
       checkoutUrl.value = r.redirect_url || r.checkout_url || ''
       checkoutTracking.value = r.order_tracking_id || r.orderReference || ''
       checkoutAmount.value = Number(amount.value || 0)
+      checkoutFee.value = Number(r.providerFee || 0)
+      checkoutTotal.value = Number(r.customerTotal || amount.value || 0)
       showCheckout.value = true
       depositing.value = false
       return
@@ -129,6 +135,8 @@ async function deposit() {
       checkoutUrl.value = ''
       checkoutTracking.value = r.orderReference
       checkoutAmount.value = Number(amount.value || 0)
+      checkoutFee.value = Number(r.providerFee || 0)
+      checkoutTotal.value = Number(r.customerTotal || amount.value || 0)
       showCheckout.value = true
       depositing.value = false
       return
@@ -160,5 +168,7 @@ function closeCheckout() {
   checkoutUrl.value = ''
   checkoutTracking.value = ''
   checkoutAmount.value = 0
+  checkoutFee.value = 0
+  checkoutTotal.value = 0
 }
 </script>

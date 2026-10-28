@@ -29,9 +29,8 @@ function createChecksum(payload) {
 
 function verifyWebhookChecksum(payload, receivedChecksum) {
   if (!CHECKSUM_KEY) {
-    // No checksum key configured — accept but log warning
-    logger.warn('ClickPesa CHECKSUM_KEY not configured — webhook checksum not verified');
-    return true;
+    logger.warn('ClickPesa CHECKSUM_KEY not configured — checksum verification unavailable');
+    return false;
   }
   if (!receivedChecksum) {
     logger.warn('ClickPesa webhook received without checksum header');
@@ -103,7 +102,7 @@ async function getToken() {
 
 async function previewUSSDPush({ amount, phoneNumber, orderReference }) {
   const token = await getToken();
-  const payload = { amount: String(amount), currency: 'TZS', orderReference, phoneNumber };
+  const payload = { amount: String(amount), currency: 'TZS', orderReference, phoneNumber, fetchSenderDetails: true };
   if (CHECKSUM_KEY) payload.checksum = createChecksum(payload);
 
   const { data } = await axios.post(`${BASE_URL}/payments/preview-ussd-push-request`, payload, {
@@ -155,6 +154,15 @@ async function queryPaymentStatus(orderReference) {
   return data;
 }
 
+async function queryPayoutStatus(orderReference) {
+  const token = await getToken();
+  const { data } = await axios.get(`${BASE_URL}/payouts/${encodeURIComponent(orderReference)}`, {
+    headers: { Authorization: token },
+    timeout: 15000,
+  });
+  return data;
+}
+
 async function getBalance() {
   const token = await getToken();
   const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
@@ -189,6 +197,7 @@ module.exports = {
   previewUSSDPush,
   initiateUSSDPush,
   queryPaymentStatus,
+  queryPayoutStatus,
   getBalance,
   queryAllPayments,
 };

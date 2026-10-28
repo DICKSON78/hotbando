@@ -227,6 +227,23 @@ router.get('/usage', requireWifi, async (req, res) => {
     }
 });
 
+// Payment confirmations and failures remain available after the checkout modal closes.
+router.get('/notifications', async (req, res) => {
+    const user = req.session.hotbando_user;
+    if (!user?.id) return res.status(401).json({ error: 'Umelazimika kuingia kwenye akaunti yako.' });
+    try {
+        const [rows] = await db.execute(
+            `SELECT id, notification_type, title, message, action_url, action_text, is_read, created_at
+             FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`,
+            [user.id]
+        );
+        res.json({ notifications: rows });
+    } catch (error) {
+        console.error('Hotspot notifications error:', error);
+        res.status(500).json({ error: 'Imeshindikana kupata ujumbe.' });
+    }
+});
+
 // Logout (JSON)
 router.get('/logout', async (req, res) => {
     const user = req.session.hotbando_user;

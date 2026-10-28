@@ -12,6 +12,7 @@ function requireAdmin(req, res, next) {
 }
 
 router.post('/pay', ctrl.initiatePayment);
+router.post('/preview', ctrl.previewPayment);
 router.get('/status/:orderReference', ctrl.checkStatus);
 router.get('/confirm/:orderReference', ctrl.confirmPayment);
 router.post('/webhook', express.raw({ type: 'application/json' }), ctrl.webhook);

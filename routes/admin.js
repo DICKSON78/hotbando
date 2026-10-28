@@ -40,6 +40,31 @@ router.get('/payments/ledger', async (req, res) => {
   }
 });
 
+// Provider callbacks are kept as a separate audit trail to avoid counting a
+// settled callback a second time alongside its actual ledger payment.
+router.get('/payments/webhook-events', async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const [events] = await db.execute(
+      `SELECT id, provider, event_type, provider_ref, order_reference,
+              status, error_message, received_at, processed_at,
+              COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.data.collectedAmount')),
+                JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.data.amount')),
+                JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.collectedAmount')),
+                JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.amount'))
+              ) AS reported_amount
+       FROM payment_events WHERE provider = 'clickpesa'
+       ORDER BY received_at DESC LIMIT ?`,
+      [limit]
+    );
+    res.json({ events });
+  } catch (error) {
+    console.error('ClickPesa webhook audit error:', error);
+    res.status(500).json({ error: 'Failed to load ClickPesa webhook audit' });
+  }
+});
+
 // Unified payment and wallet ledger consumed by the Vue Payments page.
 const ledgerSql = `
   SELECT CONCAT('payment-', p.id) AS id, p.created_at,

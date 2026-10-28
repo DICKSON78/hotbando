@@ -105,7 +105,13 @@
         </div>
 
         <div class="mt-3">
-          <PhoneInput :initialDigits="myPhone" @change="v => payerPhone = v" label="Namba ya simu kwa malipo" hint="Utapokea ombi la malipo kwenye simu yako kupitia ClickPesa Push USSD." />
+          <PhoneInput :initialDigits="myPhone" @change="onPayerPhoneChange" label="Namba ya simu kwa malipo" hint="Utapokea ombi la malipo kwenye simu yako kupitia ClickPesa Push USSD." />
+        </div>
+
+        <div v-if="paymentQuote" class="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
+          <div class="flex justify-between text-white/60"><span>Bei ya kifurushi</span><span>TSh {{ formatPrice(paymentQuote.amount) }}</span></div>
+          <div class="flex justify-between text-white/60 mt-1"><span>Ada ya ClickPesa / {{ paymentQuote.channel }}</span><span>TSh {{ formatPrice(paymentQuote.fee) }}</span></div>
+          <div class="flex justify-between text-white font-semibold mt-2 pt-2 border-t border-white/10"><span>Jumla kwenye simu</span><span>TSh {{ formatPrice(paymentQuote.total) }}</span></div>
         </div>
 
         <div v-if="buyMode === 'gift'" class="pay-gift-note">
@@ -116,7 +122,7 @@
         <button class="pay-start" :disabled="processing" @click="startPayment">
           <i v-if="processing" class="fas fa-spinner fa-spin"></i>
           <i v-else class="fa-solid fa-lock"></i>
-          {{ processing ? 'Inatuma ombi la malipo...' : 'Lipia kwa ClickPesa Push USSD' }}
+          {{ processing ? (paymentQuote ? 'Inatuma ombi la malipo...' : 'Inakokotoa ada...') : paymentQuote ? `Tuma Push USSD · TSh ${formatPrice(paymentQuote.total)}` : 'Angalia jumla ya malipo' }}
         </button>
 
         <p v-if="modalMsg" class="pay-msg mt-3" :class="modalError ? 'pay-msg-err' : 'pay-msg-ok'">{{ modalMsg }}</p>
@@ -137,6 +143,8 @@
       :checkout-url="checkoutUrl"
       :order-tracking-id="checkoutTracking"
       :amount="checkoutAmount"
+      :provider-fee="checkoutFee"
+      :total-amount="checkoutTotal"
       success-message="Payment received. Your package is being activated."
       @close="closeCheckout"
       @completed="onCheckoutCompleted"
@@ -171,6 +179,7 @@ const modalMsg = ref('')
 const modalError = ref(false)
 const generatedVoucher = ref('')
 const copied = ref(false)
+const paymentQuote = ref(null)
 const returnStatus = ref('')
 const returnMessage = ref('')
 const returnVoucher = ref('')
@@ -179,6 +188,8 @@ const showCheckout = ref(false)
 const checkoutUrl = ref('')
 const checkoutTracking = ref('')
 const checkoutAmount = ref(0)
+const checkoutFee = ref(0)
+const checkoutTotal = ref(0)
 
 onMounted(async () => {
   try {
@@ -252,6 +263,7 @@ function openModal(pkg) {
   selectedPackage.value = pkg
   buyMode.value = 'me'
   generatedVoucher.value = ''
+  paymentQuote.value = null
   modalMsg.value = ''
   modalError.value = false
   copied.value = false
@@ -280,11 +292,18 @@ function closeCheckout() {
   checkoutUrl.value = ''
   checkoutTracking.value = ''
   checkoutAmount.value = 0
+  checkoutFee.value = 0
+  checkoutTotal.value = 0
 }
 
 function toLocalPhone(p) {
   if (!p) return ''
   return p.startsWith('+255') ? '0' + p.slice(4) : p.replace(/\D/g, '')
+}
+
+function onPayerPhoneChange(value) {
+  payerPhone.value = value
+  paymentQuote.value = null
 }
 
 async function startPayment() {
@@ -300,16 +319,35 @@ async function startPayment() {
   modalError.value = false
   generatedVoucher.value = ''
   try {
+    if (!paymentQuote.value) {
+      const quote = await apiPost('/clickpesa/preview', {
+        purpose: 'package_purchase',
+        package_id: selectedPackage.value.id,
+        phoneNumber: phone,
+      })
+      paymentQuote.value = {
+        amount: Number(quote.amount || selectedPackage.value.price),
+        fee: Number(quote.fee || 0),
+        total: Number(quote.total || quote.amount || selectedPackage.value.price),
+        channel: quote.channel || 'Mobile Money',
+      }
+      modalMsg.value = 'Kagua jumla hapo juu. Bonyeza tena kutuma Push USSD.'
+      processing.value = false
+      return
+    }
     const r = await apiPost('/clickpesa/pay', {
       purpose: 'package_purchase',
       package_id: selectedPackage.value.id,
       phoneNumber: phone,
       gift: buyMode.value === 'gift',
+      expectedTotal: paymentQuote.value.total,
     })
     if (r.success && r.orderReference) {
       checkoutUrl.value = ''
       checkoutTracking.value = r.orderReference
-      checkoutAmount.value = Number(selectedPackage.value?.price || 0)
+      checkoutAmount.value = Number(r.amount || paymentQuote.value.amount)
+      checkoutFee.value = Number(r.providerFee ?? paymentQuote.value.fee)
+      checkoutTotal.value = Number(r.customerTotal || paymentQuote.value.total)
       showModal.value = false
       showCheckout.value = true
       processing.value = false
@@ -331,6 +369,14 @@ async function startPayment() {
     modalError.value = true
     processing.value = false
   } catch (e) {
+    if (e.response?.status === 409 && e.response?.data?.quote) {
+      paymentQuote.value = {
+        amount: Number(e.response.data.quote.amount || 0),
+        fee: Number(e.response.data.quote.fee || 0),
+        total: Number(e.response.data.quote.total || 0),
+        channel: e.response.data.quote.channel || 'Mobile Money',
+      }
+    }
     modalMsg.value = e.response?.data?.error || 'Error. Please try again.'
     modalError.value = true
     processing.value = false

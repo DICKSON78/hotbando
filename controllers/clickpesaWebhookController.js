@@ -3,143 +3,197 @@ const db = require('../config/database');
 const logger = require('../utils/logger');
 const { fulfillClickPesaPayment } = require('../services/paymentFulfillment');
 
+function eventData(payload) {
+  return payload?.data && typeof payload.data === 'object' ? payload.data : (payload || {});
+}
+
 function getProviderRef(payload) {
-  if (!payload) return null;
-  return payload.id || payload.paymentId || payload.transactionId || payload.providerReference || payload.reference || payload.orderReference || null;
+  const data = eventData(payload);
+  return data.paymentReference || data.providerRef || data.providerReference || data.transactionId || data.id
+    || payload?.paymentReference || payload?.providerRef || payload?.providerReference || payload?.id || null;
 }
 
 function getOrderRef(payload) {
-  if (!payload) return null;
-  return payload.orderReference || payload.order_reference || payload.merchantReference || payload.externalReference || payload.reference || null;
+  const data = eventData(payload);
+  return data.orderReference || data.order_reference || data.merchantReference || data.externalReference
+    || payload?.orderReference || payload?.order_reference || payload?.merchantReference || null;
 }
 
 function getEventType(payload) {
-  if (!payload) return 'UNKNOWN';
-  return payload.eventType || payload.event || payload.type || payload.status || 'UNKNOWN';
+  return String(payload?.eventType || payload?.event || payload?.type || eventData(payload).eventType || '').toUpperCase();
 }
 
 function getAmount(payload) {
-  if (!payload) return null;
-  return payload.amount || payload.collectedAmount || payload.paidAmount || payload.totalAmount || null;
+  const data = eventData(payload);
+  return data.collectedAmount ?? data.paidAmount ?? data.totalAmount ?? data.amount
+    ?? payload?.collectedAmount ?? payload?.paidAmount ?? payload?.amount ?? null;
 }
 
 function getCurrency(payload) {
-  if (!payload) return 'TZS';
-  return payload.currency || 'TZS';
+  const data = eventData(payload);
+  return data.collectedCurrency || data.currency || payload?.collectedCurrency || payload?.currency || 'TZS';
+}
+
+function unwrapProviderResult(result) {
+  const value = Array.isArray(result) ? result[0] : result;
+  return value?.data && typeof value.data === 'object' ? value.data : (value || {});
+}
+
+function eventMatchesStatus(eventType, status) {
+  const normalized = String(status || '').toUpperCase();
+  if (eventType === 'PAYMENT RECEIVED') return ['SUCCESS', 'SETTLED'].includes(normalized);
+  if (eventType === 'PAYMENT FAILED') return ['FAILED', 'CANCELLED', 'CANCELED'].includes(normalized);
+  if (eventType === 'PAYOUT INITIATED') return ['AUTHORIZED', 'PROCESSING', 'PENDING', 'SUCCESS', 'SETTLED'].includes(normalized);
+  if (eventType === 'PAYOUT REFUNDED') return normalized === 'REFUNDED';
+  if (eventType === 'PAYOUT REVERSED') return normalized === 'REVERSED';
+  return false;
+}
+
+async function verifyWebhook(payload, rawBody, signature, eventType, orderRef) {
+  const data = eventData(payload);
+  const hasHmacSecret = !!process.env.CLICKPESA_WEBHOOK_SECRET;
+  const hasChecksumKey = !!process.env.CLICKPESA_CHECKSUM_KEY;
+  const hmacValid = clickpesa.verifyClickPesaWebhookSignature(rawBody, signature);
+  const checksum = payload?.checksum || data.checksum || signature;
+  const checksumValid = clickpesa.verifyWebhookChecksum(payload, checksum);
+
+  if (hmacValid || checksumValid) return data;
+  if (hasHmacSecret || hasChecksumKey) {
+    throw Object.assign(new Error('Invalid ClickPesa webhook signature/checksum'), { statusCode: 401 });
+  }
+
+  // If checksum verification is not configured, treat the webhook only as a
+  // trigger and verify its order directly against ClickPesa before accepting it.
+  if (!orderRef) throw Object.assign(new Error('Webhook order reference is missing'), { statusCode: 400 });
+  let result;
+  if (eventType.startsWith('PAYMENT ')) result = await clickpesa.queryPaymentStatus(orderRef);
+  else result = await clickpesa.queryPayoutStatus(orderRef);
+  const providerData = unwrapProviderResult(result);
+  const providerStatus = providerData.status || providerData.paymentStatus;
+  if (!eventMatchesStatus(eventType, providerStatus)) {
+    throw Object.assign(new Error('ClickPesa status does not match the webhook event'), { statusCode: 401 });
+  }
+  if (eventType === 'PAYMENT RECEIVED' && getAmount(providerData) == null) {
+    throw Object.assign(new Error('ClickPesa status response did not include the settled amount'), { statusCode: 503 });
+  }
+  return providerData;
+}
+
+async function markEvent(eventId, status, errorMessage = null) {
+  await db.execute(
+    'UPDATE payment_events SET status = ?, error_message = ?, processed_at = NOW() WHERE id = ?',
+    [status, errorMessage ? String(errorMessage).slice(0, 1000) : null, eventId]
+  );
+}
+
+async function notifyPaymentFailure(conn, orderRef, reason) {
+  const [orders] = await conn.execute(
+    'SELECT user_id FROM clickpesa_transactions WHERE order_reference = ? FOR UPDATE',
+    [orderRef]
+  );
+  await conn.execute('UPDATE clickpesa_transactions SET status = ? WHERE order_reference = ?', ['FAILED', orderRef]);
+  if (orders[0]?.user_id) {
+    await conn.execute(
+      `INSERT INTO notifications (user_id, notification_type, title, message, action_url, action_text, created_at)
+       VALUES (?, 'error', 'Malipo hayajakamilika', ?, '/hotspot/subscribe', 'Jaribu tena', NOW())`,
+      [orders[0].user_id, reason ? `ClickPesa haijakamilisha malipo: ${String(reason).slice(0, 300)}` : 'ClickPesa haijakamilisha malipo. Tafadhali jaribu tena.']
+    );
+  }
+}
+
+async function processEvent({ eventId, eventType, orderRef, providerRef, payload, verifiedData }) {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (eventType === 'PAYMENT RECEIVED') {
+      if (!orderRef) throw new Error('Payment webhook has no order reference');
+      // `verifiedData` is either the signature-verified webhook body or the
+      // authoritative ClickPesa status response. Never fulfill from an
+      // unverified callback amount.
+      const amount = getAmount(verifiedData);
+      const currency = getCurrency(verifiedData);
+      await fulfillClickPesaPayment({ orderReference: orderRef, amount, currency, providerRef }, conn);
+    } else if (eventType === 'PAYMENT FAILED') {
+      const details = eventData(payload);
+      await notifyPaymentFailure(conn, orderRef, details.message || details.failureReason);
+    }
+    // Payout events are preserved verbatim in payment_events. This app does
+    // not initiate ClickPesa payouts, so webhook events must not fabricate a
+    // row in the legacy customer-payments table.
+    await conn.execute(
+      'UPDATE payment_events SET status = ?, error_message = NULL, processed_at = NOW() WHERE id = ?',
+      ['processed', eventId]
+    );
+    await conn.commit();
+  } catch (error) {
+    await conn.rollback();
+    logger.error('ClickPesa webhook processing failed', { eventId, eventType, orderRef, error: error.message });
+    await markEvent(eventId, 'failed', error.message);
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 exports.handleWebhook = async (req, res) => {
   const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {})));
-  const signature = req.headers['x-clickpesa-signature'] || req.headers['x-signature'] || req.headers['clickpesa-signature'] || req.headers['x-webhook-signature'];
-
-  // Verify signature
-  const isValidSig = clickpesa.verifyClickPesaWebhookSignature(rawBody, signature);
-  // Also try checksum if configured
+  const signature = req.headers['x-clickpesa-signature'] || req.headers['x-signature']
+    || req.headers['clickpesa-signature'] || req.headers['x-webhook-signature'] || req.headers['x-checksum'];
   let payload;
   try {
-    payload = typeof req.body === 'string' ? JSON.parse(req.body) : (Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body);
-  } catch (e) {
+    payload = typeof req.body === 'string'
+      ? JSON.parse(req.body)
+      : Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
+  } catch (error) {
     return res.status(400).json({ error: 'Invalid payload' });
   }
 
-  if (!isValidSig) {
-    // Fallback to checksum verification
-    const isValidChecksum = clickpesa.verifyWebhookChecksum(payload, signature);
-    if (!isValidChecksum) {
-      logger.warn('ClickPesa webhook signature/checksum invalid');
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
+  const eventType = getEventType(payload);
+  const orderRef = getOrderRef(payload) ? String(getOrderRef(payload)) : null;
+  const providerRef = getProviderRef(payload) ? String(getProviderRef(payload)) : null;
+  const supportedEvents = new Set(['PAYMENT RECEIVED', 'PAYMENT FAILED', 'PAYOUT INITIATED', 'PAYOUT REFUNDED', 'PAYOUT REVERSED']);
+  if (!supportedEvents.has(eventType)) return res.status(400).json({ error: 'Unsupported ClickPesa event' });
+
+  let verifiedData;
+  try {
+    verifiedData = await verifyWebhook(payload, rawBody, signature, eventType, orderRef);
+  } catch (error) {
+    const status = error.statusCode || (error.response?.status === 429 ? 503 : 401);
+    logger.warn('ClickPesa webhook verification failed', { eventType, orderRef, status, error: error.message });
+    return res.status(status).json({ error: status === 503 ? 'Verification temporarily unavailable' : 'Invalid ClickPesa webhook' });
   }
 
-  const eventType = String(getEventType(payload)).toUpperCase();
-  const providerRef = getProviderRef(payload) ? String(getProviderRef(payload)) : null;
-  const orderRef = getOrderRef(payload) ? String(getOrderRef(payload)) : null;
-  const amount = getAmount(payload);
-  const currency = getCurrency(payload);
-
-  // Idempotency: store event
+  let eventId;
   try {
-    await db.execute(
+    const [insert] = await db.execute(
       `INSERT INTO payment_events (provider, event_type, provider_ref, order_reference, raw_payload, status)
        VALUES ('clickpesa', ?, ?, ?, ?, 'received')`,
       [eventType, providerRef, orderRef, JSON.stringify(payload)]
     );
-  } catch (e) {
-    // Duplicate
-    if (e.code === 'ER_DUP_ENTRY') {
-      return res.status(200).json({ status: 'received', duplicate: true });
+    eventId = insert.insertId;
+  } catch (error) {
+    if (error.code !== 'ER_DUP_ENTRY') {
+      logger.error('Failed to store ClickPesa webhook event', { eventType, orderRef, error: error.message });
+      return res.status(503).json({ error: 'Could not store webhook event' });
     }
-    logger.error('Failed to store payment event', { error: e.message });
+    const [existing] = await db.execute(
+      'SELECT id, status FROM payment_events WHERE provider = ? AND provider_ref = ? AND event_type = ? LIMIT 1',
+      ['clickpesa', providerRef, eventType]
+    );
+    if (!existing.length) return res.status(503).json({ error: 'Could not locate duplicate webhook event' });
+    if (existing[0].status === 'processed') return res.status(200).json({ status: 'received', duplicate: true });
+    eventId = existing[0].id;
   }
 
-  // Respond quickly
   res.status(200).json({ status: 'received' });
-
-  // Process asynchronously
   setImmediate(async () => {
-    const conn = await db.getConnection();
-    try {
-      await conn.beginTransaction();
-
-      if (eventType === 'PAYMENT RECEIVED' || eventType === 'SUCCESS' || eventType === 'SETTLED' || eventType === 'COMPLETED') {
-        if (!orderRef) {
-          await conn.rollback();
-          return;
-        }
-        try {
-          await fulfillClickPesaPayment({ orderReference: orderRef, amount, currency, providerRef }, conn);
-          await conn.execute('UPDATE payment_events SET status = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['processed', providerRef, eventType]);
-        } catch (err) {
-          logger.error('Webhook fulfillment failed', { error: err.message, orderRef });
-          await conn.execute('UPDATE payment_events SET status = ?, error_message = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['failed', err.message, providerRef, eventType]);
-        }
-      } else if (eventType === 'PAYMENT FAILED' || eventType === 'FAILED' || eventType === 'CANCELLED') {
-        if (orderRef) {
-          try {
-            await conn.execute('UPDATE clickpesa_transactions SET status = ? WHERE order_reference = ?', ['FAILED', orderRef]);
-          } catch (e) {}
-        }
-        await conn.execute('UPDATE payment_events SET status = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['processed', providerRef, eventType]);
-      } else if (eventType === 'PAYOUT INITIATED' || eventType === 'PAYOUT_INITIATED') {
-        try {
-          await conn.execute(
-            `INSERT INTO payments (partner_id, order_reference, type, amount, currency, status, provider, provider_ref, description, metadata)
-             VALUES ((SELECT partner_id FROM routers r JOIN clickpesa_transactions ct ON ct.extra_data LIKE CONCAT('%"router_id":', r.id, '%') WHERE ct.order_reference = ? LIMIT 1), ?, 'payout', ?, ?, 'initiated', 'clickpesa', ?, 'Payout initiated', ?)`,
-            [orderRef, orderRef, amount || 0, currency, providerRef, JSON.stringify(payload)]
-          );
-        } catch (e) {
-          logger.warn('Failed to record payout initiated', { error: e.message });
-        }
-        await conn.execute('UPDATE payment_events SET status = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['processed', providerRef, eventType]);
-      } else if (eventType === 'PAYOUT REFUNDED' || eventType === 'PAYOUT_REFUNDED') {
-        try {
-          await conn.execute("UPDATE payments SET status = 'refunded', updated_at = NOW() WHERE provider_ref = ? AND type = 'payout'", [providerRef]);
-        } catch (e) {
-          logger.warn('Failed to update payout refunded', { error: e.message });
-        }
-        await conn.execute('UPDATE payment_events SET status = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['processed', providerRef, eventType]);
-      } else if (eventType === 'PAYOUT REVERSED' || eventType === 'PAYOUT_REVERSED') {
-        try {
-          // Check balance - don't go negative silently, just log and flag
-          const [rows] = await conn.execute("SELECT id, partner_id, amount FROM payments WHERE provider_ref = ? AND type = 'payout' FOR UPDATE", [providerRef]);
-          if (rows.length) {
-            await conn.execute("UPDATE payments SET status = 'reversed', metadata = JSON_SET(COALESCE(metadata,'{}'), '$.reversal_flagged', true), updated_at = NOW() WHERE id = ?", [rows[0].id]);
-            logger.error('PAYOUT REVERSAL - flagged for HQ review', { providerRef, partnerId: rows[0].partner_id, amount: rows[0].amount });
-          }
-        } catch (e) {
-          logger.error('Failed to process payout reversal', { error: e.message });
-        }
-        await conn.execute('UPDATE payment_events SET status = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['processed', providerRef, eventType]);
-      } else {
-        await conn.execute('UPDATE payment_events SET status = ?, processed_at = NOW() WHERE provider_ref = ? AND event_type = ?', ['processed', providerRef, eventType]);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await processEvent({ eventId, eventType, orderRef, providerRef, payload, verifiedData });
+        return;
+      } catch (error) {
+        if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
       }
-
-      await conn.commit();
-    } catch (e) {
-      await conn.rollback();
-      logger.error('Webhook processing error', { error: e.message });
-    } finally {
-      conn.release();
     }
   });
 };

@@ -13,10 +13,72 @@ function generateVoucherCode() {
   return `HB-${group()}-${group()}-${group()}`;
 }
 
+function currentPaymentUser(req) {
+  return req.session?.hotbando_user || req.session?.user || req.session?.admin_user || req.session?.partner;
+}
+
+function normalizeTanzanianPhone(input) {
+  let phone = String(input || '').replace(/\D/g, '');
+  if (phone.startsWith('0')) phone = `255${phone.slice(1)}`;
+  if (!phone.startsWith('255') || phone.length !== 12) return null;
+  return phone;
+}
+
+function formatFeeQuote(preview, amount) {
+  const methods = Array.isArray(preview?.activeMethods) ? preview.activeMethods : [];
+  const senderProvider = String(preview?.sender?.accountProvider || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const available = methods.filter(method => String(method.status || '').toUpperCase() === 'AVAILABLE');
+  const selected = available.find(method => String(method.name || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === senderProvider)
+    || (available.length === 1 ? available[0] : null);
+  if (!selected) throw new Error('ClickPesa haikuweza kuthibitisha njia ya malipo kwa namba hii.');
+  const fee = Number(selected.fee || 0);
+  return {
+    amount: Number(amount),
+    fee,
+    total: Number(amount) + fee,
+    channel: selected.name || preview?.sender?.accountProvider || null,
+  };
+}
+
+async function getPackageAmount(packageId) {
+  if (!packageId) return null;
+  const [rows] = await db.execute('SELECT id, price FROM packages WHERE id = ? AND is_active = 1', [packageId]);
+  return rows.length ? Number(rows[0].price) : null;
+}
+
+exports.previewPayment = async (req, res) => {
+  try {
+    const { purpose, package_id, amount: requestedAmount } = req.body;
+    const user = currentPaymentUser(req);
+    if (purpose === 'package_purchase' && !user) {
+      return res.status(401).json({ error: 'Ingia kwanza ili kununua kifurushi.' });
+    }
+    const phone = normalizeTanzanianPhone(req.body.phoneNumber || req.body.phone_number);
+    if (!phone) return res.status(400).json({ error: 'Namba ya simu si sahihi.' });
+
+    let amount = Number(requestedAmount);
+    if (purpose === 'package_purchase') {
+      amount = await getPackageAmount(package_id);
+      if (!amount) return res.status(400).json({ error: 'Kifurushi hakipo au hakitumiki.' });
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Kiasi cha malipo si sahihi.' });
+    }
+
+    const orderReference = generateOrderRef();
+    const preview = await clickpesa.previewUSSDPush({ amount, phoneNumber: phone, orderReference });
+    const quote = formatFeeQuote(preview, amount);
+    return res.json({ success: true, ...quote, currency: 'TZS' });
+  } catch (error) {
+    logger.error('ClickPesa fee preview error', { error: error.response?.data?.message || error.message });
+    return res.status(502).json({ error: error.response?.data?.message || error.message || 'Imeshindikana kukokotoa ada ya malipo.' });
+  }
+};
+
 exports.initiatePayment = async (req, res) => {
   try {
     const { phoneNumber, purpose, package_id, gift, recipient_phone } = req.body;
-    const user = req.session?.hotbando_user || req.session?.user || req.session?.admin_user || req.session?.partner;
+    const user = currentPaymentUser(req);
 
     if (!phoneNumber) {
       return res.status(400).json({ error: 'Namba ya simu inahitajika' });
@@ -27,7 +89,8 @@ exports.initiatePayment = async (req, res) => {
       return res.status(401).json({ error: 'Please log in first to buy a package.' });
     }
 
-    const phone = phoneNumber.startsWith('255') ? phoneNumber : phoneNumber.replace(/^0/, '255');
+    const phone = normalizeTanzanianPhone(phoneNumber);
+    if (!phone) return res.status(400).json({ error: 'Namba ya simu si sahihi.' });
     const orderReference = generateOrderRef();
 
     // Server-side amount validation: amount must match the package price from DB
@@ -35,7 +98,7 @@ exports.initiatePayment = async (req, res) => {
     const purposeFinal = purpose || 'payment';
 
     if (purposeFinal === 'package_purchase' && package_id) {
-      const [pkgs] = await db.execute('SELECT id, price, duration_hours, name FROM packages WHERE id = ?', [package_id]);
+      const [pkgs] = await db.execute('SELECT id, price, duration_hours, name FROM packages WHERE id = ? AND is_active = 1', [package_id]);
       if (!pkgs.length) {
         return res.status(400).json({ error: 'Kifurushi hakipo' });
       }
@@ -46,6 +109,16 @@ exports.initiatePayment = async (req, res) => {
       return res.status(400).json({ error: 'Amount inahitajika' });
     }
 
+    const preview = await clickpesa.previewUSSDPush({ amount, phoneNumber: phone, orderReference });
+    const feeQuote = formatFeeQuote(preview, amount);
+    if (req.body.expectedTotal !== undefined && req.body.expectedTotal !== null
+      && Math.abs(Number(req.body.expectedTotal) - feeQuote.total) > 0.01) {
+      return res.status(409).json({
+        error: 'Ada ya malipo imebadilika. Tafadhali kagua jumla mpya kabla ya kuendelea.',
+        quote: { ...feeQuote, currency: 'TZS' },
+      });
+    }
+
     const extraData = {
       package_id: package_id || null,
       package_name: null,
@@ -54,6 +127,9 @@ exports.initiatePayment = async (req, res) => {
       recipient_phone: recipient_phone || null,
       mac_address: user?.mac_address || req.session?.mac || null,
       router_id: user?.last_router_id || req.session?.routerID || null,
+      provider_fee: feeQuote?.fee ?? null,
+      customer_total: feeQuote?.total ?? null,
+      fee_channel: feeQuote?.channel ?? null,
     };
 
     // Store package details in extra_data for activation reference
@@ -90,6 +166,9 @@ exports.initiatePayment = async (req, res) => {
       orderReference,
       status: result.status,
       channel: result.channel,
+      amount: Number(amount),
+      providerFee: feeQuote?.fee ?? null,
+      customerTotal: feeQuote?.total ?? null,
       message: 'Tafadhali angalia simu yako na weka PIN yako kukamilisha malipo',
     });
   } catch (error) {

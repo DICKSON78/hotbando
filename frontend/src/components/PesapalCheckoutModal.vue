@@ -15,7 +15,9 @@
           <div class="min-w-0">
             <p class="text-sm font-semibold text-white truncate">{{ title }}</p>
             <p class="text-[11px] text-white/40 truncate">
-              <span v-if="amount">TZS {{ formatNum(amount) }} · </span>
+              <span v-if="amount">Package TZS {{ formatNum(amount) }}</span>
+              <span v-if="providerFee"> · Fee TZS {{ formatNum(providerFee) }}</span>
+              <span v-if="amount"> · Total TZS {{ formatNum(totalAmount || (Number(amount) + Number(providerFee))) }} · </span>
               <span class="font-mono">{{ orderTrackingId }}</span>
             </p>
           </div>
@@ -175,6 +177,8 @@ const props = defineProps({
   checkoutUrl: { type: String, default: '' },
   orderTrackingId: { type: String, default: '' },
   amount: { type: [Number, String], default: 0 },
+  providerFee: { type: [Number, String], default: 0 },
+  totalAmount: { type: [Number, String], default: 0 },
   successMessage: { type: String, default: 'Your payment was received.' },
   pollInterval: { type: Number, default: 4000 },
   maxPollMs: { type: Number, default: 15 * 60 * 1000 }

@@ -222,6 +222,30 @@
       </div>
     </div>
 
+    <!-- Provider callback audit, separate from ledger totals to avoid double counting -->
+    <div class="section-card">
+      <div class="section-header">
+        <h3 class="section-title"><i class="fas fa-shield-alt" style="color: #60a5fa"></i> ClickPesa Webhook Audit</h3>
+        <span class="badge badge-green">{{ webhookEvents.length }} latest events</span>
+      </div>
+      <div v-if="webhookEvents.length" class="overflow-x-auto">
+        <table class="re-table">
+          <thead><tr><th>Received</th><th>Event</th><th>Order / Provider ref</th><th>Reported amount</th><th>Processing</th><th>Details</th></tr></thead>
+          <tbody>
+            <tr v-for="event in webhookEvents" :key="event.id">
+              <td class="text-sm whitespace-nowrap" style="color:#d1d5db">{{ formatDate(event.received_at) }}</td>
+              <td class="text-sm text-white">{{ event.event_type }}</td>
+              <td class="text-xs font-mono" style="color:#FF7A30">{{ event.order_reference || event.provider_ref || '—' }}</td>
+              <td class="text-sm text-white">{{ event.reported_amount ? `TSh ${formatNum(event.reported_amount)}` : '—' }}</td>
+              <td><span class="badge" :class="event.status === 'processed' ? 'badge-green' : event.status === 'failed' ? 'badge-red' : 'badge-yellow'">{{ event.status }}</span></td>
+              <td class="text-xs" style="color:#f87171">{{ event.error_message || (event.processed_at ? `Processed ${formatDate(event.processed_at)}` : 'Awaiting processing') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="section-body text-sm" style="color:#6b7280">No ClickPesa webhook events received yet.</p>
+    </div>
+
     <!-- Business accounts -->
     <div class="section-card">
       <div class="section-header">
@@ -276,6 +300,7 @@ import { adminGet } from '../../api/client'
 
 const loading = ref(true)
 const payments = ref([])
+const webhookEvents = ref([])
 const bySource = ref([])
 const accounts = ref([])
 const summary = ref({ inflow: 0, outflow: 0, net: 0, pending_amount: 0, pending_count: 0, failed_count: 0, total_count: 0 })
@@ -364,6 +389,12 @@ async function fetchPayments() {
     params.set('limit', pagination.value.limit)
 
     const data = await adminGet(`/payments?${params.toString()}`)
+    try {
+      const audit = await adminGet('/payments/webhook-events?limit=50')
+      webhookEvents.value = audit.events || []
+    } catch (auditError) {
+      console.error('ClickPesa webhook audit fetch error:', auditError)
+    }
     payments.value = data.payments || []
     bySource.value = data.bySource || []
     accounts.value = data.accounts || []
