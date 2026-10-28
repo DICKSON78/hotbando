@@ -30,6 +30,7 @@ const navItems = [
   { path: '/reseller/vouchers', label: 'Vouchers', icon: 'fas fa-ticket-alt' },
   { path: '/reseller/withdraw', label: 'Withdraw', icon: 'fas fa-money-bill-wave' },
   { path: '/reseller/topup', label: 'Top Up', icon: 'fas fa-plus-circle' },
+  { path: '/reseller/settings', label: 'Settings', icon: 'fas fa-cog' },
 ]
 
 const pageTitle = computed(() => {
@@ -38,6 +39,7 @@ const pageTitle = computed(() => {
     'reseller-vouchers': 'Vouchers',
     'reseller-withdraw': 'Withdraw',
     'reseller-topup': 'Top Up',
+    'reseller-settings': 'Settings',
   }
   return map[route.name] || 'Reseller'
 })
@@ -59,6 +61,11 @@ function logout() {
 }
 
 onMounted(async () => {
+  // Swap manifest for PWA installability of reseller app
+  const link = document.querySelector('link[rel="manifest"]')
+  if (link) link.href = '/reseller-manifest.json'
+  document.title = 'HotBando Reseller'
+
   if (!(await auth.checkSession())) { window.location.href = '/login'; return }
   fetchNotifications()
   startPolling()

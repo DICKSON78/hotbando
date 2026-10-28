@@ -1,4 +1,4 @@
-const CACHE = 'hotbando-v7';
+const CACHE = 'hotbando-v8';
 
 self.addEventListener('install', (e) => {
     self.skipWaiting();
@@ -21,7 +21,7 @@ self.addEventListener('fetch', (e) => {
     if (url.origin !== self.location.origin) return;
 
     // App shell (navigations) — network-first so new releases show immediately.
-    if (url.pathname.startsWith('/hotspot/')) {
+    if (url.pathname.startsWith('/hotspot/') || url.pathname.startsWith('/reseller/')) {
         e.respondWith(
             fetch(e.request)
                 .then((res) => {

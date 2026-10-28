@@ -98,7 +98,8 @@ const routes = [
       { path: 'dashboard', name: 'reseller-dashboard', component: () => import('../views/reseller/Dashboard.vue') },
       { path: 'vouchers', name: 'reseller-vouchers', component: () => import('../views/reseller/Vouchers.vue') },
       { path: 'withdraw', name: 'reseller-withdraw', component: () => import('../views/reseller/Withdraw.vue') },
-      { path: 'topup', name: 'reseller-topup', component: () => import('../views/reseller/TopUp.vue') }
+      { path: 'topup', name: 'reseller-topup', component: () => import('../views/reseller/TopUp.vue') },
+      { path: 'settings', name: 'reseller-settings', component: () => import('../views/reseller/Settings.vue') }
     ]
   },
   {

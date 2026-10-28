@@ -78,6 +78,14 @@
             <label class="block text-sm font-medium text-white/70 mb-1.5">Phone Number <span class="text-red-400">*</span></label>
             <input v-model="form.phone" type="tel" required class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" placeholder="07XXXXXXXX or +255...">
           </div>
+          <div v-if="form.type === 'reseller'">
+            <label class="block text-sm font-medium text-white/70 mb-1.5">Assigned Location (Mikrotik) <span class="text-red-400">*</span></label>
+            <select v-model="form.location_id" required class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors">
+              <option :value="null" disabled>Select your location</option>
+              <option v-for="loc in locations" :key="loc.id" :value="loc.id">{{ loc.name }} — {{ loc.city }}</option>
+            </select>
+            <p class="text-xs text-white/40 mt-1">The hotspot location you will manage and sell vouchers for.</p>
+          </div>
         </div>
 
         <!-- Step 3: Password -->
@@ -126,7 +134,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 
@@ -142,8 +150,17 @@ const form = ref({
   email: '',
   phone: '',
   type: 'reseller',
+  location_id: null,
   password: '',
   confirmPassword: ''
+})
+const locations = ref([])
+
+onMounted(async () => {
+  try {
+    const r = await api.get('/public/locations')
+    locations.value = r.data?.locations || r.locations || []
+  } catch {}
 })
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
@@ -177,6 +194,10 @@ const handleNext = () => {
       error.value = 'Phone Number is required'
       return
     }
+    if (form.value.type === 'reseller' && !form.value.location_id) {
+      error.value = 'Please select your assigned location'
+      return
+    }
     step.value = 3
     return
   }
@@ -206,7 +227,8 @@ const handleRegister = async () => {
         name: form.value.name,
         email: form.value.email,
         phone: form.value.phone,
-        password: form.value.password
+        password: form.value.password,
+        location_id: form.value.location_id
       })
     } else {
       await api.post('/partners/register', {

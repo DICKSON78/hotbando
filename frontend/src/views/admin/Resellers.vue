@@ -9,7 +9,7 @@
     </div>
 
     <!-- Summary Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-4">
       <div class="stat-card">
         <div class="flex items-center justify-between">
           <div><p class="stat-label">Total Resellers</p><p class="stat-value">{{ summary.total || 0 }}</p></div>
@@ -32,6 +32,12 @@
         <div class="flex items-center justify-between">
           <div><p class="stat-label">Total Earned</p><p class="stat-value" style="color: #a78bfa">TSh {{ fmtNum(summary.total_earned) }}</p></div>
           <div class="stat-icon" style="background: rgba(139,92,246,0.1); color: #a78bfa"><i class="fas fa-coins"></i></div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="flex items-center justify-between">
+          <div><p class="stat-label">Platform Commission (20%)</p><p class="stat-value" style="color: #FF7A30">TSh {{ fmtNum((summary.total_revenue || 0) * 0.2) }}</p></div>
+          <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-percent"></i></div>
         </div>
       </div>
       <div class="stat-card">
@@ -75,6 +81,7 @@
                 <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Vouchers</th>
                 <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Redeemed</th>
                 <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Revenue</th>
+                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Commission (20%)</th>
                 <th class="text-center py-3 px-4 text-xs font-medium" style="color: #6b7280">Status</th>
                 <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Actions</th>
               </tr></thead>
@@ -92,6 +99,7 @@
                   <td class="py-3 px-4 text-right text-xs" style="color: #6b7280">{{ r.total_vouchers_sold || 0 }}</td>
                   <td class="py-3 px-4 text-right text-xs" style="color: #6b7280">{{ r.redeemed_count || 0 }}</td>
                   <td class="py-3 px-4 text-right text-xs font-medium" style="color: #34d399">TSh {{ fmtNum(r.revenue_generated) }}</td>
+                  <td class="py-3 px-4 text-right text-xs font-medium" style="color: #FF7A30">TSh {{ fmtNum((r.revenue_generated || 0) * 0.2) }}</td>
                   <td class="py-3 px-4 text-center"><span class="text-xs px-2 py-0.5 rounded-full" :class="r.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'">{{ r.is_active ? 'ACTIVE' : 'OFF' }}</span></td>
                   <td class="py-3 px-4 text-right"><i class="fas fa-chevron-right text-xs" style="color: #6b7280"></i></td>
                 </tr>

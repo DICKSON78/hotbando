@@ -12,7 +12,7 @@ class ResellerController {
 
   async register(req, res) {
     try {
-      const { name, email, phone, password, location } = req.body;
+      const { name, email, phone, password, location, location_id } = req.body;
 
       if (!name || !name.trim()) {
         return res.status(400).json({ success: false, message: 'Jina linahitajika' });
@@ -38,17 +38,17 @@ class ResellerController {
       const hashedPassword = await bcrypt.hash(password, 12);
 
       const [userResult] = await db.execute(
-        `INSERT INTO users (name, phone_number, email, password, role, is_active, is_verified, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'reseller', 1, 0, NOW(), NOW())`,
-        [name.trim(), phone, email, hashedPassword]
+        `INSERT INTO users (name, phone_number, email, password, role, location_id, is_active, is_verified, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'reseller', ?, 1, 0, NOW(), NOW())`,
+        [name.trim(), phone, email, hashedPassword, location_id || null]
       );
 
       const userId = userResult.insertId;
 
       await db.execute(
-        `INSERT INTO resellers (user_id, balance, total_earned, status, created_at)
-         VALUES (?, 0, 0, 'active', NOW())`,
-        [userId]
+        `INSERT INTO resellers (user_id, location_id, balance, total_earned, status, created_at)
+         VALUES (?, ?, 0, 0, 'active', NOW())`,
+        [userId, location_id || null]
       );
 
       const [resellerRows] = await db.execute('SELECT * FROM resellers WHERE user_id = ?', [userId]);
@@ -621,6 +621,78 @@ class ResellerController {
       return res.status(500).json({ success: false, message: 'Imeshindikana kufuta uondoaji', error: error.message });
     } finally {
       connection.release();
+    }
+  }
+
+  async getSettings(req, res) {
+    try {
+      const resellerUserId = req.session.reseller_user.id;
+      const [users] = await db.execute('SELECT id, name, email, phone_number, location FROM users WHERE id = ?', [resellerUserId]);
+      const [resellers] = await db.execute('SELECT id, balance, total_earned, commission_rate, tier, status, router_id FROM resellers WHERE user_id = ?', [resellerUserId]);
+      return res.json({ success: true, user: users[0], reseller: resellers[0] });
+    } catch (error) {
+      console.error('Hitilafu kupata settings:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata mipangilio', error: error.message });
+    }
+  }
+
+  async updateProfile(req, res) {
+    try {
+      const resellerUserId = req.session.reseller_user.id;
+      const { name, email, phone } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, message: 'Jina linahitajika' });
+      }
+      if (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, message: 'Barua pepe sio sahihi' });
+      }
+      if (phone && !/^[0-9]{9,15}$/.test(phone)) {
+        return res.status(400).json({ success: false, message: 'Namba ya simu sio sahihi' });
+      }
+      await db.execute(
+        'UPDATE users SET name = ?, email = COALESCE(?, email), phone_number = COALESCE(?, phone_number), updated_at = NOW() WHERE id = ?',
+        [name.trim(), email || null, phone || null, resellerUserId]
+      );
+      // update session
+      if (req.session.reseller_user) {
+        req.session.reseller_user.name = name.trim();
+        if (email) req.session.reseller_user.email = email;
+        if (phone) req.session.reseller_user.phone_number = phone;
+      }
+      return res.json({ success: true, message: 'Wasifu umesasishwa' });
+    } catch (error) {
+      console.error('Hitilafu kusasisha wasifu:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kusasisha wasifu', error: error.message });
+    }
+  }
+
+  async changePassword(req, res) {
+    try {
+      const resellerUserId = req.session.reseller_user.id;
+      const { current_password, new_password, confirm_password } = req.body;
+      if (!current_password || !new_password || !confirm_password) {
+        return res.status(400).json({ success: false, message: 'Jaza sehemu zote.' });
+      }
+      if (new_password !== confirm_password) {
+        return res.status(400).json({ success: false, message: 'Neno la siri jipya halifanani.' });
+      }
+      if (new_password.length < 8) {
+        return res.status(400).json({ success: false, message: 'Neno la siri linapaswa kuwa na herufi angalau 8.' });
+      }
+      const [users] = await db.execute('SELECT password FROM users WHERE id = ?', [resellerUserId]);
+      if (users.length === 0) {
+        return res.status(401).json({ success: false, message: 'Reseller access required' });
+      }
+      const isCurrentValid = await bcrypt.compare(current_password, users[0].password);
+      if (!isCurrentValid) {
+        return res.status(400).json({ success: false, message: 'Neno la siri la sasa sio sahihi.' });
+      }
+      const newHash = await bcrypt.hash(new_password, 12);
+      await db.execute('UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?', [newHash, resellerUserId]);
+      return res.json({ success: true, message: 'Neno la siri limebadilishwa.' });
+    } catch (error) {
+      console.error('Reseller password change error:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kubadilisha neno la siri.' });
     }
   }
 

@@ -209,7 +209,8 @@ router.get('/resellers', async (req, res) => {
     const [summary] = await db.execute(
       `SELECT COUNT(*) as total, SUM(CASE WHEN u.is_active=1 THEN 1 ELSE 0 END) as active,
               COALESCE(SUM(r.balance),0) as total_balance, COALESCE(SUM(r.total_earned),0) as total_earned,
-              COALESCE(AVG(r.commission_rate),10) as avg_commission
+              COALESCE(AVG(r.commission_rate),10) as avg_commission,
+              (SELECT COALESCE(SUM(v.price),0) FROM vouchers v JOIN voucher_batches vb ON v.batch_id=vb.id JOIN users u2 ON vb.created_by=u2.id WHERE u2.role='reseller' AND v.is_used=1) as total_revenue
        FROM users u LEFT JOIN resellers r ON u.id = r.user_id WHERE u.role='reseller'`
     );
 

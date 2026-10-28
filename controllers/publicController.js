@@ -242,6 +242,18 @@ async function updateContactMessageStatus(req, res) {
     }
 }
 
+async function getPublicLocations(req, res) {
+    try {
+        const [rows] = await db.execute(
+            'SELECT id, name, city, region FROM locations WHERE is_active = 1 ORDER BY name ASC'
+        );
+        res.json({ success: true, locations: rows });
+    } catch (error) {
+        console.error('Error fetching public locations:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch locations' });
+    }
+}
+
 module.exports = {
     submitPartnerApplication,
     submitContactMessage,
@@ -249,7 +261,8 @@ module.exports = {
     getContactMessages,
     updatePartnerApplicationStatus,
     updateContactMessageStatus,
-    getPublicStats
+    getPublicStats,
+    getPublicLocations
 };
 
 // Public stats for homepage (no auth required)

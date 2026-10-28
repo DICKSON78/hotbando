@@ -11,6 +11,7 @@ const { adminAuth } = require('../middleware/authMiddleware');
 router.post('/partner-application', publicController.submitPartnerApplication);
 router.post('/contact-message', publicController.submitContactMessage);
 router.get('/stats', publicController.getPublicStats);
+router.get('/locations', publicController.getPublicLocations);
 
 // Admin routes (require authentication)
 router.get('/partner-applications', adminAuth, publicController.getPartnerApplications);

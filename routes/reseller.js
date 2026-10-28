@@ -20,5 +20,8 @@ router.get('/topups', (req, res) => resellerController.getTopups(req, res));
 router.get('/withdrawals', (req, res) => resellerController.getWithdrawals(req, res));
 router.post('/withdraw', (req, res) => resellerController.requestWithdrawal(req, res));
 router.delete('/withdrawals/:id', (req, res) => resellerController.cancelWithdrawal(req, res));
+router.get('/settings', (req, res) => resellerController.getSettings(req, res));
+router.put('/settings/profile', (req, res) => resellerController.updateProfile(req, res));
+router.post('/settings/change-password', (req, res) => resellerController.changePassword(req, res));
 
 module.exports = router;
