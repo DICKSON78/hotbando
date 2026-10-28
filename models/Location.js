@@ -20,6 +20,7 @@ class Location extends BaseModel {
                 SELECT
                     l.*,
                     u.name as franchise_owner_name,
+                    b.name as branch_name,
                     u.phone_number as franchise_owner_phone,
                     u.email as franchise_owner_email,
                     u.commission_rate as franchise_commission_rate,
@@ -28,6 +29,7 @@ class Location extends BaseModel {
                     SUM(CASE WHEN m.status = 'online' THEN m.active_users ELSE 0 END) as active_users
                 FROM locations l
                 LEFT JOIN users u ON l.franchise_owner_id = u.id
+                LEFT JOIN branches b ON b.id = l.branch_id
                 LEFT JOIN mikrotiks m ON l.id = m.location_id
                 LEFT JOIN users usr ON l.id = usr.location_id
                 WHERE l.id = ?
@@ -51,12 +53,14 @@ class Location extends BaseModel {
                 SELECT
                     l.*,
                     u.name as franchise_owner_name,
+                    b.name as branch_name,
                     COUNT(DISTINCT m.id) as router_count,
                     COUNT(DISTINCT usr.id) as total_users,
                     SUM(CASE WHEN m.status = 'online' THEN 1 ELSE 0 END) as online_routers,
                     SUM(CASE WHEN m.status = 'online' THEN m.active_users ELSE 0 END) as active_users
                 FROM locations l
                 LEFT JOIN users u ON l.franchise_owner_id = u.id
+                LEFT JOIN branches b ON b.id = l.branch_id
                 LEFT JOIN mikrotiks m ON l.id = m.location_id
                 LEFT JOIN users usr ON l.id = usr.location_id
                 WHERE l.is_active = 1
@@ -80,11 +84,13 @@ class Location extends BaseModel {
             const query = `
                 SELECT
                     l.*,
+                    b.name as branch_name,
                     COUNT(DISTINCT m.id) as router_count,
                     COUNT(DISTINCT usr.id) as total_users,
                     SUM(CASE WHEN m.status = 'online' THEN m.active_users ELSE 0 END) as active_users
                 FROM locations l
                 LEFT JOIN mikrotiks m ON l.id = m.location_id
+                LEFT JOIN branches b ON b.id = l.branch_id
                 LEFT JOIN users usr ON l.id = usr.location_id
                 WHERE l.franchise_owner_id = ?
                 GROUP BY l.id

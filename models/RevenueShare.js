@@ -47,8 +47,12 @@ class RevenueShare extends BaseModel {
 
             const rule = rules[0];
 
-            // Calculate total revenue from this location in the period
-            const [revenueResult] = await connection.query(
+            // Campaign completion share applies to ad/lead revenue; package
+            // collection share applies to actual paid subscriptions attributed
+            // to this location's registered MikroTik.
+            const includeCampaigns = ['all', 'ads', 'bank_leads'].includes(rule.revenue_type || 'all');
+            const includeSubscriptions = ['all', 'subscriptions'].includes(rule.revenue_type || 'all');
+            const [campaignResult] = await connection.query(
                 `SELECT
                     SUM(cc.cost_charged) as total_revenue,
                     COUNT(DISTINCT cc.id) as total_completions
@@ -59,9 +63,36 @@ class RevenueShare extends BaseModel {
                  AND cc.cost_charged > 0`,
                 [locationId, startDate, endDate]
             );
+            const [clickpesaResult] = await connection.query(
+                `SELECT COALESCE(SUM(ct.amount), 0) AS total_revenue, COUNT(*) AS total_completions
+                 FROM clickpesa_transactions ct
+                 LEFT JOIN mikrotiks m
+                   ON m.router_id = JSON_UNQUOTE(JSON_EXTRACT(ct.extra_data, '$.router_id'))
+                 LEFT JOIN users customer ON customer.id = ct.user_id
+                 WHERE ct.purpose = 'package_purchase'
+                   AND UPPER(ct.status) IN ('SUCCESS', 'SETTLED', 'COMPLETED')
+                   AND ct.created_at BETWEEN ? AND ?
+                   AND COALESCE(m.location_id, customer.location_id) = ?`,
+                [startDate, endDate, locationId]
+            );
+            const [pesapalResult] = await connection.query(
+                `SELECT COALESCE(SUM(pr.amount), 0) AS total_revenue, COUNT(*) AS total_completions
+                 FROM payment_requests pr
+                 LEFT JOIN users customer ON customer.id = pr.user_id
+                 LEFT JOIN mikrotiks m ON m.router_id = JSON_UNQUOTE(JSON_EXTRACT(pr.callback_data, '$.router_id'))
+                 WHERE pr.payment_method = 'pesapal' AND pr.status = 'completed'
+                   AND pr.completed_at BETWEEN ? AND ?
+                   AND COALESCE(m.location_id, customer.location_id) = ?`,
+                [startDate, endDate, locationId]
+            );
 
-            const totalRevenue = parseFloat(revenueResult[0].total_revenue || 0);
-            const totalCompletions = parseInt(revenueResult[0].total_completions || 0);
+            const campaignRevenue = includeCampaigns ? Number(campaignResult[0].total_revenue || 0) : 0;
+            const subscriptionRevenue = includeSubscriptions
+                ? Number(clickpesaResult[0].total_revenue || 0) + Number(pesapalResult[0].total_revenue || 0)
+                : 0;
+            const totalRevenue = campaignRevenue + subscriptionRevenue;
+            const totalCompletions = (includeCampaigns ? Number(campaignResult[0].total_completions || 0) : 0)
+                + (includeSubscriptions ? Number(clickpesaResult[0].total_completions || 0) + Number(pesapalResult[0].total_completions || 0) : 0);
 
             if (totalRevenue === 0) {
                 return {
@@ -101,6 +132,13 @@ class RevenueShare extends BaseModel {
             let shareRecord;
 
             if (existing.length > 0) {
+                // A reviewed or paid amount is immutable for audit safety. New
+                // receipts belong to the next calculation period instead.
+                if (existing[0].status !== 'pending') {
+                    await connection.commit();
+                    connection.release();
+                    return existing[0];
+                }
                 // Update existing record
                 await connection.query(
                     `UPDATE partner_revenue_shares
@@ -251,7 +289,7 @@ class RevenueShare extends BaseModel {
         try {
             // Get share record
             const [shares] = await connection.query(
-                'SELECT * FROM partner_revenue_shares WHERE id = ?',
+                    'SELECT * FROM partner_revenue_shares WHERE id = ? FOR UPDATE',
                 [shareId]
             );
 
@@ -305,7 +343,7 @@ class RevenueShare extends BaseModel {
         try {
             // Get share record
             const [shares] = await connection.query(
-                'SELECT * FROM partner_revenue_shares WHERE id = ?',
+                    'SELECT * FROM partner_revenue_shares WHERE id = ? FOR UPDATE',
                 [shareId]
             );
 

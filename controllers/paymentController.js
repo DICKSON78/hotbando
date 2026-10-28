@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const crypto = require('crypto');
 const pesapal = require('../utils/pesapal');
 const Wallet = require('../models/Wallet');
+const { extendUserPackage } = require('../utils/packageEntitlement');
 
 function generateVoucherCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -503,15 +504,10 @@ async function _activatePackage(userId, packageId, amount, callbackData = {}) {
   if (!users.length) return;
   const user = users[0];
   const now = new Date();
-  let newUsageUntil;
-  if (user.usage_until && new Date(user.usage_until) > now) {
-    newUsageUntil = new Date(new Date(user.usage_until).getTime() + (pkg.duration_hours * 3600 * 1000));
-  } else {
-    newUsageUntil = new Date(now.getTime() + (pkg.duration_hours * 3600 * 1000));
-  }
+  const { usageUntil: newUsageUntil } = await extendUserPackage(db, userId, pkg);
   await db.execute(
-    'UPDATE users SET package = ?, usage_start = ?, usage_until = ?, moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
-    [pkg.name, now, newUsageUntil, amount, userId]
+    'UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
+    [amount, userId]
   );
   await db.execute(
     'INSERT INTO payments (user_id, package_id, amount, payment_method, status, activated, created_at) VALUES (?, ?, ?, "pesapal", "completed", 1, NOW())',

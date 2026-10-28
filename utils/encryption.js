@@ -13,7 +13,14 @@ const TAG_LENGTH = 16;
 const SALT_LENGTH = 64;
 
 // Encryption key from environment (must be 32 bytes hex)
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
+
+function requireEncryptionKey() {
+    if (!/^(?:[0-9a-f]{64}|.{32,})$/i.test(ENCRYPTION_KEY)) {
+        throw new Error('ENCRYPTION_KEY must be configured (64 hex chars or at least 32 characters)');
+    }
+    return ENCRYPTION_KEY;
+}
 
 /**
  * Derive encryption key from passphrase using PBKDF2
@@ -31,7 +38,7 @@ function encrypt(plaintext) {
     
     try {
         const salt = crypto.randomBytes(SALT_LENGTH / 2);
-        const key = deriveKey(ENCRYPTION_KEY, salt);
+        const key = deriveKey(requireEncryptionKey(), salt);
         const iv = crypto.randomBytes(IV_LENGTH);
         
         const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
@@ -69,7 +76,7 @@ function decrypt(ciphertext) {
         const tag = Buffer.from(parts[2], 'hex');
         const encrypted = parts[3];
         
-        const key = deriveKey(ENCRYPTION_KEY, salt);
+        const key = deriveKey(requireEncryptionKey(), salt);
         
         const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
         decipher.setAuthTag(tag);

@@ -23,6 +23,7 @@
 const db = require('../config/database');
 const wireguardService = require('./wireguard');
 const logger = require('./logger');
+const { encrypt } = require('./encryption');
 
 const ROUTER_REGISTRATION_SECRET = process.env.ROUTER_REGISTRATION_SECRET || process.env.RADIUS_SECRET || '';
 const SERVER_PUBLIC_HOST = process.env.SERVER_PUBLIC_HOST || process.env.SERVER_PUBLIC_IP || 'hotbandowifi.online';
@@ -92,8 +93,8 @@ async function resolveRouter({ serial, identity, model, firmware, publicIp, rout
             `INSERT INTO mikrotiks
                 (router_id, router_name, host, port, \`user\`, password, ssid, status, setup_status, setup_step,
                  serial_number, model, firmware_version, location_id)
-             VALUES (?, ?, ?, 8728, 'admin', 'admin', ?, 'offline', 'pending', 1, ?, ?, ?, ?)`,
-            [id, name, `10.7.0.2`, DEFAULT_SSID, serial || null, model || null, firmware || null, locationId || null]
+             VALUES (?, ?, ?, 8728, 'admin', ?, ?, 'offline', 'pending', 1, ?, ?, ?, ?)`,
+            [id, name, `10.7.0.2`, encrypt('admin'), DEFAULT_SSID, serial || null, model || null, firmware || null, locationId || null]
         );
         const [rows] = await db.execute('SELECT * FROM mikrotiks WHERE id = ?', [result.insertId]);
         router = rows[0] || null;

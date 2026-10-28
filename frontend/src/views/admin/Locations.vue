@@ -395,6 +395,20 @@
               <div><label class="input-label">Latitude</label><input v-model.number="form.latitude" type="number" step="any" class="form-input" placeholder="-6.7924"></div>
               <div><label class="input-label">Longitude</label><input v-model.number="form.longitude" type="number" step="any" class="form-input" placeholder="39.2083"></div>
             </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="input-label">Branch</label>
+                <select v-model="form.branch_id" class="form-input">
+                  <option :value="null">Unassigned</option>
+                  <option v-for="branch in branches" :key="branch.id" :value="branch.id">{{ branch.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="input-label">Approx. Wi-Fi coverage (metres)</label>
+                <input v-model.number="form.coverage_radius_m" type="number" min="1" max="50000" class="form-input" placeholder="e.g. 150">
+              </div>
+            </div>
+            <p class="text-[11px]" style="color:#6b7280">Coverage is an approximate planning radius set by your team; walls, access points and interference affect real signal.</p>
             <div>
               <button type="button" @click="pickFromMap()" class="w-full px-3 py-2 rounded-xl text-xs font-medium transition-all" style="background: rgba(59,130,246,0.1); color: #60a5fa; border: 1px dashed rgba(59,130,246,0.3)">
                 <i class="fas fa-map-pin mr-1"></i> Click on map to pick coordinates
@@ -424,12 +438,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { adminGet, adminPost, adminPut, adminDelete } from '../../api/client'
 
 const activeTab = ref('map')
 const loading = ref(false)
 const locations = ref([])
+const branches = ref([])
 const routers = ref([])
 const showForm = ref(false)
 const editing = ref(null)
@@ -438,6 +453,7 @@ const mapRef = ref(null)
 let map = null
 let tileLayer = null
 let markerLayer = null
+let liveRefreshTimer = null
 
 const mapLayer = ref('street')
 const showLocationMarkers = ref(true)
@@ -504,10 +520,12 @@ function routersForLocation(locId) {
 
 onMounted(async () => {
   loading.value = true
-  await Promise.all([loadLocations(), loadRouters()])
+  await Promise.all([loadLocations(), loadRouters(), loadBranches()])
   if (activeTab.value === 'map') await nextTick(initMap)
   loading.value = false
+  liveRefreshTimer = window.setInterval(() => loadRouters(), 60000)
 })
+onUnmounted(() => window.clearInterval(liveRefreshTimer))
 
 watch(activeTab, async (v) => {
   if (v === 'map') { await nextTick(); initMap() }
@@ -515,7 +533,7 @@ watch(activeTab, async (v) => {
 
 async function refreshAll() {
   loading.value = true
-  await Promise.all([loadLocations(), loadRouters()])
+  await Promise.all([loadLocations(), loadRouters(), loadBranches()])
   if (activeTab.value === 'map' && map) updateMarkers()
   loading.value = false
 }
@@ -525,7 +543,26 @@ async function loadLocations() {
 }
 
 async function loadRouters() {
-  try { const r = await adminGet('/routers/'); routers.value = r.routers || r.data || [] } catch (e) { console.error(e) }
+  try {
+    const [r, live] = await Promise.all([adminGet('/routers/'), adminGet('/routers/status-all')])
+    const liveById = new Map((live.routers || []).map(item => [String(item.routerId), item]))
+    routers.value = (r.routers || r.data || []).map(router => {
+      const current = liveById.get(String(router.router_id))
+      return current ? {
+        ...router,
+        status: current.isOnline ? 'online' : 'offline',
+        active_users: Number(current.activeUsers || 0),
+        cpu_load: Number(current.cpu || 0),
+        memory_usage: Number(current.memory || 0),
+        live_checked_at: live.timestamp || new Date().toISOString(),
+      } : router
+    })
+    if (map && activeTab.value === 'map') updateMarkers()
+  } catch (e) { console.error(e) }
+}
+
+async function loadBranches() {
+  try { const r = await adminGet('/hq/branches?limit=1000'); branches.value = r.data || r.branches || [] } catch (e) { console.error(e) }
 }
 
 // ===================== MAP =====================
@@ -594,6 +631,13 @@ function updateMarkers() {
     locations.value.forEach(loc => {
       if (!loc.latitude || !loc.longitude) return
       const routerCount = routersForLocation(loc.id).length
+      const liveUsers = routersForLocation(loc.id).reduce((sum, router) => sum + Number(router.active_users || 0), 0)
+      if (Number(loc.coverage_radius_m) > 0) {
+        L.circle([loc.latitude, loc.longitude], {
+          radius: Number(loc.coverage_radius_m), color: '#3b82f6', weight: 1,
+          fillColor: '#3b82f6', fillOpacity: 0.12
+        }).addTo(markerLayer).bindPopup(`${loc.name}: configured coverage estimate ${Number(loc.coverage_radius_m)} m`)
+      }
       const icon = L.divIcon({
         html: `<div style="background:#3b82f6;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 8px rgba(59,130,246,0.4);font-size:11px;font-weight:700">${routerCount || '📍'}</div>`,
         className: '', iconSize: [28, 28], iconAnchor: [14, 14]
@@ -604,6 +648,8 @@ function updateMarkers() {
           <div style="font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:4px">${loc.name}</div>
           <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${loc.city || ''}, ${loc.region || ''}</div>
           <div style="font-size:12px;color:#3b82f6">Routers: ${routerCount} &bull; ${loc.location_type}</div>
+          <div style="font-size:12px;color:#6b7280">Branch: ${loc.branch_name || 'Unassigned'} &bull; Live active users: ${liveUsers}</div>
+          ${Number(loc.coverage_radius_m) > 0 ? `<div style="font-size:12px;color:#6b7280">Configured coverage estimate: ${Number(loc.coverage_radius_m)} m</div>` : '<div style="font-size:12px;color:#b45309">Coverage radius not configured</div>'}
         </div>
       `)
     })
@@ -638,6 +684,7 @@ function updateMarkers() {
         </div>
         <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${r.host}:${r.port || 8728}</div>
         <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${r.ssid || 'No SSID'}</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:4px">Branch: ${r.branch_name || r.location_branch_name || 'Unassigned'}</div>
         <div style="font-size:12px;color:#FF7A30;margin-bottom:8px">Users: ${r.active_users || 0} &bull; ${r.status || 'offline'}</div>
         <button onclick="window.__selectRouter && window.__selectRouter(${r.id})" style="width:100%;padding:6px 12px;background:#FF7A30;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Remote Control</button>
       </div>
@@ -675,7 +722,7 @@ const pickingCoords = ref(false)
 
 function openAddLocation() {
   editing.value = null
-  form.value = { name: '', city: '', region: '', address: '', latitude: null, longitude: null, location_type: 'University', contact_person: '', contact_phone: '' }
+  form.value = { name: '', city: '', region: '', address: '', latitude: null, longitude: null, branch_id: null, coverage_radius_m: null, location_type: 'University', contact_person: '', contact_phone: '' }
   showForm.value = true
 }
 

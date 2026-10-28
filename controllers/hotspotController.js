@@ -2,6 +2,7 @@
 const db = require('../config/database');
 const mikrotikService = require('../utils/mikrotik');
 const bcrypt = require('bcryptjs');
+const { extendUserPackage } = require('../utils/packageEntitlement');
 
 // Utility functions
 function formatRemainingTime(seconds) {
@@ -1295,7 +1296,7 @@ const hotspotController = {
             const now = new Date();
             
             const [vouchers] = await db.execute(
-                'SELECT v.*, p.duration_hours, p.name AS package_name FROM vouchers v JOIN packages p ON v.package_id = p.id WHERE v.voucher_code = ? AND v.is_used = 0 AND v.expires_at > NOW()',
+                'SELECT v.*, p.duration_hours, p.name AS package_name, p.data_limit_mb FROM vouchers v JOIN packages p ON v.package_id = p.id WHERE v.voucher_code = ? AND v.is_used = 0 AND v.expires_at > NOW()',
                 [voucherCode]
             );
             
@@ -1314,16 +1315,11 @@ const hotspotController = {
                 return res.status(400).json({ success: 'error', message: 'Voucher imekwisha kutumika na mtu mwingine.' });
             }
 
-            let newUsageUntil;
-            if (user.usage_until && new Date(user.usage_until) > now) {
-                newUsageUntil = new Date(new Date(user.usage_until).getTime() + (vouch.duration_hours * 3600 * 1000));
-            } else {
-                newUsageUntil = new Date(now.getTime() + (vouch.duration_hours * 3600 * 1000));
-            }
+            const { usageUntil: newUsageUntil } = await extendUserPackage(db, user.id, vouch);
 
             await db.execute(
-                'UPDATE users SET package = ?, usage_start = ?, usage_until = ?, moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
-                [vouch.package_name, now, newUsageUntil, vouch.price, user.id]
+                'UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
+                [vouch.price, user.id]
             );
 
             await db.execute(
@@ -1477,16 +1473,11 @@ const hotspotController = {
                 });
             }
             
-            let newUsageUntil;
-            if (user.usage_until && new Date(user.usage_until) > now) {
-                newUsageUntil = new Date(new Date(user.usage_until).getTime() + (pkg.duration_hours * 3600 * 1000));
-            } else {
-                newUsageUntil = new Date(now.getTime() + (pkg.duration_hours * 3600 * 1000));
-            }
-            
+            const { usageUntil: newUsageUntil } = await extendUserPackage(db, user.id, pkg);
+
             await db.execute(
-                'UPDATE users SET package = ?, usage_start = ?, usage_until = ?, moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
-                [pkg.name, now, newUsageUntil, pkg.price, user.id]
+                'UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
+                [pkg.price, user.id]
             );
             
             // Verified payment (clickpesa/voucher) is already recorded — no extra row.

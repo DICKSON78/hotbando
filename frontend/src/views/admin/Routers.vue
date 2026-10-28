@@ -512,7 +512,7 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { adminGet, adminPost, adminPut, adminDelete } from '../../api/client'
 import TerminalModal from '../../components/TerminalModal.vue'
 
@@ -531,6 +531,7 @@ const locations = ref([])
 const search = ref('')
 const statusFilter = ref('')
 const toast = ref(null)
+let liveRefreshTimer = null
 
 // Detect
 const detectForm = ref({ ip: '', port: 8728, user: 'admin', password: '' })
@@ -618,7 +619,9 @@ onMounted(async () => {
   loading.value = true
   await Promise.all([loadRouters(), loadLocations(), loadWGStatus()])
   loading.value = false
+  liveRefreshTimer = window.setInterval(() => loadRouters(), 60000)
 })
+onUnmounted(() => window.clearInterval(liveRefreshTimer))
 
 async function refreshAll() {
   loading.value = true
@@ -627,7 +630,21 @@ async function refreshAll() {
 }
 
 async function loadRouters() {
-  try { const r = await adminGet('/routers'); routers.value = r.routers || r.data || [] }
+  try {
+    const [r, live] = await Promise.all([adminGet('/routers'), adminGet('/routers/status-all')])
+    const liveById = new Map((live.routers || []).map(item => [String(item.routerId), item]))
+    routers.value = (r.routers || r.data || []).map(router => {
+      const current = liveById.get(String(router.router_id))
+      return current ? {
+        ...router,
+        status: current.isOnline ? 'online' : 'offline',
+        active_users: Number(current.activeUsers || 0),
+        cpu_load: Number(current.cpu || 0),
+        memory_usage: Number(current.memory || 0),
+        live_checked_at: new Date().toISOString(),
+      } : router
+    })
+  }
   catch (e) { console.error(e) }
 }
 

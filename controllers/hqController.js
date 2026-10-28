@@ -566,12 +566,21 @@ const hqController = {
       const { year } = req.query;
       const yr = year || new Date().getFullYear();
 
-      const [revenue] = await db.execute(
-        `SELECT MONTH(t.created_at) AS month, COALESCE(SUM(t.amount), 0) AS total
-         FROM transactions t
-         WHERE YEAR(t.created_at) = ? AND t.transaction_type = 'revenue_share'
-         GROUP BY MONTH(t.created_at)
-         ORDER BY month`, [yr]
+      const [clickpesa] = await db.execute(
+        `SELECT MONTH(created_at) AS month, COALESCE(SUM(amount), 0) AS total
+         FROM clickpesa_transactions WHERE YEAR(created_at) = ?
+           AND UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED') GROUP BY MONTH(created_at)`, [yr]
+      );
+      const [pesapal] = await db.execute(
+        `SELECT MONTH(completed_at) AS month, COALESCE(SUM(amount), 0) AS total
+         FROM payment_requests WHERE YEAR(completed_at) = ? AND status = 'completed' AND payment_method = 'pesapal'
+         GROUP BY MONTH(completed_at)`, [yr]
+      );
+      const [manual] = await db.execute(
+        `SELECT MONTH(created_at) AS month, COALESCE(SUM(amount), 0) AS total
+         FROM payments WHERE YEAR(created_at) = ? AND LOWER(status) IN ('completed', 'success', 'paid')
+           AND LOWER(COALESCE(payment_method, '')) IN ('cash', 'manual', 'agent', 'bank_transfer')
+         GROUP BY MONTH(created_at)`, [yr]
       );
 
       const [expenses] = await db.execute(
@@ -581,12 +590,22 @@ const hqController = {
          GROUP BY MONTH(e.expense_date)
          ORDER BY month`, [yr]
       );
+      const [partnerPayouts] = await db.execute(
+        `SELECT MONTH(paid_at) AS month, COALESCE(SUM(share_amount), 0) AS total
+         FROM partner_revenue_shares WHERE YEAR(paid_at) = ? AND status = 'paid' GROUP BY MONTH(paid_at)`, [yr]
+      );
 
       const months = Array.from({ length: 12 }, (_, i) => i + 1);
       const pl = months.map(m => {
-        const rev = revenue.find(r => r.month === m)?.total || 0;
-        const exp = expenses.find(e => e.month === m)?.total || 0;
-        return { month: m, revenue: rev, expenses: exp, profit: rev - exp };
+        const amount = rows => Number(rows.find(row => Number(row.month) === m)?.total || 0);
+        const clickpesaAmount = amount(clickpesa);
+        const pesapalAmount = amount(pesapal);
+        const manualAmount = amount(manual);
+        const operatingExpenses = amount(expenses);
+        const partnerPayoutAmount = amount(partnerPayouts);
+        const rev = clickpesaAmount + pesapalAmount + manualAmount;
+        const exp = operatingExpenses + partnerPayoutAmount;
+        return { month: m, revenue: rev, expenses: exp, operating_expenses: operatingExpenses, partner_payouts: partnerPayoutAmount, clickpesa: clickpesaAmount, pesapal: pesapalAmount, manual: manualAmount, profit: rev - exp };
       });
 
       const totalRevenue = pl.reduce((s, r) => s + r.revenue, 0);
@@ -601,35 +620,62 @@ const hqController = {
 
   async getFinancialDashboard(req, res) {
     try {
-      // Recognize collected sales from gateway settlement records. Revenue-share
-      // entries are partner payouts, not sales revenue.
-      const [clickRevenue] = await db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM clickpesa_transactions WHERE UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED')"
+      // Count only confirmed collections and keep each collection rail visible.
+      const [clickRows] = await db.execute(
+        `SELECT purpose, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
+         FROM clickpesa_transactions GROUP BY purpose, status`
       );
-      const [pesapalRevenue] = await db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM payment_requests WHERE status = 'completed' AND payment_method = 'pesapal'"
+      const [pesaRows] = await db.execute(
+        `SELECT payment_method, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
+         FROM payment_requests GROUP BY payment_method, status`
+      );
+      const [manualRows] = await db.execute(
+        `SELECT payment_method, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
+         FROM payments WHERE LOWER(COALESCE(payment_method, '')) IN ('cash', 'manual', 'agent', 'bank_transfer')
+         GROUP BY payment_method, status`
       );
       const [expResult] = await db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE status = 'approved'");
       const [budgetResult] = await db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM budgets");
-      const [budgetSpent] = await db.execute(
-        `SELECT COALESCE(SUM(e.amount), 0) AS total FROM expenses e
-         WHERE e.status = 'approved'`
+      const [partnerPayoutResult] = await db.execute(
+        "SELECT COALESCE(SUM(share_amount), 0) AS total FROM partner_revenue_shares WHERE status = 'paid'"
       );
 
-      const totalRevenue = Number(clickRevenue[0].total || 0) + Number(pesapalRevenue[0].total || 0);
-      const totalExpenses = expResult[0].total;
-      const budgetTotal = budgetResult[0].total;
-      const budgetUsed = budgetSpent[0].total;
+      const isSettled = status => ['success', 'settled', 'completed', 'paid'].includes(String(status || '').toLowerCase());
+      const clickpesaSettled = clickRows.filter(row => isSettled(row.status)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const pesapalSettled = pesaRows.filter(row => row.payment_method === 'pesapal' && isSettled(row.status)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const manualSettled = manualRows.filter(row => isSettled(row.status)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const totalRevenue = clickpesaSettled + pesapalSettled + manualSettled;
+      const operatingExpenses = Number(expResult[0].total || 0);
+      const partnerPayouts = Number(partnerPayoutResult[0].total || 0);
+      const totalExpenses = operatingExpenses + partnerPayouts;
+      const budgetTotal = Number(budgetResult[0].total || 0);
+      const budgetUsed = operatingExpenses;
+      const sourceSummary = (rows, predicate = () => true) => {
+        const settled = rows.filter(row => predicate(row) && isSettled(row.status));
+        return {
+          settled: settled.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+          settled_count: settled.reduce((sum, row) => sum + Number(row.count || 0), 0),
+          pending: rows.filter(row => predicate(row) && ['pending', 'processing'].includes(String(row.status || '').toLowerCase())).reduce((sum, row) => sum + Number(row.amount || 0), 0),
+          failed: rows.filter(row => predicate(row) && ['failed', 'cancelled', 'canceled', 'timeout', 'reversed'].includes(String(row.status || '').toLowerCase())).reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        };
+      };
 
       res.json({
         success: true,
         data: {
           total_revenue: totalRevenue,
-          total_expenses: totalExpenses,
+          total_expenses: operatingExpenses,
+          partner_payouts: partnerPayouts,
           net_profit: totalRevenue - totalExpenses,
           budget_allocated: budgetTotal,
           budget_used: budgetUsed,
-          budget_utilization: budgetTotal > 0 ? Math.round((budgetUsed / budgetTotal) * 100) : 0
+          budget_utilization: budgetTotal > 0 ? Math.round((budgetUsed / budgetTotal) * 100) : 0,
+          revenue_by_source: {
+            clickpesa: sourceSummary(clickRows),
+            pesapal: sourceSummary(pesaRows, row => row.payment_method === 'pesapal'),
+            manual: sourceSummary(manualRows),
+          },
+          expense_breakdown: { operating_expenses: operatingExpenses, partner_payouts: partnerPayouts }
         }
       });
     } catch (error) {

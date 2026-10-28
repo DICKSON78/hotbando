@@ -185,15 +185,13 @@ exports.handleWebhook = async (req, res) => {
     eventId = existing[0].id;
   }
 
-  res.status(200).json({ status: 'received' });
-  setImmediate(async () => {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await processEvent({ eventId, eventType, orderRef, providerRef, payload, verifiedData });
-        return;
-      } catch (error) {
-        if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-      }
-    }
-  });
+  try {
+    await processEvent({ eventId, eventType, orderRef, providerRef, payload, verifiedData });
+    return res.status(200).json({ status: 'received' });
+  } catch (error) {
+    // Return a retryable response so ClickPesa can redeliver if fulfillment or
+    // audit persistence fails. Duplicate events resume from their saved row.
+    logger.error('ClickPesa webhook processing deferred for provider retry', { eventId, eventType, orderRef, error: error.message });
+    return res.status(503).json({ error: 'Webhook processing failed; retry later' });
+  }
 };

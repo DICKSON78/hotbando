@@ -90,6 +90,8 @@ const locationController = {
                 latitude,
                 longitude,
                 franchise_owner_id,
+                branch_id,
+                coverage_radius_m,
                 max_users,
                 bandwidth_limit_mbps,
                 operating_hours,
@@ -111,6 +113,8 @@ const locationController = {
                 latitude: latitude || null,
                 longitude: longitude || null,
                 franchise_owner_id: franchise_owner_id || null,
+                branch_id: branch_id || null,
+                coverage_radius_m: coverage_radius_m ? Math.max(1, Math.min(50000, Number(coverage_radius_m))) : null,
                 max_users: max_users || 100,
                 bandwidth_limit_mbps: bandwidth_limit_mbps || 100,
                 operating_hours: operating_hours ? JSON.stringify(operating_hours) : null,
@@ -161,6 +165,7 @@ const locationController = {
             const allowedFields = [
                 'name', 'location_type', 'address', 'city', 'region',
                 'latitude', 'longitude', 'franchise_owner_id', 'max_users',
+                'branch_id', 'coverage_radius_m',
                 'bandwidth_limit_mbps', 'operating_hours', 'contact_person',
                 'contact_phone', 'contact_email', 'is_active'
             ];

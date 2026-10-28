@@ -90,7 +90,7 @@ SELECT
 FROM users u
 WHERE u.role = 'customer'
   AND u.is_active = 1
-  AND (u.usage_until > NOW() OR u.free_bytes > 0);
+  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0);
 
 -- 2. radreply: Authorization — what bandwidth/limits does the user get?
 CREATE OR REPLACE VIEW radius_radreply AS
@@ -106,7 +106,23 @@ SELECT
 FROM users u
 WHERE u.role = 'customer'
   AND u.is_active = 1
-  AND (u.usage_until > NOW() OR u.free_bytes > 0);
+  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0)
+UNION ALL
+SELECT u.id, u.phone_number, 'Session-Timeout', ':=',
+       CAST(GREATEST(TIMESTAMPDIFF(SECOND, NOW(), u.usage_until), 0) AS CHAR)
+FROM users u
+WHERE u.role = 'customer' AND u.is_active = 1 AND u.usage_until > NOW()
+  AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)
+UNION ALL
+SELECT u.id, u.phone_number, 'Mikrotik-Total-Limit', ':=', CAST(u.paid_bytes_remaining AS CHAR)
+FROM users u
+WHERE u.role = 'customer' AND u.is_active = 1 AND u.usage_until > NOW()
+  AND u.paid_data_limit_bytes > 0 AND u.paid_bytes_remaining > 0
+UNION ALL
+SELECT u.id, u.phone_number, 'Mikrotik-Total-Limit', ':=', CAST(u.free_bytes AS CHAR)
+FROM users u
+WHERE u.role = 'customer' AND u.is_active = 1 AND u.free_bytes > 0
+  AND (u.usage_until IS NULL OR u.usage_until <= NOW() OR (u.paid_data_limit_bytes > 0 AND u.paid_bytes_remaining <= 0));
 
 -- 3. radacct: Active sessions for accounting
 CREATE OR REPLACE VIEW radius_radacct AS
@@ -142,7 +158,7 @@ SELECT
 FROM users u
 WHERE u.role = 'customer'
   AND u.is_active = 1
-  AND (u.usage_until > NOW() OR u.free_bytes > 0);
+  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0);
 
 -- ============================================================================
 -- VIEWS: For HotBando Node.js to read RADIUS session data

@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const { extendUserPackage } = require('../utils/packageEntitlement');
 
 function generateVoucherCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -15,19 +16,13 @@ async function activatePackage(userId, packageId, amount, extraData = {}, conn =
   const pkg = packages[0];
   const [users] = await executor.execute('SELECT * FROM users WHERE id = ?', [userId]);
   if (!users.length) return;
-  const user = users[0];
   const now = new Date();
-
-  let newUsageUntil;
-  if (user.usage_until && new Date(user.usage_until) > now) {
-    newUsageUntil = new Date(new Date(user.usage_until).getTime() + (pkg.duration_hours * 3600 * 1000));
-  } else {
-    newUsageUntil = new Date(now.getTime() + (pkg.duration_hours * 3600 * 1000));
-  }
+  const user = users[0];
+  const { usageUntil: newUsageUntil } = await extendUserPackage(executor, userId, pkg);
 
   await executor.execute(
-    'UPDATE users SET package = ?, usage_start = ?, usage_until = ?, moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
-    [pkg.name, now, newUsageUntil, amount, userId]
+    'UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
+    [amount, userId]
   );
   await executor.execute(
     'INSERT INTO payments (user_id, package_id, amount, payment_method, status, activated, created_at) VALUES (?, ?, ?, "clickpesa", "completed", 1, NOW())',
@@ -112,8 +107,10 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
       const voucherCode = generateVoucherCode();
       const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
       await executor.execute(
-        'INSERT INTO vouchers (voucher_code, package_id, price, is_used, expires_at, created_at) VALUES (?, ?, ?, 0, ?, NOW())',
-        [voucherCode, packageId, tx.amount, expiresAt]
+        `INSERT INTO vouchers
+           (voucher_code, package_id, price, is_used, expires_at, recipient_phone, purchased_by_phone, payment_order_reference, created_at)
+         VALUES (?, ?, ?, 0, ?, ?, ?, ?, NOW())`,
+        [voucherCode, packageId, tx.amount, expiresAt, extra.recipient_phone || null, tx.phone || null, orderReference]
       );
       extra.voucher_code = voucherCode;
       await executor.execute('UPDATE clickpesa_transactions SET extra_data = ? WHERE order_reference = ?',
@@ -121,8 +118,23 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
       result = { voucher: voucherCode, message: 'Voucher imegeneratiwa!' };
     } else if (packageId) {
       await activatePackage(userId, packageId, tx.amount, extra, executor);
-      result = { activated: true, message: 'Kifurushi kimewashwa! Umeunganishwa kwenye mtandao.' };
+      result = { activated: true, message: 'Kifurushi chako kimewashwa. Unganisha tena au refresh Wi-Fi ili kuanza kutumia.' };
     }
+  } else if (purpose === 'package_purchase' && extra.gift && !userId) {
+    const packageId = extra.package_id;
+    if (!packageId) throw new Error('Voucher purchase has no package');
+    const voucherCode = generateVoucherCode();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+    await executor.execute(
+      `INSERT INTO vouchers
+         (voucher_code, package_id, price, is_used, expires_at, recipient_phone, purchased_by_phone, payment_order_reference, created_at)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?, NOW())`,
+      [voucherCode, packageId, tx.amount, expiresAt, extra.recipient_phone || null, tx.phone || null, orderReference]
+    );
+    extra.voucher_code = voucherCode;
+    await executor.execute('UPDATE clickpesa_transactions SET extra_data = ? WHERE order_reference = ?',
+      [JSON.stringify(extra), orderReference]);
+    result = { voucher: voucherCode, message: 'Voucher imegeneratiwa!' };
   } else if (purpose === 'reseller_topup' && userId) {
     await creditWallet(userId, tx.amount, orderReference, 'Reseller wallet top-up via ClickPesa', executor);
     result = { message: 'Salio la wallet limeongezwa!' };

@@ -43,6 +43,8 @@ class MikrotikService {
             }
 
             const router = routers[0];
+            const { decrypt, isEncrypted } = require('./encryption');
+            const routerPassword = isEncrypted(router.password) ? decrypt(router.password) : router.password;
             const dbWhere = isNumericId ? 'id = ?' : 'router_id = ?';
             const dbValue = isNumericId ? parseInt(routerID) : routerID;
 
@@ -50,7 +52,7 @@ class MikrotikService {
             const conn = new RouterOSAPI({
                 host: router.host,
                 user: router.user,
-                password: router.password,
+                password: routerPassword,
                 port: router.port || 8728,
                 timeout: router.timeout || 10
             });

@@ -50,7 +50,7 @@ exports.previewPayment = async (req, res) => {
   try {
     const { purpose, package_id, amount: requestedAmount } = req.body;
     const user = currentPaymentUser(req);
-    if (purpose === 'package_purchase' && !user) {
+    if (purpose === 'package_purchase' && !user && !req.body.gift) {
       return res.status(401).json({ error: 'Ingia kwanza ili kununua kifurushi.' });
     }
     const phone = normalizeTanzanianPhone(req.body.phoneNumber || req.body.phone_number);
@@ -85,12 +85,14 @@ exports.initiatePayment = async (req, res) => {
     }
 
     // Require login for package purchases
-    if (purpose === 'package_purchase' && !user) {
+    if (purpose === 'package_purchase' && !user && !gift) {
       return res.status(401).json({ error: 'Please log in first to buy a package.' });
     }
 
     const phone = normalizeTanzanianPhone(phoneNumber);
     if (!phone) return res.status(400).json({ error: 'Namba ya simu si sahihi.' });
+    const recipientPhone = gift ? normalizeTanzanianPhone(recipient_phone) : null;
+    if (gift && !recipientPhone) return res.status(400).json({ error: 'Weka namba sahihi ya mpokeaji wa voucher.' });
     const orderReference = generateOrderRef();
 
     // Server-side amount validation: amount must match the package price from DB
@@ -124,7 +126,7 @@ exports.initiatePayment = async (req, res) => {
       package_name: null,
       package_duration_hours: null,
       gift: !!gift,
-      recipient_phone: recipient_phone || null,
+      recipient_phone: recipientPhone,
       mac_address: user?.mac_address || req.session?.mac || null,
       router_id: user?.last_router_id || req.session?.routerID || null,
       provider_fee: feeQuote?.fee ?? null,
@@ -314,7 +316,7 @@ async function processAndActivate(orderReference) {
   } catch (error) {
     await conn.rollback();
     logger.error('Process and activate error', { error: error.message, orderReference });
-    return { message: 'Malipo yamekamilika' };
+    throw error;
   } finally {
     conn.release();
   }
@@ -329,19 +331,8 @@ async function _activatePackage(userId, packageId, amount, extraData = {}) {
     if (!users.length) return;
     const user = users[0];
     const now = new Date();
-
-    // Calculate usage_until: extend if still active, otherwise start fresh
-    let newUsageUntil;
-    if (user.usage_until && new Date(user.usage_until) > now) {
-      newUsageUntil = new Date(new Date(user.usage_until).getTime() + (pkg.duration_hours * 3600 * 1000));
-    } else {
-      newUsageUntil = new Date(now.getTime() + (pkg.duration_hours * 3600 * 1000));
-    }
-
-    await db.execute(
-      'UPDATE users SET package = ?, usage_start = ?, usage_until = ?, moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
-      [pkg.name, now, newUsageUntil, amount, userId]
-    );
+    const { usageUntil: newUsageUntil } = await require('../utils/packageEntitlement').extendUserPackage(db, userId, pkg);
+    await db.execute('UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?', [amount, userId]);
     await db.execute(
       'INSERT INTO payments (user_id, package_id, amount, payment_method, status, activated, created_at) VALUES (?, ?, ?, "clickpesa", "completed", 1, NOW())',
       [userId, packageId, amount]

@@ -14,27 +14,26 @@ SELECT
 FROM users u
 WHERE u.is_active = 1
   AND u.role IN ('customer', 'reseller')
-  AND (u.usage_until IS NULL OR u.usage_until > NOW() OR u.free_bytes > 0);
+  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0);
 
 -- View: RADIUS reply items (session parameters)
 CREATE OR REPLACE VIEW radius_radreply AS
-SELECT
-    u.id AS id,
-    u.phone_number AS username,
-    CASE
-        WHEN u.free_bytes > 0 THEN 'Mikrotik-Total-Limit'
-        ELSE 'Session-Timeout'
-    END AS attribute,
-    ':=' AS op,
-    CASE
-        WHEN u.free_bytes > 0 THEN CAST(u.free_bytes AS CHAR)
-        WHEN u.usage_until IS NOT NULL THEN CAST(TIMESTAMPDIFF(SECOND, NOW(), u.usage_until) AS CHAR)
-        ELSE '0'
-    END AS value
-FROM users u
-WHERE u.is_active = 1
-  AND u.role IN ('customer', 'reseller')
-  AND (u.usage_until > NOW() OR u.free_bytes > 0);
+SELECT u.id, u.phone_number AS username, 'Mikrotik-Rate-Limit' AS attribute, ':=' AS op,
+       CASE WHEN u.usage_until > NOW() THEN '10M/10M 1M/1M 5000/5000' ELSE '2M/2M 512K/512K 2000/2000' END AS value
+FROM users u WHERE u.is_active = 1 AND u.role IN ('customer', 'reseller')
+  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0)
+UNION ALL
+SELECT u.id, u.phone_number, 'Session-Timeout', ':=', CAST(GREATEST(TIMESTAMPDIFF(SECOND, NOW(), u.usage_until), 0) AS CHAR)
+FROM users u WHERE u.is_active = 1 AND u.role IN ('customer', 'reseller') AND u.usage_until > NOW()
+  AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)
+UNION ALL
+SELECT u.id, u.phone_number, 'Mikrotik-Total-Limit', ':=', CAST(u.paid_bytes_remaining AS CHAR)
+FROM users u WHERE u.is_active = 1 AND u.role IN ('customer', 'reseller')
+  AND u.usage_until > NOW() AND u.paid_data_limit_bytes > 0 AND u.paid_bytes_remaining > 0
+UNION ALL
+SELECT u.id, u.phone_number, 'Mikrotik-Total-Limit', ':=', CAST(u.free_bytes AS CHAR)
+FROM users u WHERE u.is_active = 1 AND u.role IN ('customer', 'reseller')
+  AND u.free_bytes > 0 AND (u.usage_until IS NULL OR u.usage_until <= NOW() OR (u.paid_data_limit_bytes > 0 AND u.paid_bytes_remaining <= 0));
 
 -- View: RADIUS accounting
 CREATE OR REPLACE VIEW radius_radacct AS

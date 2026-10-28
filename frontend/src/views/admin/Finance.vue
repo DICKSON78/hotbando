@@ -37,7 +37,7 @@
         <div class="stat-card">
           <div class="flex items-center justify-between">
             <div>
-              <p class="stat-label">Total Expenses</p>
+              <p class="stat-label">Operating Expenses</p>
               <p class="stat-value" style="color: #f87171">TSh {{ (overview.total_expenses || 0).toLocaleString() }}</p>
             </div>
             <div class="stat-icon" style="background: rgba(239,68,68,0.1); color: #f87171"><i class="fas fa-arrow-trend-down"></i></div>
@@ -72,6 +72,21 @@
         </div>
       </div>
 
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title"><i class="fas fa-arrow-trend-up" style="color:#34d399"></i> Settled Revenue by Source</h3>
+          <span class="text-xs" style="color:#6b7280">Only successful collections are included</span>
+        </div>
+        <div class="section-body grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div v-for="item in revenueSourceRows" :key="item.key" class="rounded-xl p-4" style="background:#0a0a12;border:1px solid #1e1e2a">
+            <p class="text-xs font-semibold uppercase tracking-wide" style="color:#9ca3af">{{ item.label }}</p>
+            <p class="text-lg font-bold text-white mt-2">TSh {{ Number(item.value?.settled || 0).toLocaleString() }}</p>
+            <p class="text-[11px] mt-2" style="color:#facc15">Pending: TSh {{ Number(item.value?.pending || 0).toLocaleString() }}</p>
+            <p class="text-[11px]" style="color:#f87171">Failed: TSh {{ Number(item.value?.failed || 0).toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="section-card">
           <div class="section-header">
@@ -79,6 +94,10 @@
           </div>
           <div class="section-body">
             <div class="space-y-4">
+              <div class="flex items-center justify-between p-4 rounded-xl" style="background:#0d0d14">
+                <span class="text-sm" style="color:#9ca3af">Partner payouts (paid)</span>
+                <span class="text-sm font-semibold" style="color:#f87171">TSh {{ Number(overview.partner_payouts || 0).toLocaleString() }}</span>
+              </div>
               <div class="flex items-center justify-between p-4 rounded-xl" style="background: #0d0d14">
                 <span class="text-sm" style="color: #9ca3af">Budget Allocated</span>
                 <span class="text-sm font-semibold text-white">TSh {{ (overview.budget_allocated || 0).toLocaleString() }}</span>
@@ -467,6 +486,11 @@ const toast = ref(null)
 const branches = ref([])
 
 const overview = ref({})
+const revenueSourceRows = computed(() => [
+  { key: 'clickpesa', label: 'ClickPesa', value: overview.value.revenue_by_source?.clickpesa },
+  { key: 'pesapal', label: 'PesaPal', value: overview.value.revenue_by_source?.pesapal },
+  { key: 'manual', label: 'Cash / Manual', value: overview.value.revenue_by_source?.manual },
+])
 const expenses = ref([])
 const budgets = ref([])
 const pnlMonths = ref([])

@@ -101,6 +101,26 @@
         </div>
       </div>
 
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title"><i class="fas fa-coins" style="color:#34d399"></i> Revenue by Collection Source</h3>
+          <span class="text-xs" style="color:#6b7280">Failed and pending payments are excluded from revenue totals</span>
+        </div>
+        <div class="section-body grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div v-for="item in revenueSourceRows" :key="item.key" class="rounded-xl p-4" style="background:#0a0a12;border:1px solid #1e1e2a">
+            <p class="text-xs font-semibold uppercase tracking-wide" style="color:#9ca3af">{{ item.label }}</p>
+            <p class="text-lg font-bold text-white mt-2">TSh {{ formatNum(item.value?.settled) }}</p>
+            <p class="text-[11px] mt-2" style="color:#facc15">Pending: TSh {{ formatNum(item.value?.pending) }}</p>
+            <p class="text-[11px]" style="color:#f87171">Failed: TSh {{ formatNum(item.value?.failed) }}</p>
+          </div>
+          <div class="rounded-xl p-4" style="background:#0a0a12;border:1px solid #1e1e2a">
+            <p class="text-xs font-semibold uppercase tracking-wide" style="color:#9ca3af">Partner payouts</p>
+            <p class="text-lg font-bold mt-2" style="color:#f87171">TSh {{ formatNum(financial.partner_payouts) }}</p>
+            <p class="text-[11px] mt-2" style="color:#6b7280">Already-paid partner shares, shown as outflow</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Branch Performance Table + Compliance Alerts -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Branch Performance (2/3) -->
@@ -321,6 +341,11 @@ const loading = ref(true)
 const toast = ref(null)
 
 const financial = ref({})
+const revenueSourceRows = computed(() => [
+  { key: 'clickpesa', label: 'ClickPesa', value: financial.value.revenue_by_source?.clickpesa },
+  { key: 'pesapal', label: 'PesaPal', value: financial.value.revenue_by_source?.pesapal },
+  { key: 'manual', label: 'Cash / Manual', value: financial.value.revenue_by_source?.manual },
+])
 const ticketStats = ref({})
 const branches = ref({})
 const staffData = ref({})
@@ -415,7 +440,7 @@ onMounted(async () => {
       adminGet('/hq/compliance-dashboard'),
       adminGet('/hq/audit-trail?stats=true')
     ])
-    financial.value = finData || {}
+    financial.value = finData?.data || finData || {}
     ticketStats.value = ticketData || {}
     branches.value = branchData || {}
     staffData.value = staffRes || {}

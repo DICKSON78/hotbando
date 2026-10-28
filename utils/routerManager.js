@@ -3,6 +3,7 @@
 const db = require('../config/database');
 const mikrotikService = require('./mikrotik');
 const logger = require('./logger');
+const { encrypt } = require('./encryption');
 
 const DEFAULT_HOTSPOT_INTERFACE = 'wlan1';
 const DEFAULT_HOTSPOT_IP = process.env.HOTSPOT_IP || '10.5.50.1';
@@ -26,6 +27,7 @@ async function addRouter({ routerID, routerName, host, port = 8728, user = 'admi
             return { success: false, message: 'Router ID and host are required' };
         }
 
+        const encryptedPassword = encrypt(password);
         const [existing] = await db.execute(
             'SELECT id FROM mikrotiks WHERE router_id = ?',
             [routerID]
@@ -36,7 +38,7 @@ async function addRouter({ routerID, routerName, host, port = 8728, user = 'admi
                 `UPDATE mikrotiks SET
                     router_name = ?, host = ?, port = ?, \`user\` = ?, password = ?, ssid = ?
                 WHERE router_id = ?`,
-                [routerName || `Router-${routerID}`, host, port, user, password, ssid, routerID]
+                [routerName || `Router-${routerID}`, host, port, user, encryptedPassword, ssid, routerID]
             );
             return { success: true, message: 'Router updated', data: { routerID, routerName: routerName || `Router-${routerID}` } };
         }
@@ -44,7 +46,7 @@ async function addRouter({ routerID, routerName, host, port = 8728, user = 'admi
         const [result] = await db.execute(
             `INSERT INTO mikrotiks (router_id, router_name, host, port, \`user\`, password, ssid, status, setup_status, setup_step)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'offline', 'pending', 1)`,
-            [routerID, routerName || `Router-${routerID}`, host, port, user, password, ssid]
+            [routerID, routerName || `Router-${routerID}`, host, port, user, encryptedPassword, ssid]
         );
 
         return {

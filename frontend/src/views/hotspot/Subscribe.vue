@@ -108,6 +108,10 @@
           <PhoneInput :initialDigits="myPhone" @change="onPayerPhoneChange" label="Namba ya simu kwa malipo" hint="Utapokea ombi la malipo kwenye simu yako kupitia ClickPesa Push USSD." />
         </div>
 
+        <div v-if="buyMode === 'gift'" class="mt-3">
+          <PhoneInput :initialDigits="recipientPhone" @change="onRecipientPhoneChange" label="Namba ya mnunuzi wa vocha" hint="Namba hii haihitaji kuwa na akaunti ya HotBando. Voucher code itaonekana baada ya malipo kuthibitishwa." />
+        </div>
+
         <div v-if="paymentQuote" class="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
           <div class="flex justify-between text-white/60"><span>Bei ya kifurushi</span><span>TSh {{ formatPrice(paymentQuote.amount) }}</span></div>
           <div class="flex justify-between text-white/60 mt-1"><span>Ada ya ClickPesa / {{ paymentQuote.channel }}</span><span>TSh {{ formatPrice(paymentQuote.fee) }}</span></div>
@@ -173,6 +177,7 @@ const showModal = ref(false)
 const selectedPackage = ref(null)
 const buyMode = ref('me')
 const payerPhone = ref('')
+const recipientPhone = ref('')
 const myPhone = ref('')
 const processing = ref(false)
 const modalMsg = ref('')
@@ -306,11 +311,20 @@ function onPayerPhoneChange(value) {
   paymentQuote.value = null
 }
 
+function onRecipientPhoneChange(value) {
+  recipientPhone.value = value
+}
+
 async function startPayment() {
   if (processing.value) return
   const phone = toLocalPhone(payerPhone.value)
   if (!/^0[0-9]{9}$/.test(phone)) {
     modalMsg.value = 'Tafadhali ingiza namba ya simu sahihi.'
+    modalError.value = true
+    return
+  }
+  if (buyMode.value === 'gift' && !/^0[0-9]{9}$/.test(toLocalPhone(recipientPhone.value))) {
+    modalMsg.value = 'Weka namba halali ya anayenunuliwa voucher.'
     modalError.value = true
     return
   }
@@ -324,6 +338,8 @@ async function startPayment() {
         purpose: 'package_purchase',
         package_id: selectedPackage.value.id,
         phoneNumber: phone,
+        gift: buyMode.value === 'gift',
+        recipient_phone: buyMode.value === 'gift' ? toLocalPhone(recipientPhone.value) : null,
       })
       paymentQuote.value = {
         amount: Number(quote.amount || selectedPackage.value.price),
@@ -340,6 +356,7 @@ async function startPayment() {
       package_id: selectedPackage.value.id,
       phoneNumber: phone,
       gift: buyMode.value === 'gift',
+      recipient_phone: buyMode.value === 'gift' ? toLocalPhone(recipientPhone.value) : null,
       expectedTotal: paymentQuote.value.total,
     })
     if (r.success && r.orderReference) {

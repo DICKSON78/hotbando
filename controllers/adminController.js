@@ -5,6 +5,15 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 
+function stripRouterSecrets(router) {
+  if (!router) return router;
+  const safe = { ...router };
+  delete safe.password;
+  delete safe.wireguard_private_key;
+  delete safe.wireguard_preshared_key;
+  return safe;
+}
+
 class AdminController {
   // ==================== UTILITY: STATIC METHODS ====================
   static formatTimeAgo(dateString) {
@@ -1206,12 +1215,14 @@ async getAdViewsForAnalytics(req, res) {
   async getRouters(req, res) {
     try {
       const [routers] = await db.execute(`
-        SELECT m.*, l.name as location_name, l.city
+        SELECT m.*, l.name as location_name, l.city, b.name as branch_name
         FROM mikrotiks m
         LEFT JOIN locations l ON m.location_id = l.id
+        LEFT JOIN branches b ON b.id = l.branch_id
         ORDER BY m.id DESC
       `);
-      return res.json({ success: true, routers: routers, data: routers, count: routers.length });
+      const safeRouters = routers.map(router => stripRouterSecrets(router));
+      return res.json({ success: true, routers: safeRouters, data: safeRouters, count: safeRouters.length });
     } catch (error) {
       console.error('Hitilafu katika kupata routers:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kupata routers', error: error.message });
@@ -1238,7 +1249,7 @@ async getAdViewsForAnalytics(req, res) {
       await db.execute(
         `INSERT INTO mikrotiks (router_id, router_name, host, user, password, port, location_id, ssid, model, serial_number, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "offline", NOW(), NOW())`,
-        [router_id, router_name, host, user, password, port || 8728, location_id || null, ssid || null, model || null, serial_number || null]
+        [router_id, router_name, host, user, require('../utils/encryption').encrypt(password), port || 8728, location_id || null, ssid || null, model || null, serial_number || null]
       );
       return res.json({ success: true, message: 'Router imeongezwa kikamilifu' });
     } catch (error) {
@@ -1256,7 +1267,7 @@ async getAdViewsForAnalytics(req, res) {
       return res.json({
         success: true,
         message: 'Router imeunganishwa — itapakua config kwenye poll ijayo',
-        router: result.router,
+        router: stripRouterSecrets(result.router),
         wireguardIp: result.wireguardIp,
         status: result.status
       });
@@ -1269,15 +1280,22 @@ async getAdViewsForAnalytics(req, res) {
   async updateRouter(req, res) {
     try {
       const { id } = req.params;
-      const { router_name, host, user, password, port, location, ssid, status } = req.body;
+      const { router_name, host, user, password, port, ssid, status } = req.body;
       const [routers] = await db.execute('SELECT id FROM mikrotiks WHERE id = ?', [id]);
       if (routers.length === 0) {
         return res.status(404).json({ success: false, message: 'Router hakupatikana' });
       }
-      await db.execute(
-        'UPDATE mikrotiks SET router_name = ?, host = ?, user = ?, password = ?, port = ?, ssid = ?, status = ?, updated_at = NOW() WHERE id = ?',
-        [router_name, host, user, password, port, ssid, status, id]
-      );
+      if (password) {
+        await db.execute(
+          'UPDATE mikrotiks SET router_name = ?, host = ?, user = ?, password = ?, port = ?, ssid = ?, status = ?, updated_at = NOW() WHERE id = ?',
+          [router_name, host, user, require('../utils/encryption').encrypt(password), port, ssid, status, id]
+        );
+      } else {
+        await db.execute(
+          'UPDATE mikrotiks SET router_name = ?, host = ?, user = ?, port = ?, ssid = ?, status = ?, updated_at = NOW() WHERE id = ?',
+          [router_name, host, user, port, ssid, status, id]
+        );
+      }
       return res.json({ success: true, message: 'Router imebadilishwa kikamilifu' });
     } catch (error) {
       console.error('Hitilafu katika kubadilisha router:', error);
@@ -1317,7 +1335,7 @@ async getAdViewsForAnalytics(req, res) {
       if (routers.length === 0) {
         return res.status(404).json({ success: false, message: 'Router hakupatikana' });
       }
-      return res.json({ success: true, router: routers[0] });
+      return res.json({ success: true, router: stripRouterSecrets(routers[0]) });
     } catch (error) {
       console.error('Hitilafu katika kupata router:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kupata router', error: error.message });
@@ -1511,7 +1529,7 @@ async getAdViewsForAnalytics(req, res) {
 
       return res.json({
         success: true,
-        router: routerInfo[0],
+        router: stripRouterSecrets(routerInfo[0]),
         activeUsers,
         stats: {
           totalUsers,
@@ -1535,12 +1553,14 @@ async getAdViewsForAnalytics(req, res) {
         SELECT m.*,
                l.name as location_name, l.city, l.region, l.address as location_address,
                l.latitude, l.longitude, l.location_type,
+               b.name as branch_name,
                fo.name as owner_name, fo.phone_number as owner_phone, fo.email as owner_email,
                (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND usage_until > NOW() AND role = 'customer') as active_users_count,
                (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_users_count,
                (SELECT COALESCE(SUM(moneyspent), 0) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_revenue
         FROM mikrotiks m
         LEFT JOIN locations l ON m.location_id = l.id
+        LEFT JOIN branches b ON b.id = l.branch_id
         LEFT JOIN users fo ON l.franchise_owner_id = fo.id
         WHERE m.router_id = ?
       `, [routerID]);
@@ -1551,7 +1571,7 @@ async getAdViewsForAnalytics(req, res) {
 
       return res.json({
         success: true,
-        router: router[0]
+        router: stripRouterSecrets(router[0])
       });
     } catch (error) {
       console.error('Hitilafu katika kupata taarifa za router:', error);

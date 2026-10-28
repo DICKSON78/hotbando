@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `usage_start` DATETIME NULL,
   `usage_until` DATETIME NULL,
   `free_bytes` BIGINT DEFAULT 10485760, -- 10MB default
+  `paid_bytes_remaining` BIGINT NOT NULL DEFAULT 0,
+  `paid_data_limit_bytes` BIGINT NOT NULL DEFAULT 0 COMMENT '0 means the current paid entitlement has no data cap',
   `last_free_used` DATETIME NULL,
   `total_data_earned` BIGINT DEFAULT 0,
   `total_data_used` BIGINT DEFAULT 0,
@@ -123,6 +125,8 @@ CREATE TABLE IF NOT EXISTS `locations` (
   `latitude` DECIMAL(10, 8) NULL,
   `longitude` DECIMAL(11, 8) NULL,
   `franchise_owner_id` INT(11) NULL,
+  `branch_id` INT(11) NULL,
+  `coverage_radius_m` INT(11) NULL COMMENT 'Configured approximate Wi-Fi coverage radius in metres',
   `is_active` TINYINT(1) DEFAULT 1,
   `max_users` INT DEFAULT 100,
   `bandwidth_limit_mbps` INT DEFAULT 100,
@@ -220,6 +224,23 @@ CREATE TABLE IF NOT EXISTS `router_location_history` (
   PRIMARY KEY (`id`),
   KEY `idx_router_loc` (`router_id`),
   KEY `idx_moved_at` (`moved_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Idempotent per-session RADIUS counters prevent repeated accounting packets
+-- from charging the same bytes more than once.
+CREATE TABLE IF NOT EXISTS `radius_usage_sessions` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `nas_identity` VARCHAR(128) NOT NULL,
+  `acct_session_id` VARCHAR(128) NOT NULL,
+  `username` VARCHAR(128) NULL,
+  `mac_address` VARCHAR(50) NULL,
+  `input_octets` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `output_octets` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `last_accounting_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_radius_session` (`nas_identity`, `acct_session_id`),
+  KEY `idx_radius_session_mac` (`mac_address`),
+  KEY `idx_radius_session_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -622,6 +643,9 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   `is_used` TINYINT(1) DEFAULT 0,
   `used_at` DATETIME NULL,
   `used_by` INT(11) NULL,
+  `recipient_phone` VARCHAR(20) NULL,
+  `purchased_by_phone` VARCHAR(20) NULL,
+  `payment_order_reference` VARCHAR(64) NULL,
   `expires_at` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -903,6 +927,26 @@ CREATE TABLE IF NOT EXISTS `clickpesa_transactions` (
   UNIQUE KEY `idx_order_reference` (`order_reference`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Verified provider callbacks are kept separately from customer collections so
+-- retries and payout notifications remain auditable without double-counting.
+CREATE TABLE IF NOT EXISTS `payment_events` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `provider` VARCHAR(32) NOT NULL DEFAULT 'clickpesa',
+  `event_type` VARCHAR(64) NOT NULL,
+  `provider_ref` VARCHAR(128) NULL,
+  `order_reference` VARCHAR(128) NULL,
+  `raw_payload` LONGTEXT NOT NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'received',
+  `error_message` TEXT NULL,
+  `processed_at` DATETIME NULL,
+  `received_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_provider_event_ref` (`provider_ref`, `event_type`),
+  KEY `idx_order_ref` (`order_reference`),
+  KEY `idx_event_type` (`event_type`),
+  KEY `idx_received_at` (`received_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
