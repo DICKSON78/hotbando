@@ -275,7 +275,7 @@
 /ip hotspot profile set hotbando-profile html-directory=hotspot
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando Hotspot -->\n<html>\n<head>\n<meta http-equiv='refresh' content='0;url=https://<HOTBANDO_SERVER_IP>/hotspot?router_id=<ROUTER_ID>&mac=\$(mac)&ip=\$(ip)'>\n</head>\n<body>HotBando - connecting...</body>\n</html>\n"
+:local loginHtml "<!-- HotBando Hotspot -->\n<html>\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>HotBando</title></head>\n<body style=\"font-family:Arial;background:#0b0b12;color:#fff;padding:24px\">HotBando WiFi<br><a href=\"https://<HOTBANDO_SERVER_IP>/hotspot?router_id=<ROUTER_ID>&mac=\\$(mac)&ip=\\$(ip)\" style=\"color:#ff7a30\">Tap to open HotBando</a></body>\n</html>\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 # ============================================================================

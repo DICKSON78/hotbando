@@ -7,18 +7,31 @@
         <h1 class="text-xl font-bold text-white truncate">{{ user?.name || 'User' }}</h1>
         <p class="text-sm text-white/50 truncate">{{ user?.phone_number || 'HotBando Member' }}</p>
       </div>
-      <span class="flex items-center gap-1.5 text-xs font-medium text-white/60 bg-[#111118] border border-[#1e1e2a] rounded-full px-3 py-2 flex-shrink-0">
-        <i class="fas fa-wifi text-[#FF7A30]"></i>{{ store.ssidshow || 'WiFi' }}
-      </span>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button class="relative h-10 w-10 rounded-full bg-[#111118] border border-[#1e1e2a] text-white/80" aria-label="Notifications" @click="showNotifications = !showNotifications">
+          <i class="fa-solid fa-bell"></i>
+          <span v-if="unreadCount" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-bold leading-[18px]">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+        </button>
+        <span class="flex items-center gap-1.5 text-xs font-medium text-white/60 bg-[#111118] border border-[#1e1e2a] rounded-full px-3 py-2">
+          <i class="fas fa-wifi text-[#FF7A30]"></i>{{ store.ssidshow || 'WiFi' }}
+        </span>
+      </div>
     </div>
 
     <!-- Durable payment confirmations and other account messages -->
-    <div v-if="notifications.length" class="mx-4 mt-3 space-y-2">
-      <div v-for="item in notifications" :key="item.id" class="rounded-xl border border-[#262633] bg-[#111118] px-4 py-3">
+    <div v-if="showNotifications" class="mx-4 mt-3 rounded-2xl border border-[#262633] bg-[#111118] p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-white">Notifications</h2>
+        <button v-if="unreadCount" class="text-xs text-[#FF7A30]" @click="markNotificationsRead">Mark all read</button>
+      </div>
+      <div v-if="notifications.length" class="space-y-2 max-h-64 overflow-y-auto">
+      <div v-for="item in notifications" :key="item.id" class="rounded-xl border border-[#262633] bg-[#0a0a0f] px-4 py-3">
         <p class="text-sm font-semibold text-white">{{ item.title }}</p>
         <p class="mt-1 text-xs text-white/60">{{ item.message }}</p>
         <router-link v-if="item.action_url" :to="item.action_url" class="mt-2 inline-block text-xs font-semibold text-[#FF7A30]">{{ item.action_text || 'Fungua' }}</router-link>
       </div>
+      </div>
+      <p v-else class="text-xs text-white/50">Hakuna notifications mpya.</p>
     </div>
 
     <!-- Alert banner -->
@@ -29,7 +42,6 @@
         <div class="flex gap-2 mt-2">
           <router-link to="/hotspot/subscribe" class="ig-btn ig-btn-primary text-xs py-1.5 px-3">Buy Voucher</router-link>
           <router-link to="/hotspot/ads" class="ig-btn ig-btn-outline text-xs py-1.5 px-3">Watch Ads</router-link>
-          <button v-if="canEnableNotifications" class="ig-btn ig-btn-outline text-xs py-1.5 px-3" @click="enableNotifications">Enable alerts</button>
         </div>
       </div>
     </div>
@@ -100,7 +112,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { hotspotGet, hotspotPost } from '../../api/client'
 import { useHotspotStore } from '../../stores/hotspot'
@@ -121,6 +133,8 @@ const connError = ref(false)
 const alertMsg = ref('')
 const alertType = ref('info')
 const notifications = ref([])
+const showNotifications = ref(false)
+const unreadCount = computed(() => notifications.value.filter(item => !item.is_read).length)
 let lowBundleNotified = false
 let connectedNotified = false
 let outOfBundleNotified = false
@@ -163,22 +177,9 @@ function checkAlert() {
   }
 }
 
-const canEnableNotifications = ref(typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default')
-
-async function enableNotifications() {
-  try {
-    const permission = await Notification.requestPermission()
-    canEnableNotifications.value = permission === 'default'
-    if (permission === 'granted') sendNotification('HotBando', alertMsg.value)
-  } catch (e) { /* notifications may be unavailable in captive browsers */ }
-}
-
 function sendNotification(title, body) {
-  try {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/logo.png' })
-    }
-  } catch (e) { /* ignore */ }
+  // Keep hotspot alerts in the in-app banner and notification inbox; native
+  // browser popups can stack over the captive portal and interrupt browsing.
 }
 
 async function loadData() {
@@ -206,6 +207,13 @@ async function loadNotifications() {
     const r = await hotspotGet('/notifications')
     notifications.value = Array.isArray(r.notifications) ? r.notifications : []
   } catch (e) { /* account dashboard remains usable if messages are unavailable */ }
+}
+
+async function markNotificationsRead() {
+  try {
+    await hotspotPost('/notifications/read')
+    notifications.value = notifications.value.map(item => ({ ...item, is_read: 1 }))
+  } catch (e) { /* keep the inbox visible if marking read fails */ }
 }
 
 async function loadUsage() {

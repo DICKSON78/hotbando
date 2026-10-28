@@ -244,6 +244,21 @@ router.get('/notifications', async (req, res) => {
     }
 });
 
+router.post('/notifications/read', async (req, res) => {
+    const user = req.session.hotbando_user;
+    if (!user?.id) return res.status(401).json({ error: 'Umelazimika kuingia kwenye akaunti yako.' });
+    try {
+        await db.execute(
+            'UPDATE notifications SET is_read = 1, read_at = COALESCE(read_at, NOW()) WHERE user_id = ? AND is_read = 0',
+            [user.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Hotspot mark notifications read error:', error);
+        res.status(500).json({ error: 'Imeshindikana kusasisha notifications.' });
+    }
+});
+
 // Logout (JSON)
 router.get('/logout', async (req, res) => {
     const user = req.session.hotbando_user;
