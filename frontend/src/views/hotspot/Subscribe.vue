@@ -131,7 +131,7 @@
       </div>
     </div>
 
-    <PesapalCheckoutModal
+    <ClickPesaCheckoutModal
       :show="showCheckout"
       title="Complete package payment"
       :checkout-url="checkoutUrl"
@@ -151,7 +151,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { hotspotGet, hotspotPost } from '../../api/client'
 import { apiPost, apiGet } from '../../api/client'
 import PhoneInput from '../../components/PhoneInput.vue'
-import PesapalCheckoutModal from '../../components/PesapalCheckoutModal.vue'
+import ClickPesaCheckoutModal from '../../components/PesapalCheckoutModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -300,15 +300,33 @@ async function startPayment() {
   modalError.value = false
   generatedVoucher.value = ''
   try {
-    const r = await apiPost('/payments/initiate', {
-      package_id: selectedPackage.value.id,
-      phone_number: phone,
-      gift: buyMode.value === 'gift',
-      return_path: buyMode.value === 'gift' ? '/hotspot/subscribe' : '/hotspot/dashboard',
-    })
-    if (r.success && r.redirect_url) {
-      checkoutUrl.value = r.redirect_url
-      checkoutTracking.value = r.order_tracking_id || ''
+    let r
+    try {
+      r = await apiPost('/clickpesa/pay', {
+        purpose: 'package_purchase',
+        package_id: selectedPackage.value.id,
+        phoneNumber: phone,
+        gift: buyMode.value === 'gift',
+      })
+    } catch {
+      r = await apiPost('/payments/initiate', {
+        package_id: selectedPackage.value.id,
+        phone_number: phone,
+        gift: buyMode.value === 'gift',
+        return_path: buyMode.value === 'gift' ? '/hotspot/subscribe' : '/hotspot/dashboard',
+      })
+    }
+    if (r.success && (r.redirect_url || r.checkout_url)) {
+      checkoutUrl.value = r.redirect_url || r.checkout_url || ''
+      checkoutTracking.value = r.order_tracking_id || r.orderReference || ''
+      checkoutAmount.value = Number(selectedPackage.value?.price || 0)
+      showModal.value = false
+      showCheckout.value = true
+      processing.value = false
+      return
+    } else if (r.success && r.orderReference) {
+      checkoutUrl.value = ''
+      checkoutTracking.value = r.orderReference
       checkoutAmount.value = Number(selectedPackage.value?.price || 0)
       showModal.value = false
       showCheckout.value = true

@@ -18,14 +18,14 @@
           <button type="submit" :disabled="depositing" class="btn btn-primary w-full justify-center">
             <i v-if="depositing" class="fas fa-spinner fa-spin mr-2"></i>
             <i v-else class="fas fa-lock mr-2"></i>
-            {{ depositing ? 'Inaelekeza PesaPal...' : 'Lipia kwa PesaPal' }}
+            {{ depositing ? 'Inaelekeza malipo...' : 'Lipia' }}
           </button>
         </form>
         <p v-if="depositMsg" class="text-sm mt-2" :class="depositError ? 'text-red-500' : 'text-emerald-500'">{{ depositMsg }}</p>
       </div>
     </div>
 
-    <PesapalCheckoutModal
+    <ClickPesaCheckoutModal
       :show="showCheckout"
       title="Deposit to sponsor wallet"
       :checkout-url="checkoutUrl"
@@ -43,7 +43,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { apiGet, apiPost } from '../../api/client'
-import PesapalCheckoutModal from '../../components/PesapalCheckoutModal.vue'
+import ClickPesaCheckoutModal from '../../components/PesapalCheckoutModal.vue'
 
 const route = useRoute()
 const wallet = ref({})
@@ -104,14 +104,30 @@ async function deposit() {
   const localPhone = toLocalPhone(phone.value)
   if (!/^0[0-9]{9}$/.test(localPhone)) { depositMsg.value = 'Ingiza namba ya simu sahihi'; depositError.value = true; depositing.value = false; return }
   try {
-    const r = await apiPost('/payments/wallet/topup', {
-      amount: amount.value,
-      phone_number: localPhone,
-      return_path: '/sponsor/wallet',
-    })
-    if (r.success && r.redirect_url) {
-      checkoutUrl.value = r.redirect_url
-      checkoutTracking.value = r.order_tracking_id || ''
+    let r
+    try {
+      r = await apiPost('/clickpesa/pay', {
+        purpose: 'sponsor_deposit',
+        amount: amount.value,
+        phoneNumber: localPhone,
+      })
+    } catch {
+      r = await apiPost('/payments/wallet/topup', {
+        amount: amount.value,
+        phone_number: localPhone,
+        return_path: '/sponsor/wallet',
+      })
+    }
+    if (r.success && (r.redirect_url || r.checkout_url)) {
+      checkoutUrl.value = r.redirect_url || r.checkout_url || ''
+      checkoutTracking.value = r.order_tracking_id || r.orderReference || ''
+      checkoutAmount.value = Number(amount.value || 0)
+      showCheckout.value = true
+      depositing.value = false
+      return
+    } else if (r.success && r.orderReference) {
+      checkoutUrl.value = ''
+      checkoutTracking.value = r.orderReference
       checkoutAmount.value = Number(amount.value || 0)
       showCheckout.value = true
       depositing.value = false

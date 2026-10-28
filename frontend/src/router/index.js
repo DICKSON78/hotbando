@@ -13,12 +13,16 @@ const routes = [
 
   // Single unified login for all portals
   { path: '/login', name: 'portal-login', component: () => import('../views/PortalLogin.vue') },
+  { path: '/register', name: 'partner-register', component: () => import('../views/PartnerRegister.vue') },
+  { path: '/partner/register', redirect: '/register' },
   { path: '/admin/login', redirect: '/login' },
   { path: '/sponsor/login', redirect: '/login' },
   { path: '/bank/login', redirect: '/login' },
   { path: '/franchise/login', redirect: '/login' },
   { path: '/reseller/login', redirect: '/login' },
   { path: '/investor/login', redirect: '/login' },
+  { path: '/partner/login', redirect: '/login' },
+  { path: '/partners/login', redirect: '/login' },
 
   // Legacy EJS URLs now redirect to their Vue equivalents.
   { path: '/admin/vouchers', redirect: '/admin/packages' },

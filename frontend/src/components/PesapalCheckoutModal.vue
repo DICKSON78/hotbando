@@ -110,11 +110,22 @@
         <!-- Checkout iframe -->
         <template v-else>
           <div class="relative flex-1 min-h-[420px] sm:min-h-[540px] bg-white">
-            <div v-if="iframeLoading" class="absolute inset-0 flex flex-col items-center justify-center gap-3" style="background: #0a0a0f; color: #9ca3af">
+            <div v-if="iframeLoading && checkoutUrl" class="absolute inset-0 flex flex-col items-center justify-center gap-3" style="background: #0a0a0f; color: #9ca3af">
               <i class="fas fa-circle-notch fa-spin text-2xl" style="color: #FF7A30"></i>
-              <p class="text-sm">Loading secure PesaPal checkout...</p>
+              <p class="text-sm">Loading secure checkout...</p>
+            </div>
+            <div v-if="!checkoutUrl" class="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center" style="background: #0a0a0f; color: #9ca3af">
+              <div class="w-16 h-16 rounded-full flex items-center justify-center" style="background: rgba(255,122,48,0.12)">
+                <i class="fas fa-mobile-screen-button text-2xl" style="color: #FF7A30"></i>
+              </div>
+              <div>
+                <p class="text-white font-semibold">Check your phone</p>
+                <p class="text-sm mt-1">A payment prompt has been sent to your phone. Enter your PIN to complete the payment.</p>
+              </div>
+              <p class="text-xs text-white/40">Waiting for confirmation...</p>
             </div>
             <iframe
+              v-if="checkoutUrl"
               :src="checkoutUrl"
               :title="title"
               class="w-full h-full min-h-[420px] sm:min-h-[540px] border-0"
@@ -125,7 +136,7 @@
           </div>
           <div class="shrink-0 flex items-center justify-between gap-2 px-4 py-2.5" style="background: #111118; border-top: 1px solid #1e1e2a">
             <span class="hidden sm:inline text-xs" style="color: #6b7280">
-              <i class="fa-solid fa-lock mr-1" style="color: #34d399"></i> Secure checkout by PesaPal
+              <i class="fa-solid fa-lock mr-1" style="color: #34d399"></i> Secure checkout
             </span>
             <div class="flex items-center gap-2 ml-auto">
               <a
@@ -196,14 +207,20 @@ async function checkStatus() {
   if (!props.show || !props.orderTrackingId) return
   if (status.value === 'completed' || status.value === 'failed') return
   try {
-    const r = await apiGet(`/payments/status/${encodeURIComponent(props.orderTrackingId)}`)
-    if (r.status === 'completed') {
+    // Try ClickPesa status first, fallback to legacy payments
+    let r
+    try {
+      r = await apiGet(`/clickpesa/status/${encodeURIComponent(props.orderTrackingId)}`)
+    } catch {
+      r = await apiGet(`/payments/status/${encodeURIComponent(props.orderTrackingId)}`)
+    }
+    if (r.status === 'completed' || r.status === 'SUCCESS' || r.status === 'SETTLED') {
       status.value = 'completed'
       finalMessage.value = r.message || props.successMessage
       voucher.value = r.voucher || ''
       stopPolling()
       emit('completed', r)
-    } else if (r.status === 'failed') {
+    } else if (r.status === 'failed' || r.status === 'FAILED' || r.status === 'CANCELLED') {
       status.value = 'failed'
       finalMessage.value = r.message || 'The payment was not completed. Please try again.'
       stopPolling()
@@ -240,8 +257,7 @@ function startPolling() {
     }
     checkStatus()
   }, Math.max(2000, props.pollInterval))
-  // PesaPal needs a moment to register the order.
-  setTimeout(() => { if (props.show) checkStatus() }, 2500)
+  setTimeout(() => { if (props.show) checkStatus() }, 1500)
 }
 
 async function copyVoucher() {

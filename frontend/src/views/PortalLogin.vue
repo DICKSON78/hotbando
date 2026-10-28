@@ -1,19 +1,26 @@
 <template>
   <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style="background: #0a0a0f">
     <div class="absolute inset-0 pointer-events-none">
-      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" class="opacity-[0.03]">
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" class="opacity-[0.07]">
         <defs><pattern id="honeycomb-p" x="0" y="0" width="56" height="97" patternUnits="userSpaceOnUse">
-          <path d="M28 0L56 16.2V48.5L28 64.7L0 48.5V16.2Z" fill="none" stroke="#FF7A30" stroke-width="1.5"/>
-          <path d="M28 32.4L56 48.6V80.9L28 97L0 80.9V48.6Z" fill="none" stroke="#FF7A30" stroke-width="1"/>
+          <path d="M28 0L56 16.2V48.5L28 64.7L0 48.5V16.2Z" fill="none" stroke="white" stroke-width="1.5"/>
+          <path d="M28 32.4L56 48.6V80.9L28 97L0 80.9V48.6Z" fill="none" stroke="white" stroke-width="1"/>
         </pattern></defs>
         <rect width="100%" height="100%" fill="url(#honeycomb-p)"/>
       </svg>
+      <svg width="100%" height="100%" viewBox="0 0 400 400" class="absolute inset-0" preserveAspectRatio="none">
+        <path d="M0 300 Q 50 280 100 320 T 200 300 T 300 340 T 400 310 L 400 400 L 0 400Z" fill="rgba(255,122,48,0.04)"/>
+        <circle cx="50" cy="50" r="8" fill="rgba(255,122,48,0.06)"/>
+        <circle cx="350" cy="80" r="12" fill="rgba(255,122,48,0.05)"/>
+        <circle cx="180" cy="120" r="6" fill="rgba(255,122,48,0.07)"/>
+        <circle cx="80" cy="240" r="10" fill="rgba(255,122,48,0.05)"/>
+      </svg>
     </div>
-    <div class="rounded-2xl shadow-xl p-8 w-full max-w-md relative" style="background: #111118; border: 1px solid #1e1e2a">
+    <div class="rounded-2xl shadow-2xl p-8 w-full max-w-md relative" style="background: #111118; border: 1px solid #1e1e2a">
       <div class="text-center mb-6">
-        <img src="/logo.png" class="h-16 mx-auto mb-3" alt="HotBando">
-        <h1 class="text-2xl font-bold text-white">HotBando</h1>
-        <p class="text-white/50 mt-1 text-sm">Sign in to your portal</p>
+        <img src="/logo.png" class="h-16 mx-auto mb-4" alt="HotBando">
+        <h1 class="text-xl font-bold text-white mb-2">Login</h1>
+        <p class="text-white/50 text-sm">Sign in to your portal</p>
       </div>
 
       <!-- Role badge preview -->
@@ -34,27 +41,25 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-white/70 mb-1.5">Password</label>
-          <input v-model="password" type="password" required class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;">
+          <div class="relative">
+            <input v-model="password" :type="showPassword ? 'text' : 'password'" required class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 pr-10 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" placeholder="••••••••">
+            <button type="button" @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70">
+              <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
         </div>
         <p v-if="error" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
-        <button type="submit" :disabled="loading" class="w-full bg-[#FF7A30] hover:bg-[#ea6a24] text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-[#FF7A30]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+        <button type="submit" :disabled="loading" class="w-full bg-[#FF7A30] hover:bg-[#ea6a24] text-white font-semibold py-2.5 rounded-xl transition-all shadow-lg shadow-[#FF7A30]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
           <i v-if="loading" class="fas fa-spinner fa-spin"></i>
           {{ loading ? 'Signing in...' : 'Sign In' }}
         </button>
       </form>
 
-      <div class="mt-6 pt-4 border-t border-[#1e1e2a] text-center">
-        <p class="text-xs text-white/40 mb-3">Available Portals</p>
-        <div class="flex flex-wrap justify-center gap-2">
-          <span class="text-[10px] px-2 py-1 rounded bg-white/5 text-white/40 border border-[#1e1e2a]">Admin</span>
-          <span class="text-[10px] px-2 py-1 rounded bg-white/5 text-white/40 border border-[#1e1e2a]">Sponsor</span>
-          <span class="text-[10px] px-2 py-1 rounded bg-white/5 text-white/40 border border-[#1e1e2a]">Reseller</span>
-          <span class="text-[10px] px-2 py-1 rounded bg-white/5 text-white/40 border border-[#1e1e2a]">Investor</span>
-          <span class="text-[10px] px-2 py-1 rounded bg-white/5 text-white/40 border border-[#1e1e2a]">Franchise</span>
-          <span class="text-[10px] px-2 py-1 rounded bg-white/5 text-white/40 border border-[#1e1e2a]">Bank</span>
-        </div>
+      <div class="mt-6 text-center">
+        <p class="text-sm text-white/50 mb-2">Don't have an account?</p>
+        <router-link to="/register" class="text-sm text-[#FF7A30] hover:underline font-medium">Register as Reseller / Franchiser / Partner</router-link>
       </div>
-      <p class="text-center text-xs text-white/40 mt-4">
+      <p class="text-center text-sm text-white/50 mt-4">
         WiFi user? <router-link to="/hotspot/login" class="text-[#FF7A30] hover:underline">Login with phone</router-link>
       </p>
     </div>
@@ -73,6 +78,7 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const detectedRole = ref(null)
+const showPassword = ref(false)
 
 const ROLE_META = {
   admin:          { label: 'Admin Portal',       icon: 'fas fa-shield-alt',  redirect: '/admin/dashboard' },

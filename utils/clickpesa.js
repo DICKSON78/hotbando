@@ -41,7 +41,46 @@ function verifyWebhookChecksum(payload, receivedChecksum) {
   delete payloadForValidation.checksum;
   delete payloadForValidation.checksumMethod;
   const computed = createChecksum(payloadForValidation);
-  return computed === receivedChecksum;
+  try {
+    if (Buffer.byteLength(computed) !== Buffer.byteLength(receivedChecksum)) return false;
+    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(receivedChecksum));
+  } catch (e) {
+    return computed === receivedChecksum;
+  }
+}
+
+function verifyClickPesaWebhookSignature(rawBody, signature, headerName) {
+  const WEBHOOK_SECRET = process.env.CLICKPESA_WEBHOOK_SECRET || '';
+  if (!WEBHOOK_SECRET) {
+    logger.warn('CLICKPESA_WEBHOOK_SECRET not configured');
+    return false;
+  }
+  if (!signature) {
+    return false;
+  }
+  const sig = Array.isArray(signature) ? signature[0] : signature;
+  // Try HMAC-SHA256 hex
+  const hmacHex = crypto.createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
+  try {
+    if (Buffer.byteLength(hmacHex) === Buffer.byteLength(sig) && crypto.timingSafeEqual(Buffer.from(hmacHex), Buffer.from(sig))) {
+      return true;
+    }
+  } catch (e) {}
+  // Try base64
+  try {
+    const hmacB64 = crypto.createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('base64');
+    if (Buffer.byteLength(hmacB64) === Buffer.byteLength(sig) && crypto.timingSafeEqual(Buffer.from(hmacB64), Buffer.from(sig))) {
+      return true;
+    }
+  } catch (e) {}
+  // Try with sha256= prefix
+  const stripped = sig.replace(/^sha256=/i, '');
+  try {
+    if (Buffer.byteLength(hmacHex) === Buffer.byteLength(stripped) && crypto.timingSafeEqual(Buffer.from(hmacHex), Buffer.from(stripped))) {
+      return true;
+    }
+  } catch (e) {}
+  return false;
 }
 
 async function getToken() {
@@ -145,6 +184,7 @@ async function queryAllPayments({ channel, status, startDate, limit } = {}) {
 module.exports = {
   createChecksum,
   verifyWebhookChecksum,
+  verifyClickPesaWebhookSignature,
   getToken,
   previewUSSDPush,
   initiateUSSDPush,

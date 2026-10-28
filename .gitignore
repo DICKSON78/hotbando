@@ -11,3 +11,7 @@ tmp/
 .qodo/
 Modelfile
 .aider*
+
+*.rsc
+data/host-arp.txt
+*-summary.md

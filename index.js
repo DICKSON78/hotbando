@@ -105,6 +105,9 @@ app.use((req, res, next) => {
         '/api/payments/ipn',
         '/api/payments/callback',
         '/api/clickpesa/webhook',
+        '/api/webhooks/clickpesa',
+        '/api/partners/register',
+        '/api/reseller/register',
         '/api/clickpesa/ussd-webhook',
         '/api/admin/login',
         '/api/admin/logout',
@@ -153,6 +156,8 @@ const mikrotikSetupRoutes = require('./routes/mikrotikSetup');
 const investorRoutes = require('./routes/investor');
 const resellerRoutes = require('./routes/reseller');
 const clickpesaRoutes = require('./routes/clickpesa');
+const webhookRoutes = require('./routes/webhooks');
+const partnerRoutes = require('./routes/partners');
 const hqRoutes = require('./routes/hq');
 const paymentRoutes = require('./routes/paymentRoutes');
 
@@ -200,6 +205,8 @@ app.use('/api/admin/business', businessRoutes);
 app.use('/api/investor', investorRoutes);
 app.use('/api/reseller', resellerRoutes);
 app.use('/api/clickpesa', clickpesaRoutes);
+app.use('/api/webhooks', webhookRoutes);
+app.use('/api/partners', partnerRoutes);
 app.use('/api/payments', paymentRoutes);
 
 // Public packages listing (used by reseller portal)
@@ -372,6 +379,7 @@ app.get(['/bank', '/bank/*'], serveSPA);
 app.get(['/reseller', '/reseller/*'], serveSPA);
 app.get(['/investor', '/investor/*'], serveSPA);
 app.get(['/login'], serveSPA);
+app.get(['/register', '/partner/register', '/partners/register'], serveSPA);
 app.get(['/services', '/pricing', '/about', '/partners', '/contact'], serveSPA);
 
 // Home route — the hotspot portal lives at the root
