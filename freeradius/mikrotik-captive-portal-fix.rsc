@@ -115,6 +115,8 @@
 # Never hand out a free trial period: that lets clients browse without login.
 # Property names differ between RouterOS versions, so try both.
 :if ([:len $hsProfile] > 0) do={
+  :do { /ip hotspot profile set [find name=$hsProfile] use-radius=yes } on-error={}
+  :do { /ip hotspot profile set [find name=$hsProfile] html-directory=hotspot } on-error={}
   :do { /ip hotspot profile set [find name=$hsProfile] login-by=http-pap,http-chap,mac } on-error={}
   :do { /ip hotspot profile set [find name=$hsProfile] mac-auth-mode=mac-as-username-and-password } on-error={}
   :do { /ip hotspot profile set [find name=$hsProfile] trial-uptime-limit=0s } on-error={}
