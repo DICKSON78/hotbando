@@ -187,6 +187,27 @@ class ResellerController {
         [resellerUserId]
       );
 
+      // Daily sales for the last 7 days (for chart)
+      const [dailySales] = await db.execute(
+        `SELECT DATE(v.used_at) as d, COUNT(*) as c
+         FROM vouchers v
+         JOIN voucher_batches vb ON v.batch_id = vb.id
+         WHERE vb.created_by = ? AND v.is_used = 1 AND v.used_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+         GROUP BY DATE(v.used_at)
+         ORDER BY d ASC`,
+        [resellerUserId]
+      );
+      const labels = [];
+      const data = [];
+      for (let i = 6; i >= 0; i--) {
+        const dt = new Date();
+        dt.setDate(dt.getDate() - i);
+        const key = dt.toISOString().slice(0, 10);
+        labels.push(dt.toLocaleDateString('en-US', { weekday: 'short' }));
+        const row = dailySales.find(r => (r.d instanceof Date ? r.d.toISOString().slice(0, 10) : String(r.d).slice(0, 10)) === key);
+        data.push(row ? row.c : 0);
+      }
+
       return res.json({
         success: true,
         wallet: {
@@ -198,7 +219,8 @@ class ResellerController {
           redeemed: soldVouchers[0].count || 0,
           earnings: parseFloat(earningsResult[0].total) || 0
         },
-        recent_sales: recentSales
+        recent_sales: recentSales,
+        chartData: { labels, data }
       });
     } catch (error) {
       console.error('Hitilafu katika dashboard ya reseller:', error);
