@@ -11,3 +11,7 @@ export function resellerPost(url, data) {
 export function resellerPut(url, data) {
   return api.put(`/reseller${url}`, data).then(r => r.data)
 }
+
+export function resellerDelete(url) {
+  return api.delete(`/reseller${url}`).then(r => r.data)
+}

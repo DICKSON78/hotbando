@@ -420,6 +420,12 @@ class ResellerController {
         [topUpAmount, resellerUserId]
       );
 
+      await db.execute(
+        `INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at)
+         VALUES (?, 'topup', ?, ?, ?, NOW())`,
+        [resellerUserId, topUpAmount, payment_reference || null, `Top up via ${payment_method || 'clickpesa'}`]
+      );
+
       const [updatedReseller] = await db.execute('SELECT balance FROM resellers WHERE user_id = ?', [resellerUserId]);
 
       return res.json({
@@ -537,6 +543,82 @@ class ResellerController {
       await connection.rollback();
       console.error('Hitilafu katika uondoaji:', error);
       return res.status(500).json({ success: false, message: 'Imeshindikana kufanya uondoaji', error: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+
+  async getTopups(req, res) {
+    try {
+      const resellerUserId = req.session.reseller_user.id;
+      const [rows] = await db.execute(
+        `SELECT id, amount, payment_reference, description, created_at
+         FROM transactions WHERE user_id = ? AND transaction_type = 'topup'
+         ORDER BY created_at DESC LIMIT 50`,
+        [resellerUserId]
+      );
+      return res.json({ success: true, data: rows });
+    } catch (error) {
+      console.error('Hitilafu kupata topups:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kupata historia ya top up', error: error.message });
+    }
+  }
+
+  async deleteVoucher(req, res) {
+    try {
+      const resellerUserId = req.session.reseller_user.id;
+      const voucherId = parseInt(req.params.id);
+      const [rows] = await db.execute(
+        `SELECT v.id, v.is_used FROM vouchers v
+         JOIN voucher_batches vb ON v.batch_id = vb.id
+         WHERE v.id = ? AND vb.created_by = ?`,
+        [voucherId, resellerUserId]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Voucher haijapatikana' });
+      }
+      if (rows[0].is_used) {
+        return res.status(400).json({ success: false, message: 'Haiwezekani kufuta voucher iliyotumika' });
+      }
+      await db.execute('DELETE FROM vouchers WHERE id = ?', [voucherId]);
+      return res.json({ success: true, message: 'Voucher imefutwa' });
+    } catch (error) {
+      console.error('Hitilafu kufuta voucher:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kufuta voucher', error: error.message });
+    }
+  }
+
+  async cancelWithdrawal(req, res) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const resellerUserId = req.session.reseller_user.id;
+      const withdrawalId = parseInt(req.params.id);
+
+      const [resellerRows] = await connection.execute('SELECT id FROM resellers WHERE user_id = ?', [resellerUserId]);
+      if (resellerRows.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ success: false, message: 'Reseller haijapatikana' });
+      }
+      const resellerId = resellerRows[0].id;
+
+      const [rows] = await connection.execute(
+        `SELECT * FROM reseller_withdrawals WHERE id = ? AND reseller_id = ? AND status = 'pending' FOR UPDATE`,
+        [withdrawalId, resellerId]
+      );
+      if (rows.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ success: false, message: 'Uondoaji haujapatikana au umeshashughulikiwa' });
+      }
+      const w = rows[0];
+      await connection.execute('DELETE FROM reseller_withdrawals WHERE id = ?', [withdrawalId]);
+      await connection.execute('UPDATE resellers SET balance = balance + ? WHERE user_id = ?', [parseFloat(w.amount), resellerUserId]);
+      await connection.commit();
+      return res.json({ success: true, message: 'Uondoaji umefutwa na salio limerudishwa' });
+    } catch (error) {
+      await connection.rollback();
+      console.error('Hitilafu kufuta uondoaji:', error);
+      return res.status(500).json({ success: false, message: 'Imeshindikana kufuta uondoaji', error: error.message });
     } finally {
       connection.release();
     }

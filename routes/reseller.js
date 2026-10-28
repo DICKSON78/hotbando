@@ -14,8 +14,11 @@ router.get('/dashboard', (req, res) => resellerController.getDashboard(req, res)
 router.get('/earnings', (req, res) => resellerController.getDashboard(req, res));
 router.get('/vouchers', (req, res) => resellerController.getVouchers(req, res));
 router.post('/vouchers/generate', (req, res) => resellerController.generateVouchers(req, res));
+router.delete('/vouchers/:id', (req, res) => resellerController.deleteVoucher(req, res));
 router.post('/topup', (req, res) => resellerController.topUp(req, res));
+router.get('/topups', (req, res) => resellerController.getTopups(req, res));
 router.get('/withdrawals', (req, res) => resellerController.getWithdrawals(req, res));
 router.post('/withdraw', (req, res) => resellerController.requestWithdrawal(req, res));
+router.delete('/withdrawals/:id', (req, res) => resellerController.cancelWithdrawal(req, res));
 
 module.exports = router;
