@@ -204,8 +204,12 @@ async function loadWithdrawals() {
   loading.value = true
   try {
     const r = await adminGet(`/withdrawals?status=${statusFilter.value}&page=${page.value}&limit=20`)
-    withdrawals.value = r.data || []
+    const rows = [r.data, r.withdrawals, r.rows, r.data?.withdrawals, r.data?.rows].find(Array.isArray)
+    withdrawals.value = rows || []
     pagination.value = r.pagination || {}
+    if (!withdrawals.value.length && Number(pagination.value.total || 0) > 0) {
+      showToast(`Server inaonyesha maombi ${pagination.value.total}, lakini list haikuyapokea. Bonyeza Refresh.`, 'error')
+    }
   } catch (e) {
     console.error(e)
     showToast('Failed to load withdrawals', 'error')

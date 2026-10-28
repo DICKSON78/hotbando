@@ -219,11 +219,13 @@ router.get('/withdrawals', async (req, res) => {
     const [[countRow]] = await db.execute(`SELECT COUNT(*) AS total FROM transactions t WHERE ${condition}`, values);
     const [rows] = await db.execute(`
       SELECT t.id, t.user_id, t.amount, t.payment_phone, t.payment_method, t.payment_reference,
-             t.status, t.created_at, u.name AS user_name, u.phone_number, u.email, u.company_name
-      FROM transactions t JOIN users u ON u.id = t.user_id
+             t.status, t.created_at, COALESCE(u.name, CONCAT('User #', t.user_id)) AS user_name,
+             u.phone_number, u.email, u.company_name
+      FROM transactions t LEFT JOIN users u ON u.id = t.user_id
       WHERE ${condition} ORDER BY t.created_at DESC LIMIT ? OFFSET ?
     `, [...values, limit, (page - 1) * limit]);
-    res.json({ data: rows, pagination: { page, limit, total: Number(countRow.total || 0), pages: Math.max(1, Math.ceil(Number(countRow.total || 0) / limit)) } });
+    const pagination = { page, limit, total: Number(countRow.total || 0), pages: Math.max(1, Math.ceil(Number(countRow.total || 0) / limit)) };
+    res.json({ success: true, data: rows, withdrawals: rows, pagination });
   } catch (error) {
     console.error('Admin withdrawals error:', error);
     res.status(500).json({ error: 'Failed to load withdrawals' });
