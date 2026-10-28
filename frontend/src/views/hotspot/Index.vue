@@ -49,6 +49,7 @@
           </div>
         </div>
         <p class="text-xs text-white/30">Access from outside the network is limited</p>
+        <InstallApp />
       </div>
 
       <!-- ON WiFi — show normal landing -->
@@ -65,6 +66,7 @@
             <span class="text-white/50">Don't have an account?</span>
             <router-link to="/hotspot/signup" class="text-[#FF7A30] font-semibold hover:underline"> Register</router-link>
           </div>
+          <InstallApp />
         </div>
       </div>
 
@@ -79,6 +81,7 @@
 
 <script setup>
 import { useHotspotStore } from '../../stores/hotspot'
+import InstallApp from '../../components/InstallApp.vue'
 
 const store = useHotspotStore()
 // HotspotLayout initializes the session (including the captive-portal query).
