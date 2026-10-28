@@ -76,6 +76,13 @@ async function configureRouter(routerID, options = {}) {
         return { success: false, message: 'Server IP is required for RADIUS configuration' };
     }
 
+    // HOTSPOT_SUBNET is often configured as "10.5.50.0" (no prefix).
+    const hotspotCidr = String(hotspotNet || '').includes('/')
+        ? String(hotspotNet)
+        : `${hotspotNet || '10.5.50.0'}/24`;
+    const [hotspotNetBase, hotspotPrefixLen = '24'] = hotspotCidr.split('/');
+    const hotspotNetPrefix = hotspotNetBase.replace(/\.\d+$/, '');
+
     let conn;
     try {
         conn = await mikrotikService.getRouterConnection(routerID);
@@ -97,6 +104,21 @@ async function configureRouter(routerID, options = {}) {
         }
     }
 
+    // A hotspot created directly on a bridge *port* (wlan1) is bypassed by the
+    // bridge. Resolve the bridge that contains the radio and put the hotspot
+    // there instead, otherwise clients get plain internet with no portal.
+    let hotspotIface = hotspotInterface;
+    try {
+        const ports = await conn.write('/interface/bridge/port/print');
+        const port = ports.find(p => p.interface === hotspotInterface);
+        if (port && port.bridge) {
+            hotspotIface = port.bridge;
+            logger.info(`ℹ️ ${hotspotInterface} is bridged; using ${hotspotIface} for the hotspot`);
+        }
+    } catch (e) {
+        // No bridge package / no ports — keep the configured interface.
+    }
+
     // Update setup progress
     const w = routerWhere(routerID);
     await db.execute(
@@ -111,24 +133,24 @@ async function configureRouter(routerID, options = {}) {
 
     // 2. Hotspot IP address on the interface
     await run('Add hotspot IP address', '/ip/address/add', [
-        `=address=${hotspotIP}/24`,
-        `=interface=${hotspotInterface}`,
+        `=address=${hotspotIP}/${hotspotPrefixLen}`,
+        `=interface=${hotspotIface}`,
         `=comment=hotbando-hotspot`
     ]);
 
     // 3. DHCP pool + server + network
     await run('Add DHCP pool', '/ip/pool/add', [
         `=name=hotbando-pool`,
-        `=ranges=${hotspotNet}/24`
+        `=ranges=${hotspotNetPrefix}.100-${hotspotNetPrefix}.200`
     ]);
     await run('Add DHCP network', '/ip/dhcp-server/network/add', [
-        `=address=${hotspotNet}/24`,
+        `=address=${hotspotCidr}`,
         `=gateway=${hotspotIP}`,
         `=dns-server=${hotspotIP}`
     ]);
     await run('Add DHCP server', '/ip/dhcp-server/add', [
         `=name=hotbando-dhcp`,
-        `=interface=${hotspotInterface}`,
+        `=interface=${hotspotIface}`,
         `=address-pool=hotbando-pool`,
         `=disabled=no`
     ]);
@@ -139,32 +161,86 @@ async function configureRouter(routerID, options = {}) {
         `=allow-remote-requests=yes`
     ]);
 
+    // 4b. Captive-portal detection hosts -> hotspot gateway. Keep these OUT of
+    // the walled garden so the phone's probe is intercepted and the OS opens
+    // the portal instead of deciding that the internet already works.
+    const captiveHosts = [
+        'connectivitycheck.gstatic.com',
+        'connectivitycheck.android.com',
+        'captive.apple.com',
+        'msftconnecttest.com',
+        'www.msftconnecttest.com',
+        'msftncsi.com',
+        'www.msftncsi.com',
+        'detectportal.firefox.com',
+        'nmcheck.gnome.org'
+    ];
+    try {
+        const statics = await conn.write('/ip/dns/static/print');
+        for (const s of statics) {
+            if (s.comment === 'HotBando captive') {
+                await conn.write('/ip/dns/static/remove', [`=.id=${s['.id']}`]);
+            }
+        }
+    } catch (e) { /* ignore */ }
+    for (const host of captiveHosts) {
+        await run(`Add captive DNS ${host}`, '/ip/dns/static/add', [
+            `=name=${host}`,
+            `=address=${hotspotIP}`,
+            `=ttl=1m`,
+            `=comment=HotBando captive`
+        ]);
+    }
+
     // 5. Hotspot server + profile
     await run('Add hotspot server', '/ip/hotspot/add', [
         `=name=hotspot1`,
-        `=interface=${hotspotInterface}`,
+        `=interface=${hotspotIface}`,
         `=address-pool=hotbando-pool`,
         `=addresses-per-mac=1`,
-        `=trial=yes`,
         `=disabled=no`
     ]);
     await run('Enable hotspot RADIUS in profile', '/ip/hotspot/profile/set', [
         `=[find default=yes]`,
         `=use-radius=yes`,
-        `=html-directory=hotspot`
+        `=html-directory=hotspot`,
+        `=login-by=http-pap,http-chap`,
+        `=trial-uptime=0s`
     ]);
 
     // 6. Firewall: NAT masquerade + walled garden
     await run('Add NAT masquerade', '/ip/firewall/nat/add', [
         `=chain=srcnat`,
-        `=src-address=${hotspotNet}/24`,
+        `=src-address=${hotspotCidr}`,
         `=out-interface=ether1`,
         `=action=masquerade`
     ]);
-    await run('Add walled garden (DNS)', '/ip/hotspot/walled-garden/add', [
-        `=dst-host=*.hotbando.com`,
-        `=action=allow`
-    ]);
+
+    // The portal host (and bare server IP) must be reachable before login.
+    const portalHost = (() => {
+        try {
+            return new URL(process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${process.env.SERVER_PUBLIC_HOST || 'hotbandowifi.online'}`).hostname;
+        } catch (e) {
+            return process.env.SERVER_PUBLIC_HOST || 'hotbandowifi.online';
+        }
+    })();
+    const serverIp = process.env.SERVER_PUBLIC_IP || '';
+    const portalHosts = [portalHost];
+    if (!/^www\./i.test(portalHost)) portalHosts.push(`www.${portalHost}`);
+    for (const host of portalHosts) {
+        await run(`Allow portal host ${host}`, '/ip/hotspot/walled-garden/add', [
+            `=dst-host=${host}`,
+            `=action=allow`,
+            `=comment=HotBando portal`
+        ]);
+    }
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(serverIp)) {
+        await run('Allow portal IP', '/ip/hotspot/walled-garden/add', [
+            `=dst-address=${serverIp}`,
+            `=action=allow`,
+            `=comment=HotBando portal`
+        ]);
+    }
 
     // 7. RADIUS server pointing to HotBando
     if (serverIP && radiusSecret) {
@@ -172,7 +248,7 @@ async function configureRouter(routerID, options = {}) {
             `=service=hotspot`,
             `=address=${serverIP}`,
             `=secret=${radiusSecret}`,
-            `=src-address=${hotspotIP}`,
+            `=src-address=0.0.0.0`,
             `=timeout=3000ms`
         ]);
         await run('Enable RADIUS incoming', '/radius/incoming/set', [
@@ -181,13 +257,30 @@ async function configureRouter(routerID, options = {}) {
         ]);
     }
 
-    // 8. Wireless SSID
-    await run('Set wireless SSID', '/interface/wireless/set', [
-        `=.id=${hotspotInterface}`,
-        `=ssid=${ssid}`,
-        `=mode=ap-bridge`,
-        `=disabled=no`
-    ]);
+    // 8. Wireless SSID (radio interface, not the bridge)
+    //    RouterOS 6 exposes /interface/wireless; RouterOS 7 hAP ax uses
+    //    /interface/wifi (wifi1, wifi2, ...). Try both so neither is missed.
+    try {
+        await conn.write('/interface/wireless/set', [
+            `=.id=${hotspotInterface}`,
+            `=ssid=${ssid}`,
+            `=mode=ap-bridge`,
+            `=disabled=no`
+        ]);
+        executed.push('Set wireless SSID (legacy)');
+    } catch (e) {
+        try {
+            await conn.write('/interface/wifi/set', [
+                `=.id=${hotspotInterface}`,
+                `=ssid=${ssid}`,
+                `=disabled=no`
+            ]);
+            executed.push('Set wireless SSID (RouterOS 7)');
+        } catch (e2) {
+            failed.push({ label: 'Set wireless SSID', error: e2.message });
+            logger.error(`❌ Set wireless SSID on ${routerID}: ${e2.message}`);
+        }
+    }
 
     // Update router record
     await db.execute(
@@ -257,13 +350,19 @@ async function verifyConfiguration(routerID) {
         checks.radius = 'error';
     }
 
-    // Check wireless
+    // Check wireless (RouterOS 6 /interface/wireless or RouterOS 7 /interface/wifi)
     try {
         const wireless = await conn.write('/interface/wireless/print');
         const wlan = wireless.find(w => w.disabled === 'false' || w.disabled === false);
         checks.wifi = wlan ? 'ok' : 'not_configured';
     } catch (e) {
-        checks.wifi = 'error';
+        try {
+            const wifi = await conn.write('/interface/wifi/print');
+            const radio = wifi.find(w => w.disabled === 'false' || w.disabled === false);
+            checks.wifi = radio ? 'ok' : 'not_configured';
+        } catch (e2) {
+            checks.wifi = 'error';
+        }
     }
 
     const configured = checks.hotspotServer === 'ok' && checks.dhcp === 'ok';

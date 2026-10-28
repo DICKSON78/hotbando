@@ -39,6 +39,10 @@ function resolvePublicBaseUrl() {
 const PUBLIC_BASE_URL = resolvePublicBaseUrl();
 const PUBLIC_FETCH_MODE = PUBLIC_BASE_URL.startsWith('https://') ? 'https' : 'http';
 const RADIUS_SECRET = process.env.RADIUS_SECRET || '';
+// RouterOS /radius expects an IP address, so prefer the numeric public IP.
+const RADIUS_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(process.env.SERVER_PUBLIC_IP || '')
+    ? process.env.SERVER_PUBLIC_IP
+    : SERVER_PUBLIC_HOST;
 const DEFAULT_SSID = process.env.DEFAULT_SSID || 'HotBando-Free-WiFi';
 const HOTSPOT_IP = process.env.HOTSPOT_IP || '10.5.50.1';
 const HOTSPOT_NET = process.env.HOTSPOT_SUBNET || '10.5.50.0/24';
@@ -46,6 +50,16 @@ const HOTSPOT_DNS = process.env.HOTSPOT_DNS || '8.8.8.8';
 
 function sanitize(value) {
     return String(value || '').replace(/([\\"])/g, '\\$1');
+}
+
+/**
+ * Normalise a subnet ("10.5.50.0", "10.5.50.0/24") to CIDR form.
+ * HOTSPOT_SUBNET is commonly set without a prefix in .env.
+ */
+function normalizeCidr(value, fallback = '10.5.50.0/24') {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+    return raw.includes('/') ? raw : `${raw}/24`;
 }
 
 /**
@@ -375,12 +389,32 @@ async function provisionRouter(payload = {}) {
 }
 
 function serverWalledGardenRules() {
+    const rules = [];
+
+    // Allow the portal hostname(s). Captive clients may reach the portal via
+    // the configured host, the www alias, or the bare server IP.
     if (SERVER_PUBLIC_IS_IP) {
-        return `/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_HOST} comment="HotBando server"
-/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_HOST} dst-port=80,443 comment="HotBando web"`;
+        rules.push(`/ip hotspot walled-garden add action=allow dst-address=${SERVER_PUBLIC_HOST} comment="HotBando server"`);
+    } else {
+        rules.push(`/ip hotspot walled-garden add action=allow dst-host="${SERVER_PUBLIC_HOST}" comment="HotBando server"`);
+        if (!/^www\./i.test(SERVER_PUBLIC_HOST)) {
+            rules.push(`/ip hotspot walled-garden add action=allow dst-host="www.${SERVER_PUBLIC_HOST}" comment="HotBando server (www)"`);
+        }
+        const appHost = (() => {
+            try { return new URL(PUBLIC_BASE_URL).hostname; } catch (e) { return ''; }
+        })();
+        if (appHost && appHost !== SERVER_PUBLIC_HOST && !/^www\./i.test(appHost)) {
+            rules.push(`/ip hotspot walled-garden add action=allow dst-host="${appHost}" comment="HotBando portal"`);
+            rules.push(`/ip hotspot walled-garden add action=allow dst-host="www.${appHost}" comment="HotBando portal (www)"`);
+        }
     }
-    return `/ip hotspot walled-garden add action=allow dst-host="${SERVER_PUBLIC_HOST}" comment="HotBando server"
-/ip hotspot walled-garden add action=allow dst-host="${SERVER_PUBLIC_HOST}" dst-port=80,443 comment="HotBando web"`;
+
+    const serverIp = process.env.SERVER_PUBLIC_IP || '';
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(serverIp) && serverIp !== SERVER_PUBLIC_HOST) {
+        rules.push(`/ip hotspot walled-garden add action=allow dst-address=${serverIp} comment="HotBando server IP"`);
+    }
+
+    return rules.join('\n');
 }
 
 /**
@@ -389,7 +423,8 @@ function serverWalledGardenRules() {
 function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
     const serverKeys = wireguardService.ensureServerKeys();
     const ssid = router.ssid || DEFAULT_SSID;
-    const hotspotNetBase = HOTSPOT_NET.replace(/\/.*$/, '');
+    const hotspotCidr = normalizeCidr(HOTSPOT_NET);
+    const [hotspotNetBase, hotspotPrefixLen = '24'] = hotspotCidr.split('/');
     // First 3 octets for pool ranges (e.g., 10.5.50 from 10.5.50.0)
     const hotspotNetPrefix = hotspotNetBase.replace(/\.\d+$/, '');
 
@@ -408,8 +443,8 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 
 # ----------------------------------------------------------------------------
 # 1. INTERFACE DETECTION
-#    WAN   = first ether with a gateway/default route (uplink to modem)
-#    HOTSPOT = dedicated bridge containing wlan1 (client-facing LAN)
+#    WAN   = ether1 (uplink to modem)
+#    HOTSPOT = dedicated bridge containing every wireless radio (2.4 & 5 GHz)
 # ----------------------------------------------------------------------------
 :local wanIface ""
 :local hotspotIface "bridge-hotbando"
@@ -417,20 +452,41 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # Detect WAN: hardcoded for compatibility (avoid RouterOS array syntax issues)
 :local wanIface "ether1"
 
-# Detect wlan1 and ensure it's in the hotspot bridge (idempotent)
-:do { /interface bridge port remove [find interface=wlan1] } on-error={}
-:do { /interface bridge remove [find name=bridge-hotbando] } on-error={}
+# Create the hotspot bridge (never delete it here — removing it detaches radios
+# while DHCP/hotspot still reference it, which silently kills the portal).
 :do { /interface bridge add name=bridge-hotbando disabled=no comment="HotBando hotspot bridge" } on-error={}
-:if ([:len [/interface wireless find name="wlan1"] ] > 0) do={
-  :do { /interface bridge port add bridge=bridge-hotbando interface=wlan1 } on-error={}
-}
-# Fallback if bridge-hotbando somehow still missing
-:if ([:len [/interface bridge find name=bridge-hotbando]] = 0) do={
-  /interface bridge add name=bridge-hotbando disabled=no comment="HotBando hotspot bridge"
+
+:local wirelessCount 0
+
+# RouterOS 6 / legacy wireless package (wlan1, wlan2, ...)
+:do {
+  :foreach w in=[/interface wireless find] do={
+    :do { /interface bridge port remove [find interface=$w] } on-error={}
+    :do { /interface bridge port add bridge=bridge-hotbando interface=$w } on-error={}
+    :do { /interface wireless set $w ssid="${sanitize(ssid)}" mode=ap-bridge disabled=no } on-error={}
+    :set wirelessCount ($wirelessCount + 1)
+  }
+} on-error={}
+
+# RouterOS 7 / wifi package (wifi1, wifi2, ... — hAP ax, cAP ax, etc.)
+:do {
+  :foreach w in=[/interface wifi find] do={
+    :do { /interface bridge port remove [find interface=$w] } on-error={}
+    :do { /interface bridge port add bridge=bridge-hotbando interface=$w } on-error={}
+    :do { /interface wifi set $w disabled=no ssid="${sanitize(ssid)}" } on-error={
+      :do { /interface wifi set $w disabled=no configuration.ssid="${sanitize(ssid)}" } on-error={}
+    }
+    :set wirelessCount ($wirelessCount + 1)
+  }
+} on-error={}
+
+:if ($wirelessCount = 0) do={
+  :put "WARNING: no wireless radio found. Connect an AP to bridge-hotbando."
 }
 
 :put ("WAN interface: " . $wanIface)
 :put ("Hotspot interface: " . $hotspotIface)
+:put ("Wireless radios attached: " . $wirelessCount)
 
 # ----------------------------------------------------------------------------
 # 2. WIREGUARD TUNNEL TO HOTBANDO SERVER
@@ -469,26 +525,38 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 
 /ip dhcp-server remove [find interface=$hotspotIface]
 /ip address remove [find interface=$hotspotIface]
-/ip address add address=${HOTSPOT_IP}/24 interface=$hotspotIface network=${hotspotNetBase} comment="HotBando hotspot gateway"
+/ip address add address=${HOTSPOT_IP}/${hotspotPrefixLen} interface=$hotspotIface network=${hotspotNetBase} comment="HotBando hotspot gateway"
 
 /ip pool remove [find name="hotbando-pool"]
 /ip pool add name="hotbando-pool" ranges=${hotspotNetPrefix}.100-${hotspotNetPrefix}.200 comment="HotBando client pool"
 /ip dhcp-server remove [find name="hotbando-dhcp"]
 /ip dhcp-server add name="hotbando-dhcp" interface=$hotspotIface address-pool=hotbando-pool lease-time=1h disabled=no comment="HotBando DHCP"
-/ip dhcp-server network remove [find address=${HOTSPOT_NET}]
-/ip dhcp-server network add address=${HOTSPOT_NET} gateway=${HOTSPOT_IP} dns-server=${HOTSPOT_DNS}
+/ip dhcp-server network remove [find address=${hotspotCidr}]
+/ip dhcp-server network add address=${hotspotCidr} gateway=${HOTSPOT_IP} dns-server=${HOTSPOT_IP}
+# ^ hand out the router itself as DNS so the captive-portal names below resolve
 
 /ip dns set allow-remote-requests=yes servers=${HOTSPOT_DNS}
 /ip dns static remove [find comment="HotBando captive"]
 /ip dns static add name="connectivitycheck.gstatic.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
+/ip dns static add name="connectivitycheck.android.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
 /ip dns static add name="captive.apple.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
 /ip dns static add name="msftconnecttest.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
+/ip dns static add name="www.msftconnecttest.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
 /ip dns static add name="msftncsi.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
+/ip dns static add name="www.msftncsi.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
+/ip dns static add name="detectportal.firefox.com" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
+/ip dns static add name="nmcheck.gnome.org" address=${HOTSPOT_IP} ttl=1m comment="HotBando captive"
 
 /ip firewall nat remove [find comment="HotBando masquerade"]
 /ip firewall nat add chain=srcnat out-interface=$wanIface action=masquerade comment="HotBando masquerade"
-/ip firewall nat add chain=dstnat protocol=tcp dst-port=80 in-interface=$wanIface action=dst-nat to-addresses=${HOTSPOT_IP} to-ports=80 comment="HotBando http"
-/ip firewall nat add chain=dstnat protocol=tcp dst-port=443 in-interface=$wanIface action=dst-nat to-addresses=${HOTSPOT_IP} to-ports=80 comment="HotBando https"
+# Remove the old, backwards WAN->hotspot redirects (they hijack inbound web
+# traffic and are not needed: the hotspot server redirects clients itself).
+/ip firewall nat remove [find comment="HotBando http"]
+/ip firewall nat remove [find comment="HotBando https"]
+# Force client DNS through the router so captive detection is deterministic.
+/ip firewall nat remove [find comment="HotBando dns"]
+/ip firewall nat add chain=dstnat protocol=udp dst-port=53 in-interface=$hotspotIface action=redirect to-ports=53 comment="HotBando dns"
+/ip firewall nat add chain=dstnat protocol=tcp dst-port=53 in-interface=$hotspotIface action=redirect to-ports=53 comment="HotBando dns"
 /ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=$hotspotIface action=accept comment="HotBando DNS"
 /ip firewall filter add chain=input protocol=tcp dst-port=53 in-interface=$hotspotIface action=accept comment="HotBando DNS"
 
@@ -500,6 +568,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
   use-radius=yes radius-accounting=yes radius-interim-update=30s \\
   radius-mac-format=XX:XX:XX:XX:XX:XX \\
   mac-auth-mode=as-username-and-password \\
+  trial-uptime=0s \\
   hotspot-address=${HOTSPOT_IP} dns-name="hotspot.hotbando.local" \\
   comment="HotBando hotspot profile"
 /ip hotspot add name="hotbando-server" interface=$hotspotIface address-pool=hotbando-pool profile=hotbando-profile disabled=no comment="HotBando hotspot server"
@@ -507,14 +576,11 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip hotspot walled-garden remove [find]
 ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-port=53 comment="HotBando DNS"
-/ip hotspot walled-garden add action=allow dst-address=${HOTSPOT_IP} comment="HotBando gateway"
-/ip hotspot walled-garden add action=allow dst-host="connectivitycheck.gstatic.com" comment="HotBando captive"
-/ip hotspot walled-garden add action=allow dst-host="captive.apple.com" comment="HotBando captive"
-/ip hotspot walled-garden add action=allow dst-host="msftconnecttest.com" comment="HotBando captive"
-/ip hotspot walled-garden add action=allow dst-host="msftncsi.com" comment="HotBando captive"
-/ip hotspot walled-garden add action=allow dst-host="www.msftconnecttest.com" comment="HotBando captive"
-/ip hotspot walled-garden add action=allow dst-host="www.google.com" comment="HotBando captive"
-/ip hotspot walled-garden add action=allow dst-host="generate_204" comment="HotBando captive"
+# IMPORTANT: never whitelist the OS captive-portal probe hosts
+# (connectivitycheck.gstatic.com, captive.apple.com, msftconnecttest.com,
+# detectportal.firefox.com, ...). Whitelisting them lets the phone's probe
+# succeed, so the OS reports "connected, internet works" and never opens the
+# captive portal. Leave them intercepted so the hotspot redirects the probe.
 # Portal CDN (Tailwind, fonts, icons) so the login page renders fully
 # inside the phone captive browser before login
 /ip hotspot walled-garden add action=allow dst-host="cdn.tailwindcss.com" comment="HotBando portal CSS"
@@ -530,7 +596,7 @@ ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-host="www.pesapal.com" comment="PesaPal"
 
 /radius remove [find]
-/radius add address=${SERVER_PUBLIC_HOST} secret=${RADIUS_SECRET} service=hotspot \\
+/radius add address=${RADIUS_HOST} secret=${RADIUS_SECRET} service=hotspot \\
   authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=0.0.0.0 \\
   comment="HotBando FreeRADIUS"
 /radius incoming set accept=yes port=1700
@@ -544,17 +610,15 @@ ${serverWalledGardenRules()}
 /ip hotspot user add name="admin" password="hotbando2024" profile=hotbando-vip server=hotbando-server comment="HotBando admin"
 
 /ip hotspot ip-binding remove [find]
-/ip hotspot ip-binding add mac-address="00:00:00:00:00:00" type=bypassed comment="HotBando bypass"
 
 /system scheduler remove [find name="hotbando-watchdog"]
 /system scheduler add name="hotbando-watchdog" interval=5m on-event={/ip hotspot set [find name=hotbando-server] disabled=no} comment="HotBando watchdog"
 
 # ----------------------------------------------------------------------------
 # 4. WIFI SSID
+#    (handled in section 1 together with the bridge membership so that both
+#     legacy wireless and RouterOS 7 wifi radios are covered)
 # ----------------------------------------------------------------------------
-:foreach w in=[/interface wireless find] do={
-  /interface wireless set $w ssid="${sanitize(ssid)}" mode=ap-bridge disabled=no
-}
 
 # ----------------------------------------------------------------------------
 # 5. HEARTBEAT + REMOTE CONFIG PULL
@@ -572,10 +636,14 @@ ${serverWalledGardenRules()}
 
 # ----------------------------------------------------------------------------
 # 6. CAPTIVE PORTAL REDIRECT PAGE
+#    Replaces the stock MikroTik login page. It immediately sends the client
+#    to the HotBando portal (which handles registration/payment), with a
+#    visible button as a fallback if the meta refresh is blocked.
 # ----------------------------------------------------------------------------
 :delay 1
 /file remove hotspot/login.html
-:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta http-equiv='refresh' content='0;url=${PUBLIC_BASE_URL}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)'>\\n</head>\\n<body>HotBando - connecting...</body>\\n</html>\\n"
+:local portalUrl "${PUBLIC_BASE_URL}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)"
+:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta charset='utf-8'>\\n<meta name='viewport' content='width=device-width,initial-scale=1'>\\n<meta http-equiv='refresh' content='0;url=$portalUrl'>\\n<title>HotBando WiFi</title>\\n</head>\\n<body style='margin:0;font-family:system-ui,Arial,sans-serif;background:#0b0b12;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh'>\\n<div style='text-align:center;padding:24px;max-width:340px'>\\n<div style='font-size:42px;margin-bottom:12px'>&#128246;</div>\\n<h2 style='margin:0 0 8px'>HotBando WiFi</h2>\\n<p style='color:#9ca3af;margin:0 0 18px'>Opening the login page...</p>\\n<a href='$portalUrl' style='display:inline-block;background:#FF7A30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700'>Open HotBando</a>\\n<p style='color:#6b7280;font-size:12px;margin-top:18px'>If this page does not open, reconnect to the WiFi or visit ${SERVER_PUBLIC_HOST}</p>\\n</div>\\n</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 :put "============================================="

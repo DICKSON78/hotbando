@@ -13,7 +13,9 @@
 #                            On hAP the wifi is bridged, so use bridge1
 #                            (the bridge that already contains wlan1).
 #   <HOTSPOT_IP>           — the IP for the hotspot gateway (e.g., 10.5.50.1)
-#   <HOTSPOT_NET>          — the subnet (e.g., 10.5.50.0/24)
+#   <HOTSPOT_NET>          — subnet base, no prefix (e.g., 10.5.50.0)
+#   <HOTSPOT_CIDR>         — subnet in CIDR form (e.g., 10.5.50.0/24)
+#   <HOTSPOT_POOL>         — client IP range (e.g., 10.5.50.100-10.5.50.200)
 #   <HOTSPOT_DNS>          — DNS server (e.g., 8.8.8.8)
 #   <WIFI_SSID>            — WiFi network name (set separately in WinBox:
 #                            Wireless → wlan1 → SSID + Security Profile WPA2)
@@ -46,11 +48,11 @@
 # 2. DHCP SERVER (auto-assign IPs to connected clients)
 # ============================================================================
 /ip pool remove [find name="hotbando-pool"]
-/ip pool add name="hotbando-pool" ranges=<HOTSPOT_NET:100>-<HOTSPOT_NET:200> comment="HotBando client pool"
+/ip pool add name="hotbando-pool" ranges=<HOTSPOT_POOL> comment="HotBando client pool"
 /ip dhcp-server remove [find name="hotbando-dhcp"]
 /ip dhcp-server add name="hotbando-dhcp" interface=<HOTSPOT_INTERFACE> address-pool=hotbando-pool lease-time=1h disabled=no comment="HotBando DHCP"
-/ip dhcp-server network remove [find address=<HOTSPOT_NET>/24]
-/ip dhcp-server network add address=<HOTSPOT_NET>/24 gateway=<HOTSPOT_IP> dns-server=<HOTSPOT_DNS>
+/ip dhcp-server network remove [find address=<HOTSPOT_CIDR>]
+/ip dhcp-server network add address=<HOTSPOT_CIDR> gateway=<HOTSPOT_IP> dns-server=<HOTSPOT_DNS>
 
 # ============================================================================
 # 3. DNS CONFIGURATION
@@ -58,24 +60,41 @@
 # Local DNS for hotspot (required for captive portal redirect)
 /ip dns set allow-remote-requests=yes servers=<HOTSPOT_DNS>
 
-# DNS static entries for captive portal detection
-/ip dns static add name="hotspot captive portal detect" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
-/ip dns static add name="connectivitycheck.gstatic.com" address=<HOTSPOT_IP> ttl=1m comment="Android captive portal"
-/ip dns static add name="captive.apple.com" address=<HOTSPOT_IP> ttl=1m comment="Apple captive portal"
-/ip dns static add name="msftconnecttest.com" address=<HOTSPOT_IP> ttl=1m comment="Windows captive portal"
-/ip dns static add name="msftncsi.com" address=<HOTSPOT_IP> ttl=1m comment="Windows NCSI"
+# Hand the router itself out as DNS (not the upstream) so the entries below
+# are actually used by clients.
+/ip dhcp-server network set [find address=<HOTSPOT_CIDR>] dns-server=<HOTSPOT_IP>
+
+# DNS static entries for captive portal detection.
+# Do NOT also allow these hosts in the walled garden — the probe must hit the
+# hotspot and be redirected, otherwise phones think the internet already works.
+/ip dns static remove [find comment="Captive portal detection"]
+/ip dns static add name="connectivitycheck.gstatic.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="connectivitycheck.android.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="captive.apple.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="msftconnecttest.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="www.msftconnecttest.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="msftncsi.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="www.msftncsi.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="detectportal.firefox.com" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
+/ip dns static add name="nmcheck.gnome.org" address=<HOTSPOT_IP> ttl=1m comment="Captive portal detection"
 
 # ============================================================================
-# 4. FIREWALL NAT (redirect ALL HTTP/HTTPS to hotspot)
+# 4. FIREWALL NAT (masquerade only — the hotspot redirects clients itself)
 # ============================================================================
 /ip firewall nat remove [find comment="HotBando masquerade"]
 /ip firewall nat add chain=srcnat out-interface=<WAN_INTERFACE> action=masquerade comment="HotBando masquerade"
 
-# Redirect HTTP to hotspot login
-/ip firewall nat add chain=dstnat protocol=tcp dst-port=80 in-interface=<WAN_INTERFACE> action=dst-nat to-addresses=<HOTSPOT_IP> to-ports=80 comment="HTTP redirect to hotspot"
+# Old builds added dstnat 80/443 rules with in-interface=<WAN_INTERFACE>.
+# Those hijack inbound web traffic and are not needed; remove them.
+/ip firewall nat remove [find comment="HTTP redirect to hotspot"]
+/ip firewall nat remove [find comment="HTTPS redirect to hotspot"]
+/ip firewall nat remove [find comment="HotBando http"]
+/ip firewall nat remove [find comment="HotBando https"]
 
-# Redirect HTTPS to hotspot login (note: this will show certificate error)
-/ip firewall nat add chain=dstnat protocol=tcp dst-port=443 in-interface=<WAN_INTERFACE> action=dst-nat to-addresses=<HOTSPOT_IP> to-ports=80 comment="HTTPS redirect to hotspot"
+# Force client DNS through the router so captive detection is deterministic.
+/ip firewall nat remove [find comment="HotBando dns"]
+/ip firewall nat add chain=dstnat protocol=udp dst-port=53 in-interface=<HOTSPOT_INTERFACE> action=redirect to-ports=53 comment="HotBando dns"
+/ip firewall nat add chain=dstnat protocol=tcp dst-port=53 in-interface=<HOTSPOT_INTERFACE> action=redirect to-ports=53 comment="HotBando dns"
 
 # Allow hotspot DNS
 /ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=<HOTSPOT_INTERFACE> action=accept comment="Allow hotspot DNS"
@@ -97,6 +116,7 @@
     radius-interim-update=30s \
     radius-mac-format=XX:XX:XX:XX:XX:XX \
     mac-auth-mode=as-username-and-password \
+    trial-uptime=0s \
     hotspot-address=<HOTSPOT_IP> \
     dns-name="hotspot.hotbando.local" \
     http-proxy=no \
@@ -116,21 +136,18 @@
 # ============================================================================
 /ip hotspot walled-garden remove [find]
 
-# Allow access to HotBando server (use the portal hostname, not a bare IP)
+# Allow access to the HotBando server (hostname + optional www alias)
 /ip hotspot walled-garden add action=allow dst-host="<HOTBANDO_SERVER_IP>" comment="Allow HotBando server"
-/ip hotspot walled-garden add action=allow dst-host="<HOTBANDO_SERVER_IP>" dst-port=80,443 comment="Allow HotBando HTTP/HTTPS"
+/ip hotspot walled-garden add action=allow dst-host="www.<HOTBANDO_SERVER_IP>" comment="Allow HotBando server (www)"
 
-# Allow access to DNS (needed for captive portal detection)
+# Allow access to DNS (needed before login)
 /ip hotspot walled-garden add action=allow dst-port=53 comment="Allow DNS"
 
-# Allow access to local hotspot gateway
-/ip hotspot walled-garden add action=allow dst-address=<HOTSPOT_IP> comment="Allow hotspot gateway"
-
-# Allow captive portal detection domains
-/ip hotspot walled-garden add action=allow dst-host="connectivitycheck.gstatic.com" comment="Google captive portal"
-/ip hotspot walled-garden add action=allow dst-host="captive.apple.com" comment="Apple captive portal"
-/ip hotspot walled-garden add action=allow dst-host="msftconnecttest.com" comment="Windows captive portal"
-/ip hotspot walled-garden add action=allow dst-host="www.msftconnecttest.com" comment="Windows captive portal"
+# NOTE: never whitelist captive-portal probe domains here
+# (connectivitycheck.gstatic.com, captive.apple.com, msftconnecttest.com,
+# detectportal.firefox.com, ...). Whitelisting them makes the phone's probe
+# succeed, so the OS says "connected" and never shows the captive portal.
+# They are resolved to the hotspot IP in section 3 instead.
 
 # Allow portal CDN so the login page renders fully in the captive browser
 /ip hotspot walled-garden add action=allow dst-host="cdn.tailwindcss.com" comment="HotBando portal CSS"

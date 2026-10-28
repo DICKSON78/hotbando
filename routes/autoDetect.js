@@ -169,7 +169,7 @@ router.post('/quick-setup', async (req, res) => {
             radiusSecret,
             hotspotInterface: 'wlan1',
             hotspotIP: process.env.HOTSPOT_IP || '10.5.50.1',
-            hotspotNet: '10.5.50.0',
+            hotspotNet: process.env.HOTSPOT_SUBNET || '10.5.50.0',
             ssid
         });
 
