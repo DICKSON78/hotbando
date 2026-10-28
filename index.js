@@ -198,6 +198,7 @@ function serveSPA(req, res) {
 // ALL API routes FIRST (before SPA catch-all)
 app.use('/api/hotspot', hotspotApiRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/hq', hqRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/revenue-share', revenueShareRoutes);
