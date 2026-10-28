@@ -24,6 +24,11 @@ const WG_KEYS_DIR = path.join(WG_HOST_DIR, 'hotbando-keys');
 const SERVER_PUBLIC_KEY_FILE = path.join(WG_KEYS_DIR, 'server.key.pub');
 const SERVER_PRIVATE_KEY_FILE = path.join(WG_KEYS_DIR, 'server.key');
 const WG_CONF = path.join(WG_HOST_DIR, `${WG_INTERFACE}.conf`);
+const WG_STATUS_FILE = process.env.WG_STATUS_FILE || (
+    fs.existsSync('/var/run/hotbando/wg-status-result')
+        ? '/var/run/hotbando/wg-status-result'
+        : path.join(WG_HOST_DIR, '.wg-status-result')
+);
 
 class WireGuardService {
     constructor() {
@@ -215,7 +220,7 @@ ${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}
             network: this.networkCidr
         };
         // Host watcher status (written by /usr/local/bin/hotbando-wg-apply)
-        const statusResult = path.join(WG_HOST_DIR, '.wg-status-result');
+        const statusResult = WG_STATUS_FILE;
 
         try {
             if (fs.existsSync(statusResult)) {
@@ -312,6 +317,12 @@ ${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}
 
     async getWireGuardPeers() {
         try {
+            let runtimeStatus = null;
+            try {
+                const statusFile = WG_STATUS_FILE;
+                if (fs.existsSync(statusFile)) runtimeStatus = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+            } catch (e) { /* use database status if host status is unavailable */ }
+
             const [peers] = await db.execute(`
                 SELECT router_id, router_name, wireguard_ip, wireguard_public_key, status, last_seen
                 FROM mikrotiks
@@ -320,14 +331,21 @@ ${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}
             `);
             return {
                 success: true,
-                peers: peers.map(p => ({
-                    routerId: p.router_id,
-                    name: p.router_name,
-                    wgIp: p.wireguard_ip,
-                    publicKey: p.wireguard_public_key,
-                    status: p.status,
-                    lastSeen: p.last_seen
-                }))
+                peers: peers.map(p => {
+                    const handshake = Number(runtimeStatus?.peerHandshakes?.[p.wireguard_public_key]) || 0;
+                    const handshakeIsFresh = handshake > 0 && (Date.now() / 1000 - handshake) <= 180;
+                    const hasHandshakeData = !!runtimeStatus?.peerHandshakes;
+                    return {
+                        routerId: p.router_id,
+                        name: p.router_name,
+                        wgIp: p.wireguard_ip,
+                        publicKey: p.wireguard_public_key,
+                        status: hasHandshakeData
+                            ? (runtimeStatus.running && handshakeIsFresh ? 'online' : 'offline')
+                            : p.status,
+                        lastSeen: handshake > 0 ? new Date(handshake * 1000).toISOString() : p.last_seen
+                    };
+                })
             };
         } catch (error) {
             return { success: true, peers: [] };

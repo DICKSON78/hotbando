@@ -380,6 +380,7 @@
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Server IP</span><span class="font-mono text-white">{{ wgServer.serverIp }}</span></div>
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Public Host</span><span class="font-mono text-white">{{ wgServer.serverPublicIp }}</span></div>
               <div class="flex justify-between text-sm"><span style="color: #6b7280">Network</span><span class="font-mono text-white">{{ wgServer.network }}</span></div>
+              <div v-if="wgServer.activePeers != null" class="flex justify-between text-sm"><span style="color: #6b7280">Active peers</span><span class="font-mono text-white">{{ wgServer.activePeers }} / {{ wgServer.wgPeers ?? wgPeers.length }}</span></div>
             </div>
             <div v-else class="p-4 rounded-xl text-sm text-center" style="background: #0a0a0f; border: 1px solid var(--border); color: #6b7280">
               <i class="fas fa-info-circle mr-1"></i> WireGuard server is not running. It will start automatically when you configure the first router.

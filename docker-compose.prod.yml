@@ -27,6 +27,8 @@ services:
     volumes:
       - uploads:/app/public/uploads
       - ./logs:/app/logs
+      # Expose only aggregate runtime state; never mount host WireGuard keys/config.
+      - /etc/wireguard/.wg-status-result:/var/run/hotbando/wg-status-result:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
