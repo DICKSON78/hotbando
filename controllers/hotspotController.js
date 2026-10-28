@@ -236,7 +236,7 @@ const hotspotController = {
                     await mikrotikService.addUserToRouter(bindMAC, bindRouter, uptime, 0);
                     console.log(`🔗 Premium user connected to router: ${uptime} seconds`);
                 } else if (bindMAC && bindRouter && user.free_bytes > 0) {
-                    await mikrotikService.addUserToRouter(bindMAC, bindRouter, 0, user.free_bytes);
+                    await mikrotikService.addUserToRouter(bindMAC, bindRouter, 0, user.free_bytes, true);
                     console.log(`🔗 Free data user connected to router: ${user.free_bytes} bytes`);
                 }
             } catch (routerError) {
@@ -437,7 +437,8 @@ const hotspotController = {
             let routerMessage = '';
             
             try {
-                routerSuccess = await mikrotikService.addUserToRouter(mac, routerID, uptime, bytes);
+                const preserveBytes = (uptime === 0 && bytes > 0);
+                routerSuccess = await mikrotikService.addUserToRouter(mac, routerID, uptime, bytes, preserveBytes);
                 routerMessage = routerSuccess ? 
                     'Imefanikiwa kunganishwa kwenye mtandao!' : 
                     'Imeshindikana kuunganisha kwenye router.';

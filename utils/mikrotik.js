@@ -189,7 +189,7 @@ class MikrotikService {
      * The username/password are the MAC address so MAC login can authenticate
      * the device automatically once the portal grants an entitlement.
      */
-    async addUserToRouter(mac, routerID, uptimeSeconds = 0, bytes = 0) {
+    async addUserToRouter(mac, routerID, uptimeSeconds = 0, bytes = 0, preserveBytes = false) {
         try {
             if (!mac || !routerID) {
                 throw new Error('MAC address and router are required');
@@ -212,7 +212,6 @@ class MikrotikService {
                 return str || '1s';
             };
 
-            const limitBytes = bytes > 0 ? String(Math.floor(bytes)) : '0';
             const limitUptime = uptimeSeconds > 0 ? formatTime(uptimeSeconds) : '0s';
             let profile = uptimeSeconds > 0 ? 'hotbando-paid' : 'hotbando-free';
             // Fall back to the built-in profile when the tier was never created.
@@ -225,10 +224,7 @@ class MikrotikService {
             // free/ad data is byte-based. Clear the other limit so an old
             // free-data cap cannot cut off a paid user (and vice versa).
             const limitArgs = [
-                `=limit-uptime=${limitUptime}`,
-                `=limit-bytes-total=${limitBytes}`,
-                '=limit-bytes-in=0',
-                '=limit-bytes-out=0'
+                `=limit-uptime=${limitUptime}`
             ];
 
             // Check if MAC-based user already exists. Also match by name so a
@@ -241,6 +237,21 @@ class MikrotikService {
                 existingUsers = await conn.write('/ip/hotspot/user/print', [
                     `?name=${cleanMac}`
                 ]);
+            }
+
+            const isNewUser = existingUsers.length === 0;
+            // For an existing user on a normal connect/login we must NOT reset
+            // the byte counter, otherwise a reconnect re-grants the full allowance
+            // and lets users exceed their data cap. Only reset when explicitly
+            // allowed (registration, ad reward, voucher) or for a brand-new user.
+            let bytesToSet = null;
+            if (isNewUser || !preserveBytes) {
+                bytesToSet = bytes > 0 ? String(Math.floor(bytes)) : '0';
+            }
+            if (bytesToSet !== null) {
+                limitArgs.push(`=limit-bytes-total=${bytesToSet}`);
+                limitArgs.push('=limit-bytes-in=0');
+                limitArgs.push('=limit-bytes-out=0');
             }
 
             if (existingUsers.length > 0) {
