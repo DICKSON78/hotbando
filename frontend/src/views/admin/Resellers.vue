@@ -1,255 +1,180 @@
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="rs-head">
       <div>
-        <h2 class="text-lg font-bold text-white">Reseller Management</h2>
-        <p class="text-sm" style="color: #6b7280">Tiers, commissions, performance tracking</p>
+        <h2 class="rs-title">Resellers</h2>
+        <p class="rs-sub">Everyone who registered or was added by HQ. Assign each a router according to the equipment plan they chose.</p>
       </div>
-      <button @click="loadAll()" class="btn btn-secondary btn-sm"><i class="fas fa-sync-alt"></i> Refresh</button>
-    </div>
-
-    <!-- Summary Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-      <div class="stat-card">
-        <div class="flex items-center justify-between">
-          <div><p class="stat-label">Total Resellers</p><p class="stat-value">{{ summary.total || 0 }}</p></div>
-          <div class="stat-icon" style="background: rgba(59,130,246,0.1); color: #60a5fa"><i class="fas fa-store"></i></div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="flex items-center justify-between">
-          <div><p class="stat-label">Active</p><p class="stat-value" style="color: #34d399">{{ summary.active || 0 }}</p></div>
-          <div class="stat-icon" style="background: rgba(16,185,129,0.1); color: #34d399"><i class="fas fa-check-circle"></i></div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="flex items-center justify-between">
-          <div><p class="stat-label">Total Balance</p><p class="stat-value" style="color: #f59e0b">TSh {{ fmtNum(summary.total_balance) }}</p></div>
-          <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b"><i class="fas fa-wallet"></i></div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="flex items-center justify-between">
-          <div><p class="stat-label">Total Earned</p><p class="stat-value" style="color: #a78bfa">TSh {{ fmtNum(summary.total_earned) }}</p></div>
-          <div class="stat-icon" style="background: rgba(139,92,246,0.1); color: #a78bfa"><i class="fas fa-coins"></i></div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="flex items-center justify-between">
-          <div><p class="stat-label">Platform Commission (20%)</p><p class="stat-value" style="color: #FF7A30">TSh {{ fmtNum((summary.total_revenue || 0) * 0.2) }}</p></div>
-          <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-percent"></i></div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="flex items-center justify-between">
-          <div><p class="stat-label">Avg Commission</p><p class="stat-value" style="color: #FF7A30">{{ summary.avg_commission || 10 }}%</p></div>
-          <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-percent"></i></div>
-        </div>
+      <div class="rs-row">
+        <router-link :to="{ name: 'reseller-onboarding' }" class="rs-btn-s">Applications &amp; plans</router-link>
+        <router-link :to="{ name: 'reseller-routers' }" class="rs-btn-s">Routers &amp; sales</router-link>
+        <button class="rs-btn-s" @click="load">Refresh</button>
       </div>
     </div>
 
-    <!-- Tier Legend -->
-    <div class="section-card p-4">
-      <div class="flex flex-wrap gap-3">
-        <div v-for="t in tiers" :key="t.key" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" :style="{ background: t.bg, color: t.color, border: '1px solid ' + t.border }">
-          <i :class="t.icon"></i> {{ t.label }} — {{ t.desc }}
-        </div>
-      </div>
+    <div v-if="msg" class="rs-msg" :class="msg.type === 'error' ? 'rs-err' : 'rs-ok'">{{ msg.text }}</div>
+
+    <div class="rs-cards">
+      <div class="rs-card"><span>Resellers</span><b>{{ counts.all }}</b></div>
+      <div class="rs-card"><span>Active</span><b>{{ counts.active }}</b></div>
+      <div class="rs-card"><span>Need a router</span><b>{{ counts.needs }}</b></div>
+      <div class="rs-card"><span>Owed to resellers</span><b>{{ tsh(totals.balance) }}</b></div>
+      <div class="rs-card"><span>Resellers earned</span><b>{{ tsh(totals.earned) }}</b></div>
+      <div class="rs-card"><span>Equipment loans left</span><b>{{ tsh(totals.loan) }}</b></div>
     </div>
 
-    <!-- RESELLER LIST -->
-    <template v-if="!selectedReseller">
-      <div class="section-card">
-        <div class="section-header">
-          <h3 class="section-title"><i class="fas fa-store" style="color: #FF7A30"></i> All Resellers</h3>
-          <div class="flex gap-2 flex-wrap">
-            <input v-model="search" @input="debouncedLoad" placeholder="Search..." class="form-input" style="max-width: 200px">
-            <select v-model="tierFilter" @change="loadResellers()" class="form-input" style="max-width: 130px">
-              <option value="">All Tiers</option>
-              <option v-for="t in tiers" :key="t.key" :value="t.key">{{ t.label }}</option>
-            </select>
+    <div class="section-card">
+      <div class="section-body">
+        <div class="rs-row rs-between">
+          <div class="rs-row">
+            <button v-for="f in filters" :key="f.k" class="rs-chip" :class="{ on: filter === f.k }" @click="filter = f.k">{{ f.l }} ({{ counts[f.k] }})</button>
           </div>
+          <input v-model="q" class="rs-inp rs-search" placeholder="Search name, phone, business..." />
         </div>
-        <div class="section-body">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead><tr style="border-bottom: 1px solid var(--border)">
-                <th class="text-left py-3 px-4 text-xs font-medium" style="color: #6b7280">Reseller</th>
-                <th class="text-left py-3 px-4 text-xs font-medium" style="color: #6b7280">Tier</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Balance</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Total Earned</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Vouchers</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Redeemed</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Revenue</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Commission (20%)</th>
-                <th class="text-center py-3 px-4 text-xs font-medium" style="color: #6b7280">Status</th>
-                <th class="text-right py-3 px-4 text-xs font-medium" style="color: #6b7280">Actions</th>
-              </tr></thead>
-              <tbody>
-                <tr v-for="r in resellers" :key="r.id" @click="viewReseller(r)" style="border-bottom: 1px solid rgba(30,30,42,0.5)" class="hover:bg-white/[0.02] cursor-pointer">
-                  <td class="py-3 px-4">
-                    <div class="flex items-center gap-2">
-                      <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" :style="{ background: tierColor(r.tier) }">{{ initials(r.name) }}</div>
-                      <div><p class="font-medium text-white text-sm">{{ r.name }}</p><p class="text-xs" style="color: #6b7280">{{ r.phone_number }}</p></div>
-                    </div>
-                  </td>
-                  <td class="py-3 px-4"><span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="tierBadgeClass(r.tier)">{{ (r.tier || 'bronze').toUpperCase() }}</span></td>
-                  <td class="py-3 px-4 text-right text-xs font-medium text-white">TSh {{ fmtNum(r.balance) }}</td>
-                  <td class="py-3 px-4 text-right text-xs text-white">TSh {{ fmtNum(r.total_earned) }}</td>
-                  <td class="py-3 px-4 text-right text-xs" style="color: #6b7280">{{ r.total_vouchers_sold || 0 }}</td>
-                  <td class="py-3 px-4 text-right text-xs" style="color: #6b7280">{{ r.redeemed_count || 0 }}</td>
-                  <td class="py-3 px-4 text-right text-xs font-medium" style="color: #34d399">TSh {{ fmtNum(r.revenue_generated) }}</td>
-                  <td class="py-3 px-4 text-right text-xs font-medium" style="color: #FF7A30">TSh {{ fmtNum((r.revenue_generated || 0) * 0.2) }}</td>
-                  <td class="py-3 px-4 text-center"><span class="text-xs px-2 py-0.5 rounded-full" :class="r.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'">{{ r.is_active ? 'ACTIVE' : 'OFF' }}</span></td>
-                  <td class="py-3 px-4 text-right"><i class="fas fa-chevron-right text-xs" style="color: #6b7280"></i></td>
-                </tr>
-                <tr v-if="!resellers.length"><td colspan="9" class="text-center py-12" style="color: #6b7280"><p>No resellers found</p></td></tr>
-              </tbody>
+
+        <div class="rs-scroll">
+          <table class="rs-tbl">
+            <thead>
+              <tr><th>Reseller</th><th>Equipment plan</th><th>Area</th><th>Status</th><th>Router</th><th>Balance</th><th>Loan left</th><th>Earned</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in filtered" :key="r.id">
+                <td><b>{{ r.company_name || r.name }}</b><div class="rs-mut">{{ r.name }} &middot; {{ r.phone }}</div></td>
+                <td>
+                  <template v-if="r.plan"><b>{{ r.plan.name }}</b><div class="rs-mut">{{ planLabel(r.plan.plan_type) }}</div></template>
+                  <span v-else class="rs-mut">Not chosen</span>
+                </td>
+                <td><template v-if="r.application">{{ r.application.district }}, {{ r.application.region }}<div class="rs-mut">{{ r.application.landmark }}</div></template><span v-else class="rs-mut">-</span></td>
+                <td>
+                  <span class="rs-badge" :class="r.status === 'active' ? 'rs-b-ok' : 'rs-b-bad'">{{ r.status }}</span>
+                  <div v-if="r.application" class="rs-mut">{{ stageLabel(r.application) }}</div>
+                </td>
+                <td>
+                  <div v-for="x in r.routers" :key="x.router_id"><b>{{ x.display_name }}</b><div class="rs-mut">{{ x.router_id }} &middot; HQ {{ x.commission_percent }}%</div></div>
+                  <span v-if="!r.routers.length" class="rs-warn">Not assigned</span>
+                </td>
+                <td>{{ tsh(r.balance) }}</td>
+                <td>{{ r.financing ? tsh(r.financing.balance) : '-' }}</td>
+                <td>{{ tsh(r.sales.earned) }}<div class="rs-mut">{{ r.sales.count }} sales</div></td>
+                <td>
+                  <div class="rs-row">
+                    <button class="rs-btn-s" @click="openShow(r)">Show</button>
+                    <button class="rs-btn-s" @click="openEdit(r)">Edit</button>
+                    <button v-if="r.status === 'active'" class="rs-btn" @click="openAssign(r)">Assign router</button>
+                    <button class="rs-btn-s rs-red" @click="remove(r)">Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!filtered.length"><td colspan="9" class="rs-mut">{{ loading ? 'Loading...' : 'No resellers found' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SHOW -->
+    <div v-if="showR" class="rs-ov" @click.self="showR = null">
+      <div class="rs-mod">
+        <button class="rs-x" @click="showR = null">&times;</button>
+        <h3 class="rs-h3">{{ showR.base.company_name || showR.base.name }}</h3>
+        <p class="rs-mut">{{ showR.base.name }} &middot; {{ showR.base.phone }} &middot; {{ showR.base.email }}</p>
+        <p v-if="showR.loading" class="rs-mut">Loading...</p>
+        <template v-else-if="showR.d">
+          <div class="rs-box">
+            <b>Account</b>
+            <p class="rs-mut">Balance TSh {{ showR.d.reseller.balance.toLocaleString() }} &middot; Earned TSh {{ showR.d.reseller.total_earned.toLocaleString() }} &middot; Status {{ showR.d.reseller.reseller_status || '-' }}</p>
+          </div>
+          <div v-if="showR.d.application" class="rs-box">
+            <b>Application {{ showR.d.application.application_ref }}</b> <span class="rs-badge">{{ showR.d.application.status }}</span>
+            <p class="rs-mut">{{ [showR.d.application.address, showR.d.application.ward, showR.d.application.district, showR.d.application.region].filter(Boolean).join(', ') }} <span v-if="showR.d.application.landmark">&middot; near {{ showR.d.application.landmark }}</span></p>
+            <p class="rs-mut">Business: {{ showR.d.application.business_type || '-' }} &middot; Expected customers/day: {{ showR.d.application.expected_customers ?? '-' }}</p>
+            <p class="rs-mut">Plan: {{ showR.d.application.plan_name || 'not chosen' }} <span v-if="showR.d.application.plan_type">({{ planLabel(showR.d.application.plan_type) }})</span></p>
+            <p v-if="showR.d.application.install_date" class="rs-mut">Install: {{ showR.d.application.install_date }} {{ showR.d.application.install_time }} &middot; {{ showR.d.application.technician }}</p>
+          </div>
+          <div class="rs-box">
+            <b>Routers</b>
+            <p v-for="x in showR.d.routers" :key="x.router_id" class="rs-mut">
+              {{ x.display_name }} ({{ x.router_id }}) &middot; HQ keeps {{ x.commission_percent }}%
+              <button class="rs-btn-s rs-red" @click="unassign(x)">Unassign</button>
+            </p>
+            <p v-if="!showR.d.routers.length" class="rs-mut">No router assigned yet</p>
+          </div>
+          <div v-if="showR.d.financings.length" class="rs-box">
+            <b>Equipment financing</b>
+            <p v-for="f in showR.d.financings" :key="f.id" class="rs-mut">
+              {{ f.partner_name || 'Partner' }}: TSh {{ f.principal.toLocaleString() }}, left TSh {{ f.balance.toLocaleString() }} ({{ f.repayment_percent }}% of reseller share) &middot; {{ f.status }}
+            </p>
+            <table v-if="showR.d.repayments.length" class="rs-tbl">
+              <thead><tr><th>Date</th><th>Repaid</th><th>Left</th></tr></thead>
+              <tbody><tr v-for="x in showR.d.repayments" :key="x.order_reference"><td>{{ fmt(x.created_at) }}</td><td>{{ tsh(x.amount) }}</td><td>{{ tsh(x.balance_after) }}</td></tr></tbody>
             </table>
           </div>
-          <div v-if="pagination.pages > 1" class="flex items-center justify-between mt-4 pt-4" style="border-top: 1px solid var(--border)">
-            <p class="text-xs" style="color: #6b7280">Showing {{ resellers.length }} of {{ pagination.total }}</p>
-            <div class="flex gap-1">
-              <button @click="goPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="btn btn-ghost btn-sm">Prev</button>
-              <span class="text-xs px-3 py-1" style="color: #6b7280">{{ pagination.page }}/{{ pagination.pages }}</span>
-              <button @click="goPage(pagination.page + 1)" :disabled="pagination.page >= pagination.pages" class="btn btn-ghost btn-sm">Next</button>
-            </div>
+          <div class="rs-box">
+            <b>Latest sales</b>
+            <table v-if="showR.d.sales.length" class="rs-tbl">
+              <thead><tr><th>Date</th><th>Router</th><th>Gross</th><th>HQ</th><th>Loan</th><th>Reseller</th></tr></thead>
+              <tbody><tr v-for="s in showR.d.sales" :key="s.order_reference"><td>{{ fmt(s.created_at) }}</td><td>{{ s.router_id }}</td><td>{{ tsh(s.gross_amount) }}</td><td>{{ tsh(s.hq_amount) }}</td><td>{{ tsh(s.repayment_amount) }}</td><td>{{ tsh(s.reseller_amount) }}</td></tr></tbody>
+            </table>
+            <p v-else class="rs-mut">No sales yet</p>
           </div>
+          <div v-if="showR.d.withdrawals.length" class="rs-box">
+            <b>Withdrawals</b>
+            <p v-for="w in showR.d.withdrawals" :key="w.id" class="rs-mut">{{ fmt(w.requested_at) }} &middot; {{ tsh(w.amount) }} &middot; {{ w.status }}</p>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- EDIT -->
+    <div v-if="editR" class="rs-ov" @click.self="editR = null">
+      <div class="rs-mod rs-small">
+        <button class="rs-x" @click="editR = null">&times;</button>
+        <h3 class="rs-h3">Edit reseller</h3>
+        <label class="rs-l">Name<input v-model="editR.name" class="rs-inp" /></label>
+        <label class="rs-l">Business name<input v-model="editR.company_name" class="rs-inp" /></label>
+        <label class="rs-l">Phone<input v-model="editR.phone" class="rs-inp" /></label>
+        <label class="rs-l">Email<input v-model="editR.email" class="rs-inp" /></label>
+        <label class="rs-l">Account status
+          <select v-model="editR.status" class="rs-inp"><option value="active">Active</option><option value="suspended">Suspended</option></select>
+        </label>
+        <label class="rs-l">New password (leave empty to keep)<input v-model="editR.password" type="password" class="rs-inp" autocomplete="new-password" /></label>
+        <div class="rs-row">
+          <button class="rs-btn" :disabled="busy" @click="saveEdit">Save</button>
+          <button class="rs-btn-s" @click="editR = null">Cancel</button>
         </div>
       </div>
-    </template>
+    </div>
 
-    <!-- RESELLER DETAIL VIEW -->
-    <template v-if="selectedReseller">
-      <div class="flex items-center gap-3 mb-4">
-        <button @click="selectedReseller = null" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left mr-1"></i> Back</button>
-        <h3 class="text-lg font-bold text-white">{{ selectedReseller.name }}</h3>
-        <span class="text-xs px-2 py-0.5 rounded-full" :class="tierBadgeClass(selectedReseller.tier)">{{ (selectedReseller.tier || 'bronze').toUpperCase() }}</span>
-      </div>
-
-      <!-- Detail Stats -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="stat-card">
-          <p class="stat-label">Wallet Balance</p>
-          <p class="stat-value" style="color: #f59e0b">TSh {{ fmtNum(selectedReseller.balance) }}</p>
+    <!-- ASSIGN -->
+    <div v-if="assignR" class="rs-ov" @click.self="assignR = null">
+      <div class="rs-mod rs-small">
+        <button class="rs-x" @click="assignR = null">&times;</button>
+        <h3 class="rs-h3">Assign router to {{ assignR.r.company_name || assignR.r.name }}</h3>
+        <div class="rs-box">
+          <b>Plan chosen: {{ assignR.r.plan ? assignR.r.plan.name : 'none' }}</b>
+          <p v-if="assignR.r.plan" class="rs-mut">{{ planLabel(assignR.r.plan.plan_type) }}</p>
+          <p v-if="assignR.r.plan && assignR.r.plan.plan_type === 'financed'" class="rs-mut">
+            Loan TSh {{ assignR.r.plan.financed_amount.toLocaleString() }}. {{ assignR.r.plan.repayment_percent }}% of the reseller share goes to repayment from each sale until it is paid, then HQ keeps {{ assignR.r.plan.maintenance_percent }}% only. Assigning links the loan to this router and starts repayments.
+          </p>
+          <p v-if="assignR.r.plan && assignR.r.plan.plan_type === 'outright'" class="rs-mut">Bought equipment from the partner. HQ keeps the maintenance percent only.</p>
+          <p v-if="assignR.r.plan && assignR.r.plan.plan_type === 'hq_supplied'" class="rs-mut">HQ supplies the equipment and keeps the percent below from every voucher.</p>
         </div>
-        <div class="stat-card">
-          <p class="stat-label">Total Earned</p>
-          <p class="stat-value" style="color: #34d399">TSh {{ fmtNum(selectedReseller.total_earned) }}</p>
-        </div>
-        <div class="stat-card">
-          <p class="stat-label">Commission Rate</p>
-          <p class="stat-value" style="color: #FF7A30">{{ selectedReseller.commission_rate || 10 }}%</p>
-        </div>
-        <div class="stat-card">
-          <p class="stat-label">Vouchers Sold</p>
-          <p class="stat-value">{{ selectedReseller.total_vouchers_sold || 0 }}</p>
-        </div>
-      </div>
-
-      <!-- Wallet Controls -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-plus-circle" style="color: #34d399"></i> Deposit</h3></div>
-          <div class="section-body space-y-3">
-            <input v-model.number="depositAmount" type="number" class="form-input" placeholder="Amount (TSh)" min="100">
-            <input v-model="depositNote" class="form-input" placeholder="Note (optional)">
-            <button @click="doDeposit()" class="btn btn-primary w-full" :disabled="depositAmount < 100 || loadingAction">
-              <i v-if="loadingAction" class="fas fa-spinner fa-spin mr-1"></i> Deposit TSh {{ fmtNum(depositAmount) }}
-            </button>
-          </div>
-        </div>
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-minus-circle" style="color: #f87171"></i> Deduct</h3></div>
-          <div class="section-body space-y-3">
-            <input v-model.number="deductAmount" type="number" class="form-input" placeholder="Amount (TSh)" min="100">
-            <input v-model="deductNote" class="form-input" placeholder="Reason (required)">
-            <button @click="doDeduct()" class="btn btn-sm w-full" :disabled="deductAmount < 100 || !deductNote || loadingAction" style="background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2)">
-              <i v-if="loadingAction" class="fas fa-spinner fa-spin mr-1"></i> Deduct TSh {{ fmtNum(deductAmount) }}
-            </button>
-          </div>
+        <label class="rs-l">Router (not yet assigned)
+          <select v-model="assignR.router_id" class="rs-inp">
+            <option value="">Select router</option>
+            <option v-for="rt in freeRouters" :key="rt.key" :value="rt.key">{{ rt.key }} {{ rt.name ? '(' + rt.name + ')' : '' }} {{ rt.status ? '- ' + rt.status : '' }}</option>
+          </select>
+        </label>
+        <p v-if="!freeRouters.length" class="rs-warn">No unassigned routers available.</p>
+        <label class="rs-l">Router name shown<input v-model="assignR.display_name" class="rs-inp" /></label>
+        <label class="rs-l">HQ keeps (% of each voucher)<input v-model.number="assignR.commission_percent" type="number" min="0" max="100" step="0.5" class="rs-inp" /></label>
+        <label class="rs-chk"><input type="checkbox" v-model="assignR.rename_router" /> Rename the router everywhere</label>
+        <div class="rs-row">
+          <button class="rs-btn" :disabled="busy" @click="saveAssign">Assign</button>
+          <button class="rs-btn-s" @click="assignR = null">Cancel</button>
         </div>
       </div>
-
-      <!-- Tier Management -->
-      <div class="section-card mb-6">
-        <div class="section-header"><h3 class="section-title"><i class="fas fa-medal" style="color: #a78bfa"></i> Tier Management</h3></div>
-        <div class="section-body">
-          <div class="flex gap-2 flex-wrap">
-            <button v-for="t in tiers" :key="t.key" @click="updateTier(t.key)"
-              class="px-4 py-2 rounded-xl text-sm font-medium transition-all"
-              :style="selectedReseller.tier === t.key ? `background: ${t.bg}; color: ${t.color}; border: 1px solid ${t.border}` : 'background: #0a0a0f; border: 1px solid var(--border); color: #6b7280'">
-              <i :class="t.icon" class="mr-1"></i> {{ t.label }}
-            </button>
-          </div>
-          <div class="mt-3 flex items-center gap-3">
-            <label class="text-xs" style="color: #6b7280">Commission Rate:</label>
-            <input v-model.number="commissionRate" type="number" min="1" max="50" class="form-input" style="width: 80px">
-            <span class="text-xs" style="color: #6b7280">%</span>
-            <button @click="updateCommission()" class="btn btn-primary btn-sm">Save</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sales Performance Chart -->
-      <div v-if="performance.length" class="section-card mb-6">
-        <div class="section-header"><h3 class="section-title"><i class="fas fa-chart-bar" style="color: #FF7A30"></i> Sales Performance (30 days)</h3></div>
-        <div class="section-body">
-          <div class="flex items-end gap-1" style="height: 100px">
-            <div v-for="(p, i) in performance" :key="i" class="flex-1 rounded-t" :title="p.day + ': ' + p.sales + ' sales, TSh ' + fmtNum(p.revenue)"
-              :style="{ height: perfHeight(p.sales) + '%', background: 'linear-gradient(to top, #34d399, #10b981)' }"></div>
-          </div>
-          <div class="flex justify-between mt-2 text-xs" style="color: #6b7280">
-            <span>{{ performance.length }} days with sales</span>
-            <span>Total: {{ performance.reduce((a,b) => a + b.sales, 0) }} sales / TSh {{ fmtNum(performance.reduce((a,b) => a + b.revenue, 0)) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Batches & Transactions -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-boxes" style="color: #60a5fa"></i> Voucher Batches</h3></div>
-          <div class="section-body">
-            <div v-for="b in detailBatches" :key="b.id" class="flex items-center justify-between p-2.5 rounded-lg mb-2" style="background: #0a0a0f; border: 1px solid var(--border)">
-              <div>
-                <p class="text-xs font-medium text-white">{{ b.batch_name || 'Batch #' + b.id }}</p>
-                <p class="text-xs" style="color: #6b7280">{{ fmtDate(b.created_at) }}</p>
-              </div>
-              <div class="text-right">
-                <p class="text-xs text-white">{{ b.redeemed || 0 }}/{{ b.total_vouchers || 0 }} redeemed</p>
-                <div class="h-1.5 rounded-full mt-1" style="background: #1e1e2a; width: 80px">
-                  <div class="h-full rounded-full" :style="{ width: batchPct(b) + '%', background: '#34d399' }"></div>
-                </div>
-              </div>
-            </div>
-            <p v-if="!detailBatches.length" class="text-xs text-center py-4" style="color: #6b7280">No batches yet</p>
-          </div>
-        </div>
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-exchange-alt" style="color: #a78bfa"></i> Transaction History</h3></div>
-          <div class="section-body max-h-80 overflow-y-auto">
-            <div v-for="t in detailTransactions" :key="t.id" class="flex items-center justify-between p-2.5 rounded-lg mb-2" style="background: #0a0a0f; border: 1px solid var(--border)">
-              <div class="flex items-center gap-2">
-                <div class="w-7 h-7 rounded-full flex items-center justify-center" :style="{ background: t.transaction_type === 'deposit' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)' }">
-                  <i class="fas text-xs" :class="t.transaction_type === 'deposit' ? 'fa-arrow-down text-green-400' : 'fa-arrow-up text-red-400'"></i>
-                </div>
-                <div>
-                  <p class="text-xs font-medium text-white">{{ t.description || t.transaction_type }}</p>
-                  <p class="text-xs" style="color: #6b7280">{{ fmtDate(t.created_at) }}</p>
-                </div>
-              </div>
-              <span class="text-xs font-medium" :class="t.transaction_type === 'deposit' ? 'text-green-400' : 'text-red-400'">
-                {{ t.transaction_type === 'deposit' ? '+' : '-' }}TSh {{ fmtNum(t.amount) }}
-              </span>
-            </div>
-            <p v-if="!detailTransactions.length" class="text-xs text-center py-4" style="color: #6b7280">No transactions</p>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <div v-if="toast.show" class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium" :style="toast.type === 'success' ? 'background: rgba(16,185,129,0.9); color: #fff' : 'background: rgba(239,68,68,0.9); color: #fff'">{{ toast.message }}</div>
+    </div>
   </div>
 </template>
 
@@ -257,118 +182,167 @@
 import { ref, computed, onMounted } from 'vue'
 import { adminGet, adminPost } from '../../api/client'
 
-const loading = ref(false)
-const loadingAction = ref(false)
-const search = ref('')
-const tierFilter = ref('')
-const resellers = ref([])
-const summary = ref({})
-const selectedReseller = ref(null)
-const detailBatches = ref([])
-const detailTransactions = ref([])
-const performance = ref([])
-const pagination = ref({ page: 1, limit: 20, total: 0, pages: 0 })
+const list = ref([])
+const routers = ref([])
+const filter = ref('all')
+const q = ref('')
+const msg = ref(null)
+const busy = ref(false)
+const loading = ref(true)
+const showR = ref(null)
+const editR = ref(null)
+const assignR = ref(null)
 
-const depositAmount = ref(0)
-const depositNote = ref('')
-const deductAmount = ref(0)
-const deductNote = ref('')
-const commissionRate = ref(10)
-
-const toast = ref({ show: false, message: '', type: 'success' })
-function showToast(msg, type = 'success') { toast.value = { show: true, message: msg, type }; setTimeout(() => toast.value.show = false, 3000) }
-
-const tiers = [
-  { key: 'bronze', label: 'Bronze', desc: '10% commission', icon: 'fas fa-medal', bg: 'rgba(180,130,80,0.15)', color: '#cd7f32', border: 'rgba(180,130,80,0.3)' },
-  { key: 'silver', label: 'Silver', desc: '12% commission', icon: 'fas fa-medal', bg: 'rgba(192,192,192,0.15)', color: '#c0c0c0', border: 'rgba(192,192,192,0.3)' },
-  { key: 'gold', label: 'Gold', desc: '15% commission', icon: 'fas fa-medal', bg: 'rgba(255,215,0,0.15)', color: '#ffd700', border: 'rgba(255,215,0,0.3)' },
-  { key: 'platinum', label: 'Platinum', desc: '20% commission', icon: 'fas fa-crown', bg: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: 'rgba(139,92,246,0.3)' }
-]
-
-function tierColor(tier) { return tiers.find(t => t.key === tier)?.color || '#cd7f32' }
-function tierBadgeClass(tier) {
-  const m = { bronze: 'bg-orange-500/10 text-orange-400', silver: 'bg-gray-400/10 text-gray-300', gold: 'bg-yellow-500/10 text-yellow-400', platinum: 'bg-purple-500/10 text-purple-400' }
-  return m[tier] || m.bronze
+const filters = [{ k: 'all', l: 'All' }, { k: 'needs', l: 'Needs router' }, { k: 'active', l: 'Active' }, { k: 'suspended', l: 'Suspended' }]
+const tsh = (n) => 'TSh ' + Number(n || 0).toLocaleString()
+const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '')
+const planLabel = (t) => ({ hq_supplied: 'HQ supplies equipment', outright: 'Buys equipment outright', financed: 'Partner loan' }[t] || t)
+const stageLabel = (a) => {
+  if (a.status === 'scheduled') return 'Install ' + (a.install_date || '') + ' ' + (a.install_time || '')
+  return ({ approved: 'Approved, awaiting schedule', installed: 'Installed', new: 'New', reviewing: 'Reviewing', rejected: 'Rejected' }[a.status] || a.status)
 }
+const errText = (e) => (e && e.response && e.response.data && e.response.data.error) || (e && e.data && e.data.error) || (e && e.message) || 'Request failed'
+function notify(text, type = 'ok') { msg.value = { text, type }; setTimeout(() => { msg.value = null }, 8000) }
 
-function fmtNum(n) { return Number(n || 0).toLocaleString() }
-function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
-function initials(name) { return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) }
-function batchPct(b) { return b.total_vouchers > 0 ? (b.redeemed / b.total_vouchers * 100) : 0 }
-function perfHeight(n) { const max = Math.max(...performance.value.map(p => p.sales), 1); return (n / max) * 100 }
+const needsRouter = (r) => r.status === 'active' && !r.routers.length
+const counts = computed(() => ({
+  all: list.value.length,
+  needs: list.value.filter(needsRouter).length,
+  active: list.value.filter(r => r.status === 'active').length,
+  suspended: list.value.filter(r => r.status === 'suspended').length
+}))
+const totals = computed(() => ({
+  balance: list.value.reduce((s, r) => s + r.balance, 0),
+  earned: list.value.reduce((s, r) => s + r.sales.earned, 0),
+  loan: list.value.reduce((s, r) => s + (r.financing ? r.financing.balance : 0), 0)
+}))
+const filtered = computed(() => {
+  const t = q.value.trim().toLowerCase()
+  return list.value.filter(r => {
+    if (filter.value === 'needs' && !needsRouter(r)) return false
+    if (filter.value === 'active' && r.status !== 'active') return false
+    if (filter.value === 'suspended' && r.status !== 'suspended') return false
+    if (!t) return true
+    return [r.name, r.company_name, r.phone, r.email].some(v => String(v || '').toLowerCase().includes(t))
+  })
+})
+const freeRouters = computed(() => routers.value.filter(rt => !rt.assignment))
 
-let searchTimeout = null
-function debouncedLoad() { clearTimeout(searchTimeout); searchTimeout = setTimeout(() => loadResellers(), 300) }
-
-async function loadResellers() {
+async function load() {
   loading.value = true
   try {
-    const params = new URLSearchParams({ page: pagination.value.page, limit: 20 })
-    if (search.value) params.set('search', search.value)
-    if (tierFilter.value) params.set('tier', tierFilter.value)
-    const r = await adminGet('/business/resellers?' + params.toString())
-    resellers.value = r.resellers || []
-    summary.value = r.summary || {}
-    pagination.value = r.pagination || { page: 1, limit: 20, total: 0, pages: 0 }
-  } catch (e) { console.error(e) }
-  loading.value = false
+    const [m, r] = await Promise.all([adminGet('/resellers-v2/managed'), adminGet('/resellers-v2/routers')])
+    list.value = m.resellers || []
+    routers.value = r.routers || []
+  } catch (e) { notify(errText(e), 'error') } finally { loading.value = false }
 }
 
-function goPage(p) { pagination.value.page = p; loadResellers() }
-
-async function viewReseller(r) {
+async function openShow(r) {
+  showR.value = { base: r, loading: true, d: null }
   try {
-    const detail = await adminGet('/business/resellers/' + r.id)
-    selectedReseller.value = detail.reseller
-    detailBatches.value = detail.batches || []
-    detailTransactions.value = detail.transactions || []
-    performance.value = detail.performance || []
-    commissionRate.value = detail.reseller.commission_rate || 10
-  } catch (e) { showToast('Failed to load details', 'error') }
+    const d = await adminGet('/resellers-v2/managed/' + r.id)
+    showR.value = { base: r, loading: false, d }
+  } catch (e) { showR.value = null; notify(errText(e), 'error') }
 }
 
-async function doDeposit() {
-  if (!selectedReseller.value || depositAmount.value < 100) return
-  loadingAction.value = true
+function openEdit(r) {
+  editR.value = { id: r.id, name: r.name, company_name: r.company_name || '', phone: r.phone, email: r.email || '', status: r.status, password: '' }
+}
+async function saveEdit() {
+  const e = editR.value
+  const body = { name: e.name, company_name: e.company_name, phone: e.phone, email: e.email, status: e.status }
+  if (e.password) body.password = e.password
+  busy.value = true
   try {
-    const r = await adminPost('/resellers/' + selectedReseller.value.id + '/deposit', { amount: depositAmount.value, description: depositNote.value || 'Admin deposit' })
-    selectedReseller.value.balance = r.balance
-    depositAmount.value = 0; depositNote.value = ''
-    showToast('Deposit successful')
-    viewReseller(selectedReseller.value)
-  } catch (e) { showToast('Failed: ' + (e.response?.data?.error || e.message), 'error') }
-  loadingAction.value = false
+    await adminPost('/resellers-v2/resellers/' + e.id + '/update', body)
+    editR.value = null
+    notify('Reseller updated')
+    await load()
+  } catch (err) { notify(errText(err), 'error') } finally { busy.value = false }
 }
 
-async function doDeduct() {
-  if (!selectedReseller.value || deductAmount.value < 100 || !deductNote.value) return
-  loadingAction.value = true
+function openAssign(r) {
+  const plan = r.plan
+  assignR.value = {
+    r, router_id: '', display_name: r.company_name || r.name,
+    commission_percent: plan && plan.plan_type === 'outright' ? plan.maintenance_percent : 20,
+    rename_router: true
+  }
+}
+async function saveAssign() {
+  const a = assignR.value
+  if (!a.router_id) return notify('Pick a router', 'error')
+  if (!a.display_name || a.display_name.trim().length < 2) return notify('Enter the router name', 'error')
+  busy.value = true
   try {
-    const r = await adminPost('/resellers/' + selectedReseller.value.id + '/deduct', { amount: deductAmount.value, description: deductNote.value })
-    selectedReseller.value.balance = r.balance
-    deductAmount.value = 0; deductNote.value = ''
-    showToast('Deduction successful')
-    viewReseller(selectedReseller.value)
-  } catch (e) { showToast('Failed: ' + (e.response?.data?.error || e.message), 'error') }
-  loadingAction.value = false
+    await adminPost('/resellers-v2/assign', {
+      router_id: a.router_id, reseller_user_id: a.r.id, display_name: a.display_name,
+      commission_percent: a.commission_percent, rename_router: a.rename_router
+    })
+    assignR.value = null
+    notify('Router assigned')
+    await load()
+  } catch (e) { notify(errText(e), 'error') } finally { busy.value = false }
 }
 
-async function updateTier(tier) {
+async function unassign(x) {
+  if (!window.confirm('Unassign ' + x.router_id + '? Its future sales go 100% to HQ.')) return
   try {
-    await adminPost('/business/resellers/' + selectedReseller.value.id + '/tier', { tier })
-    selectedReseller.value.tier = tier
-    showToast('Tier updated to ' + tier.toUpperCase())
-  } catch (e) { showToast('Failed', 'error') }
+    await adminPost('/resellers-v2/unassign', { router_id: x.router_id })
+    showR.value = null
+    notify('Router unassigned')
+    await load()
+  } catch (e) { notify(errText(e), 'error') }
 }
 
-async function updateCommission() {
+async function remove(r) {
+  if (!window.confirm('Delete "' + (r.company_name || r.name) + '"? This only works if they have no routers, sales, loans, withdrawals or balance. Otherwise suspend them.')) return
   try {
-    await adminPost('/business/resellers/' + selectedReseller.value.id + '/tier', { commission_rate: commissionRate.value })
-    selectedReseller.value.commission_rate = commissionRate.value
-    showToast('Commission updated')
-  } catch (e) { showToast('Failed', 'error') }
+    await adminPost('/resellers-v2/resellers/' + r.id + '/delete', {})
+    notify('Reseller deleted')
+    await load()
+  } catch (e) { notify(errText(e), 'error') }
 }
 
-async function loadAll() { await loadResellers() }
-onMounted(loadAll)
+onMounted(load)
 </script>
+
+<style scoped>
+.rs-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.rs-title { font-size: 1.25rem; font-weight: 700; color: #fff; }
+.rs-sub { color: #6b7280; font-size: 0.85rem; margin-top: 4px; max-width: 640px; }
+.rs-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rs-between { justify-content: space-between; margin-bottom: 12px; }
+.rs-msg { padding: 12px; border-radius: 12px; font-size: 0.85rem; }
+.rs-ok { background: #0f2a1c; color: #34d399; }
+.rs-err { background: #2a1015; color: #f87171; }
+.rs-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.rs-card { background: #111118; border: 1px solid #1e1e2a; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.rs-card span { color: #6b7280; font-size: 0.75rem; }
+.rs-card b { color: #FF7A30; font-size: 1.1rem; }
+.rs-chip { background: #0d0d14; border: 1px solid #1e1e2a; color: #9ca3af; padding: 5px 12px; border-radius: 999px; font-size: 0.8rem; cursor: pointer; }
+.rs-chip.on { border-color: #FF7A30; color: #FF7A30; }
+.rs-inp { background: #0a0a0f; border: 1px solid #1e1e2a; color: #fff; padding: 8px 10px; border-radius: 10px; font-size: 0.85rem; width: 100%; }
+.rs-search { max-width: 280px; }
+.rs-scroll { overflow-x: auto; }
+.rs-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; color: #e5e7eb; margin: 8px 0; }
+.rs-tbl th { text-align: left; color: #6b7280; font-weight: 500; padding: 8px; border-bottom: 1px solid #1e1e2a; white-space: nowrap; }
+.rs-tbl td { padding: 8px; border-bottom: 1px solid #14141c; vertical-align: top; }
+.rs-mut { color: #6b7280; font-size: 0.78rem; margin: 3px 0; }
+.rs-warn { color: #f59e0b; font-size: 0.8rem; }
+.rs-badge { background: #1a1a24; color: #FF7A30; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; }
+.rs-b-ok { background: #0f2a1c; color: #34d399; }
+.rs-b-bad { background: #2a1015; color: #f87171; }
+.rs-btn { background: #FF7A30; color: #fff; border: 0; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 0.8rem; cursor: pointer; }
+.rs-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; text-decoration: none; display: inline-block; }
+.rs-red { color: #f87171; }
+.rs-btn:disabled { opacity: 0.5; cursor: default; }
+.rs-ov { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.rs-mod { position: relative; background: #111118; border: 1px solid #1e1e2a; border-radius: 16px; padding: 20px; width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto; color: #e5e7eb; }
+.rs-small { max-width: 480px; display: grid; gap: 10px; }
+.rs-x { position: absolute; top: 10px; right: 14px; color: #6b7280; font-size: 1.4rem; background: none; border: 0; cursor: pointer; }
+.rs-h3 { font-size: 1.1rem; font-weight: 700; color: #fff; }
+.rs-box { background: #0d0d14; border: 1px solid #1e1e2a; border-radius: 12px; padding: 12px; margin-top: 10px; }
+.rs-l { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #9ca3af; }
+.rs-chk { font-size: 0.8rem; color: #9ca3af; display: flex; gap: 6px; align-items: center; }
+</style>

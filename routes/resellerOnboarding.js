@@ -332,4 +332,173 @@ router.post('/partner-payouts', async (req, res) => {
   } catch (e) { fail(res, e, 'partner payout'); }
 });
 
+// ---------------- Resellers page: list, show, edit, delete ----------------
+const normPhoneR = (p) => {
+  let d = String(p || '').replace(/\D/g, '');
+  if (d.startsWith('0')) d = '255' + d.slice(1);
+  return /^255[67]\d{8}$/.test(d) ? d : null;
+};
+const phoneVariants = (p) => [p, '+' + p, '0' + p.slice(3)];
+const adminId = (req) => (req.user && req.user.id) || null;
+
+router.get('/managed', async (req, res) => {
+  try {
+    const [rs] = await db.execute(
+      `SELECT u.id, u.name, u.company_name, u.phone_number, u.email, u.is_active, u.created_at,
+              r.balance, r.total_earned, r.status AS reseller_status
+       FROM users u LEFT JOIN resellers r ON r.user_id = u.id
+       WHERE u.role = 'reseller' ORDER BY u.id DESC LIMIT 500`
+    );
+    const [apps] = await db.execute(
+      `SELECT a.user_id, a.application_ref, a.status, a.region, a.district, a.ward, a.landmark,
+              DATE_FORMAT(a.install_date, '%Y-%m-%d') AS install_date, a.install_time, a.technician,
+              p.id AS plan_id, p.name AS plan_name, p.plan_type, p.maintenance_percent, p.total_price, p.financed_amount, p.repayment_percent
+       FROM reseller_applications a LEFT JOIN equipment_plans p ON p.id = a.plan_id
+       WHERE a.user_id IS NOT NULL ORDER BY a.id`
+    );
+    const [asg] = await db.execute('SELECT router_id, reseller_user_id, display_name, commission_percent FROM router_assignments WHERE unassigned_at IS NULL');
+    const [fin] = await db.execute("SELECT reseller_user_id, id, status, principal, balance, repayment_percent, maintenance_percent, router_id FROM reseller_financings WHERE status IN ('pending','active') ORDER BY id");
+    const [sales] = await db.execute("SELECT reseller_user_id, COUNT(*) AS sales, COALESCE(SUM(gross_amount),0) AS gross, COALESCE(SUM(reseller_amount),0) AS earned FROM router_sales WHERE status = 'credited' AND reseller_user_id IS NOT NULL GROUP BY reseller_user_id");
+    const appBy = new Map(apps.map(a => [a.user_id, a]));
+    const finBy = new Map(fin.map(f => [f.reseller_user_id, f]));
+    const saleBy = new Map(sales.map(s => [s.reseller_user_id, s]));
+    res.json({
+      resellers: rs.map(u => {
+        const a = appBy.get(u.id) || null;
+        const f = finBy.get(u.id) || null;
+        const s = saleBy.get(u.id) || null;
+        return {
+          id: u.id, name: u.name, company_name: u.company_name, phone: u.phone_number, email: u.email, created_at: u.created_at,
+          is_active: !!u.is_active,
+          status: (u.is_active && u.reseller_status !== 'suspended') ? 'active' : 'suspended',
+          balance: num(u.balance), total_earned: num(u.total_earned),
+          application: a && { ref: a.application_ref, status: a.status, region: a.region, district: a.district, ward: a.ward, landmark: a.landmark, install_date: a.install_date, install_time: a.install_time, technician: a.technician },
+          plan: a && a.plan_id ? { id: a.plan_id, name: a.plan_name, plan_type: a.plan_type, maintenance_percent: num(a.maintenance_percent), total_price: num(a.total_price), financed_amount: num(a.financed_amount), repayment_percent: num(a.repayment_percent) } : null,
+          financing: f && { id: f.id, status: f.status, principal: num(f.principal), balance: num(f.balance), repaid: num(f.principal) - num(f.balance), repayment_percent: num(f.repayment_percent), maintenance_percent: num(f.maintenance_percent), router_id: f.router_id },
+          routers: asg.filter(x => x.reseller_user_id === u.id).map(x => ({ router_id: x.router_id, display_name: x.display_name, commission_percent: num(x.commission_percent) })),
+          sales: s ? { count: Number(s.sales), gross: num(s.gross), earned: num(s.earned) } : { count: 0, gross: 0, earned: 0 }
+        };
+      })
+    });
+  } catch (e) { fail(res, e, 'managed list'); }
+});
+
+router.get('/managed/:id', async (req, res) => {
+  try {
+    const id = idOf(req); if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const [u] = await db.execute("SELECT id, name, company_name, phone_number, email, is_active, created_at FROM users WHERE id = ? AND role = 'reseller' LIMIT 1", [id]);
+    if (!u.length) return res.status(404).json({ error: 'Reseller not found' });
+    const [apps] = await db.execute(
+      `SELECT a.application_ref, a.status, a.business_type, a.expected_customers, a.region, a.district, a.ward, a.address, a.landmark,
+              DATE_FORMAT(a.install_date, '%Y-%m-%d') AS install_date, a.install_time, a.technician, a.install_notes, a.admin_notes, a.created_at,
+              p.name AS plan_name, p.plan_type
+       FROM reseller_applications a LEFT JOIN equipment_plans p ON p.id = a.plan_id WHERE a.user_id = ? ORDER BY a.id DESC LIMIT 1`, [id]);
+    const [fins] = await db.execute(
+      `SELECT f.id, f.status, f.principal, f.balance, f.repayment_percent, f.maintenance_percent, f.router_id, f.started_at, f.completed_at, ep.name AS partner_name
+       FROM reseller_financings f LEFT JOIN equipment_partners ep ON ep.id = f.partner_id WHERE f.reseller_user_id = ? ORDER BY f.id DESC`, [id]);
+    const [reps] = await db.execute(
+      `SELECT r.order_reference, r.amount, r.balance_after, r.created_at FROM financing_repayments r
+       JOIN reseller_financings f ON f.id = r.financing_id WHERE f.reseller_user_id = ? ORDER BY r.id DESC LIMIT 10`, [id]);
+    const [sales] = await db.execute(
+      'SELECT order_reference, router_id, gross_amount, hq_percent, hq_amount, repayment_amount, reseller_amount, created_at FROM router_sales WHERE reseller_user_id = ? ORDER BY id DESC LIMIT 10', [id]);
+    const [routers] = await db.execute(
+      'SELECT router_id, display_name, commission_percent, assigned_at FROM router_assignments WHERE reseller_user_id = ? AND unassigned_at IS NULL', [id]);
+    const [wd] = await db.execute('SELECT id, amount, payment_method, status, requested_at FROM reseller_withdrawals WHERE user_id = ? ORDER BY id DESC LIMIT 10', [id]);
+    const [rr] = await db.execute('SELECT balance, total_earned, status FROM resellers WHERE user_id = ? LIMIT 1', [id]);
+    res.json({
+      reseller: { ...u[0], is_active: !!u[0].is_active, balance: num(rr[0] && rr[0].balance), total_earned: num(rr[0] && rr[0].total_earned), reseller_status: rr[0] ? rr[0].status : null },
+      application: apps[0] || null,
+      financings: fins.map(f => ({ ...f, principal: num(f.principal), balance: num(f.balance), repayment_percent: num(f.repayment_percent), maintenance_percent: num(f.maintenance_percent) })),
+      repayments: reps.map(r => ({ ...r, amount: num(r.amount), balance_after: num(r.balance_after) })),
+      sales: sales.map(s => ({ ...s, gross_amount: num(s.gross_amount), hq_amount: num(s.hq_amount), repayment_amount: num(s.repayment_amount), reseller_amount: num(s.reseller_amount), hq_percent: num(s.hq_percent) })),
+      routers: routers.map(r => ({ ...r, commission_percent: num(r.commission_percent) })),
+      withdrawals: wd.map(w => ({ ...w, amount: num(w.amount) }))
+    });
+  } catch (e) { fail(res, e, 'managed detail'); }
+});
+
+router.post('/resellers/:id/update', async (req, res) => {
+  try {
+    const id = idOf(req); if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const b = req.body || {};
+    const [u] = await db.execute("SELECT id FROM users WHERE id = ? AND role = 'reseller' LIMIT 1", [id]);
+    if (!u.length) return res.status(404).json({ error: 'Reseller not found' });
+    const sets = []; const vals = []; let status = null;
+    if (b.name !== undefined) {
+      const v = str(b.name, 100);
+      if (v.length < 2) return res.status(400).json({ error: 'Name must be at least 2 characters' });
+      sets.push('name = ?'); vals.push(v);
+    }
+    if (b.company_name !== undefined) { sets.push('company_name = ?'); vals.push(str(b.company_name, 150) || null); }
+    if (b.email !== undefined) {
+      const v = str(b.email, 190).toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return res.status(400).json({ error: 'Invalid email' });
+      const [d] = await db.execute('SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1', [v, id]);
+      if (d.length) return res.status(409).json({ error: 'Another user already has this email' });
+      sets.push('email = ?'); vals.push(v);
+    }
+    if (b.phone !== undefined) {
+      const p = normPhoneR(b.phone);
+      if (!p) return res.status(400).json({ error: 'Phone must look like 2557XXXXXXXX or 07XXXXXXXX' });
+      const pv = phoneVariants(p);
+      const [d] = await db.execute('SELECT id FROM users WHERE phone_number IN (?, ?, ?) AND id <> ? LIMIT 1', [...pv, id]);
+      if (d.length) return res.status(409).json({ error: 'Another user already has this phone' });
+      sets.push('phone_number = ?'); vals.push('+' + p);
+    }
+    if (b.password) {
+      const pw = String(b.password);
+      if (pw.length < 8 || pw.length > 72) return res.status(400).json({ error: 'Password must be 8-72 characters' });
+      let bcrypt; try { bcrypt = require('bcryptjs'); } catch (_) { bcrypt = require('bcrypt'); }
+      sets.push('password = ?'); vals.push(await bcrypt.hash(pw, 10));
+    }
+    if (b.status !== undefined) {
+      if (!['active', 'suspended'].includes(b.status)) return res.status(400).json({ error: 'Status must be active or suspended' });
+      status = b.status; sets.push('is_active = ?'); vals.push(status === 'active' ? 1 : 0);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    await withTx(async (c) => {
+      await c.execute('UPDATE users SET ' + sets.join(', ') + ' WHERE id = ?', [...vals, id]);
+      if (status) await c.execute('UPDATE resellers SET status = ? WHERE user_id = ?', [status, id]);
+    });
+    console.log('[resellers-v2] reseller ' + id + ' updated by admin ' + adminId(req) + ' (' + sets.map(x => x.split(' ')[0]).join(',') + ')');
+    res.json({ success: true });
+  } catch (e) { fail(res, e, 'reseller update'); }
+});
+
+router.post('/resellers/:id/delete', async (req, res) => {
+  try {
+    const id = idOf(req); if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const out = await withTx(async (c) => {
+      const [u] = await c.execute("SELECT id, name FROM users WHERE id = ? AND role = 'reseller' FOR UPDATE", [id]);
+      if (!u.length) return { code: 404, error: 'Reseller not found' };
+      const blockers = [];
+      const count = async (label, sql) => {
+        const [r] = await c.execute(sql, [id]);
+        if (Number(r[0].n) > 0) blockers.push(label + ' (' + r[0].n + ')');
+      };
+      await count('router assignments', 'SELECT COUNT(*) AS n FROM router_assignments WHERE reseller_user_id = ?');
+      await count('sales', 'SELECT COUNT(*) AS n FROM router_sales WHERE reseller_user_id = ?');
+      await count('financing', 'SELECT COUNT(*) AS n FROM reseller_financings WHERE reseller_user_id = ?');
+      await count('withdrawals', 'SELECT COUNT(*) AS n FROM reseller_withdrawals WHERE user_id = ?');
+      await count('wallet transactions', 'SELECT COUNT(*) AS n FROM transactions WHERE user_id = ?');
+      await count('wallet balance', 'SELECT COUNT(*) AS n FROM wallets WHERE user_id = ? AND COALESCE(balance, 0) <> 0');
+      await count('reseller balance', 'SELECT COUNT(*) AS n FROM resellers WHERE user_id = ? AND COALESCE(balance, 0) <> 0');
+      if (blockers.length) return { code: 409, error: 'Cannot delete, has history: ' + blockers.join(', ') + '. Suspend the reseller instead.' };
+      await c.execute("UPDATE reseller_applications SET user_id = NULL, status = 'rejected', rejection_reason = 'Account removed by HQ' WHERE user_id = ?", [id]);
+      await c.execute('DELETE FROM wallets WHERE user_id = ?', [id]);
+      await c.execute('DELETE FROM resellers WHERE user_id = ?', [id]);
+      await c.execute('DELETE FROM users WHERE id = ?', [id]);
+      return { ok: true, name: u[0].name };
+    });
+    if (out.error) return res.status(out.code).json({ error: out.error });
+    console.log('[resellers-v2] reseller ' + id + ' (' + out.name + ') deleted by admin ' + adminId(req));
+    res.json({ success: true });
+  } catch (e) {
+    if (e && (e.code === 'ER_ROW_IS_REFERENCED_2' || e.code === 'ER_ROW_IS_REFERENCED')) {
+      return res.status(409).json({ error: 'Cannot delete: other records still refer to this user. Suspend the reseller instead.' });
+    }
+    fail(res, e, 'reseller delete');
+  }
+});
+
 module.exports = router;

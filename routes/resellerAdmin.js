@@ -190,6 +190,7 @@ router.post('/assign', async (req, res) => {
         [rid, resellerId, display, pct, actor(req)]
       );
       if (rename) await c.execute('UPDATE mikrotiks SET router_name = ? WHERE router_id = ?', [display, rid]);
+      await c.execute("UPDATE reseller_financings SET router_id = ?, status = 'active', started_at = COALESCE(started_at, NOW()) WHERE reseller_user_id = ? AND status IN ('pending','active') AND router_id IS NULL", [rid, resellerId]);
       const touched = new Set([resellerId, ...old.map(o => o.reseller_user_id)]);
       for (const uid of touched) await syncResellerRouter(c, uid);
     });
