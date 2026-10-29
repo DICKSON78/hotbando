@@ -205,6 +205,8 @@ router.get('/payments', async (req, res) => {
   }
 });
 
+router.use('/resellers-v2', require('./resellerAdmin'));
+
 router.get('/clickpesa-balance', clickpesaController.getBalance);
 
 router.get('/withdrawals', async (req, res) => {
