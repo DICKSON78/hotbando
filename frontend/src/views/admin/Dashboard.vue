@@ -163,6 +163,7 @@ onMounted(async () => {
   try {
     const data = await adminGet('/dashboard-stats')
     stats.value = data
+    loading.value = false
     await nextTick()
     if (data.chartData?.labels?.length) renderChart(data.chartData)
   } catch (e) {
@@ -172,10 +173,21 @@ onMounted(async () => {
   }
 })
 
-function renderChart(chartData) {
-  const ctx = document.getElementById('trendChart')
-  if (!ctx) return
-  new Chart(ctx, {
+let trendChart = null
+function renderChart(chartData, attempt = 0) {
+  const ctx = chartRef.value || document.getElementById('trendChart')
+  if (!ctx) {
+    if (attempt < 10) setTimeout(() => renderChart(chartData, attempt + 1), 150)
+    else console.warn('trendChart canvas not found')
+    return
+  }
+  if (typeof Chart === 'undefined') {
+    if (attempt < 20) setTimeout(() => renderChart(chartData, attempt + 1), 150)
+    else console.warn('Chart.js not loaded')
+    return
+  }
+  if (trendChart) { trendChart.destroy(); trendChart = null }
+  trendChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: chartData.labels,
