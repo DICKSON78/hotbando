@@ -55,8 +55,8 @@ router.get('/payments/webhook-events', async (req, res) => {
                 JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.amount'))
               ) AS reported_amount
        FROM payment_events WHERE provider = 'clickpesa'
-       ORDER BY received_at DESC LIMIT ?`,
-      [limit]
+       ORDER BY received_at DESC LIMIT ${limit}`,
+      []
     );
     res.json({ events });
   } catch (error) {
@@ -138,8 +138,8 @@ router.get('/payments', async (req, res) => {
     const ledger = `SELECT * FROM (${ledgerSql}) AS ledger ${where}`;
     const [[countRow]] = await db.execute(`SELECT COUNT(*) AS total FROM (${ledger}) AS filtered`, values);
     const [rows] = await db.execute(
-      `${ledger} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [...values, limit, (page - 1) * limit]
+      `${ledger} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+      values
     );
     const [[summaryRow]] = await db.execute(`
       SELECT
