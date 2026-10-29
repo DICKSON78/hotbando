@@ -6,9 +6,9 @@
         <p class="rs-sub">Everyone who registered or was added by HQ. Assign each a router according to the equipment plan they chose.</p>
       </div>
       <div class="rs-row">
-        <router-link :to="{ name: 'reseller-onboarding' }" class="rs-btn-s">Applications &amp; plans</router-link>
-        <router-link :to="{ name: 'reseller-routers' }" class="rs-btn-s">Routers &amp; sales</router-link>
-        <button class="rs-btn-s" @click="load">Refresh</button>
+        <router-link :to="{ name: 'reseller-onboarding' }" class="rs-btn-s rs-c-blue">Applications &amp; plans</router-link>
+        <router-link :to="{ name: 'reseller-routers' }" class="rs-btn-s rs-c-purple">Routers &amp; sales</router-link>
+        <button class="rs-btn-s rs-c-teal" @click="load">Refresh</button>
       </div>
     </div>
 
@@ -58,10 +58,10 @@
                 <td>{{ tsh(r.sales.earned) }}<div class="rs-mut">{{ r.sales.count }} sales</div></td>
                 <td>
                   <div class="rs-row">
-                    <button class="rs-btn-s" @click="openShow(r)">Show</button>
-                    <button class="rs-btn-s" @click="openEdit(r)">Edit</button>
+                    <button class="rs-btn-s rs-c-blue" @click="openShow(r)">Show</button>
+                    <button class="rs-btn-s rs-c-amber" @click="openEdit(r)">Edit</button>
                     <button v-if="r.status === 'active'" class="rs-btn" @click="openAssign(r)">Assign router</button>
-                    <button class="rs-btn-s rs-red" @click="remove(r)">Delete</button>
+                    <button class="rs-btn-s rs-c-red" @click="remove(r)">Delete</button>
                   </div>
                 </td>
               </tr>
@@ -95,7 +95,7 @@
             <b>Routers</b>
             <p v-for="x in showR.d.routers" :key="x.router_id" class="rs-mut">
               {{ x.display_name }} ({{ x.router_id }}) &middot; HQ keeps {{ x.commission_percent }}%
-              <button class="rs-btn-s rs-red" @click="unassign(x)">Unassign</button>
+              <button class="rs-btn-s rs-c-red" @click="unassign(x)">Unassign</button>
             </p>
             <p v-if="!showR.d.routers.length" class="rs-mut">No router assigned yet</p>
           </div>
@@ -140,7 +140,7 @@
         <label class="rs-l">New password (leave empty to keep)<input v-model="editR.password" type="password" class="rs-inp" autocomplete="new-password" /></label>
         <div class="rs-row">
           <button class="rs-btn" :disabled="busy" @click="saveEdit">Save</button>
-          <button class="rs-btn-s" @click="editR = null">Cancel</button>
+          <button class="rs-btn-s rs-c-slate" @click="editR = null">Cancel</button>
         </div>
       </div>
     </div>
@@ -171,7 +171,7 @@
         <label class="rs-chk"><input type="checkbox" v-model="assignR.rename_router" /> Rename the router everywhere</label>
         <div class="rs-row">
           <button class="rs-btn" :disabled="busy" @click="saveAssign">Assign</button>
-          <button class="rs-btn-s" @click="assignR = null">Cancel</button>
+          <button class="rs-btn-s rs-c-slate" @click="assignR = null">Cancel</button>
         </div>
       </div>
     </div>
@@ -334,7 +334,18 @@ onMounted(load)
 .rs-b-ok { background: #0f2a1c; color: #34d399; }
 .rs-b-bad { background: #2a1015; color: #f87171; }
 .rs-btn { background: #FF7A30; color: #fff; border: 0; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 0.8rem; cursor: pointer; }
-.rs-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; text-decoration: none; display: inline-block; }
+.rs-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; transition: filter 0.15s, transform 0.15s; }
+.rs-btn-s:hover:not(:disabled) { filter: brightness(1.3); transform: translateY(-1px); }
+.rs-btn-s:disabled { opacity: 0.5; cursor: default; }
+.rs-c-blue { background: rgba(59, 130, 246, 0.14); color: #60a5fa; border-color: rgba(59, 130, 246, 0.45); }
+.rs-c-purple { background: rgba(139, 92, 246, 0.14); color: #a78bfa; border-color: rgba(139, 92, 246, 0.45); }
+.rs-c-teal { background: rgba(20, 184, 166, 0.14); color: #2dd4bf; border-color: rgba(20, 184, 166, 0.45); }
+.rs-c-green { background: rgba(16, 185, 129, 0.14); color: #34d399; border-color: rgba(16, 185, 129, 0.45); }
+.rs-c-amber { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.45); }
+.rs-c-red { background: rgba(239, 68, 68, 0.14); color: #f87171; border-color: rgba(239, 68, 68, 0.45); }
+.rs-c-slate { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.35); }
+.rs-back { display: inline-block; margin-bottom: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255, 122, 48, 0.5); background: rgba(255, 122, 48, 0.12); color: #FF7A30; font-size: 0.82rem; font-weight: 600; text-decoration: none; }
+.rs-back:hover { filter: brightness(1.25); }
 .rs-red { color: #f87171; }
 .rs-btn:disabled { opacity: 0.5; cursor: default; }
 .rs-ov { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }

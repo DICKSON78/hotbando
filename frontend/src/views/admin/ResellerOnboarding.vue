@@ -1,8 +1,9 @@
 <template>
   <div class="space-y-6">
     <div>
+      <router-link :to="{ name: 'resellers' }" class="ob-back">← Back to Resellers</router-link>
       <h2 class="ob-title">Reseller Onboarding</h2>
-      <p class="ob-sub">Applications, equipment partners and plans, financing. <router-link :to="{ name: 'reseller-routers' }" class="ob-link">Assign routers &amp; sales →</router-link></p>
+      <p class="ob-sub">Applications, equipment partners and plans, financing. <router-link :to="{ name: 'reseller-routers' }" class="ob-btn-s ob-c-purple" style="margin-left: 8px">Assign routers &amp; sales →</router-link></p>
     </div>
     <div v-if="msg" class="ob-msg" :class="msg.type === 'error' ? 'ob-err' : 'ob-ok'">{{ msg.text }}</div>
 
@@ -27,7 +28,7 @@
               <td>{{ a.district }}, {{ a.region }}<div class="ob-mut">{{ a.landmark }}</div></td>
               <td>{{ a.plan_name || '-' }}</td>
               <td><span class="ob-badge">{{ a.status }}</span></td>
-              <td><button class="ob-btn-s" @click="openApp(a)">Open</button></td>
+              <td><button class="ob-btn-s ob-c-blue" @click="openApp(a)">Open</button></td>
             </tr>
             <tr v-if="!apps.length"><td colspan="6" class="ob-mut">No applications</td></tr>
           </tbody>
@@ -46,7 +47,7 @@
           <div v-if="['new', 'reviewing'].includes(sel.status)" class="ob-blk">
             <p class="ob-mut">Verify the phone number by calling the applicant before approving.</p>
             <input v-model="form.note" class="ob-inp" placeholder="Note (optional)" />
-            <button class="ob-btn-s" :disabled="busy" @click="act('review', { notes: form.note })">Mark reviewing</button>
+            <button class="ob-btn-s ob-c-amber" :disabled="busy" @click="act('review', { notes: form.note })">Mark reviewing</button>
             <div class="ob-row">
               <select v-model="form.plan_id" class="ob-inp">
                 <option value="">Keep applicant's plan ({{ sel.plan_name || 'none' }})</option>
@@ -56,7 +57,7 @@
             </div>
             <div class="ob-row">
               <input v-model="form.reason" class="ob-inp" placeholder="Rejection reason (the applicant sees this)" />
-              <button class="ob-btn-s ob-red" :disabled="busy" @click="act('reject', { reason: form.reason })">Reject</button>
+              <button class="ob-btn-s ob-c-red" :disabled="busy" @click="act('reject', { reason: form.reason })">Reject</button>
             </div>
           </div>
 
@@ -69,11 +70,11 @@
             </div>
             <input v-model="form.inote" class="ob-inp" placeholder="Install notes (optional)" />
             <button class="ob-btn" :disabled="busy" @click="schedule">Save schedule</button>
-            <a v-if="wa" :href="wa" target="_blank" rel="noopener" class="ob-btn-s">Send WhatsApp to applicant</a>
-            <button class="ob-btn-s" :disabled="busy" @click="act('installed', {})">Mark installed</button>
+            <a v-if="wa" :href="wa" target="_blank" rel="noopener" class="ob-btn-s ob-c-green">Send WhatsApp to applicant</a>
+            <button class="ob-btn-s ob-c-green" :disabled="busy" @click="act('installed', {})">Mark installed</button>
           </div>
           <p v-if="sel.status === 'installed'" class="ob-mut">Installed. Assign the router on the <router-link :to="{ name: 'reseller-routers' }" class="ob-link">Reseller Routers</router-link> page.</p>
-          <button class="ob-btn-s" @click="sel = null">Close</button>
+          <button class="ob-btn-s ob-c-slate" @click="sel = null">Close</button>
         </div>
       </div>
     </div>
@@ -123,7 +124,7 @@
               <tr v-for="p in plans" :key="p.id" :style="{ opacity: p.is_active ? 1 : 0.5 }">
                 <td>{{ p.name }}<div class="ob-mut">{{ p.equipment_list }}</div></td><td>{{ p.plan_type }}</td><td>{{ p.partner_name || 'HQ' }}</td>
                 <td>{{ tsh(p.total_price) }}</td><td>{{ tsh(p.financed_amount) }}</td><td>{{ p.repayment_percent }}</td><td>{{ p.maintenance_percent }}</td>
-                <td><button class="ob-btn-s" @click="togglePlan(p)">{{ p.is_active ? 'Disable' : 'Enable' }}</button></td>
+                <td><button class="ob-btn-s ob-c-amber" @click="togglePlan(p)">{{ p.is_active ? 'Disable' : 'Enable' }}</button></td>
               </tr>
               <tr v-if="!plans.length"><td colspan="8" class="ob-mut">No plans yet</td></tr>
             </tbody>
@@ -144,7 +145,7 @@
                 <td>{{ f.company_name || f.reseller_name }}</td><td>{{ f.partner_name }}<div class="ob-mut">{{ f.plan_name }}</div></td>
                 <td>{{ tsh(f.principal) }}</td><td>{{ tsh(f.repaid) }}</td><td>{{ tsh(f.balance) }}</td><td>{{ f.repayment_percent }}%</td>
                 <td><span class="ob-badge">{{ f.status }}</span></td><td>{{ f.last_repayment ? fmt(f.last_repayment) : '-' }}</td>
-                <td><button v-if="f.status === 'pending'" class="ob-btn-s" @click="activateFin(f)">Activate</button></td>
+                <td><button v-if="f.status === 'pending'" class="ob-btn-s ob-c-green" @click="activateFin(f)">Activate</button></td>
               </tr>
               <tr v-if="!fins.length"><td colspan="9" class="ob-mut">No financing yet</td></tr>
             </tbody>
@@ -163,7 +164,7 @@
                   <div class="ob-row">
                     <input v-model="pay[p.id]" type="number" min="0" class="ob-inp ob-sm" placeholder="Amount" />
                     <input v-model="payRef[p.id]" class="ob-inp ob-sm" placeholder="Reference" />
-                    <button class="ob-btn-s" :disabled="busy || !p.owed" @click="payPartner(p)">Record</button>
+                    <button class="ob-btn-s ob-c-green" :disabled="busy || !p.owed" @click="payPartner(p)">Record</button>
                   </div>
                 </td>
               </tr>
@@ -332,7 +333,18 @@ onMounted(() => { loadApps(); loadPlans() })
 .ob-inp { background: #0a0a0f; border: 1px solid #1e1e2a; color: #fff; padding: 8px 10px; border-radius: 10px; font-size: 0.85rem; flex: 1; min-width: 150px; }
 .ob-sm { min-width: 90px; max-width: 140px; }
 .ob-btn { background: #FF7A30; color: #fff; border: 0; padding: 8px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
-.ob-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; text-decoration: none; display: inline-block; }
+.ob-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; transition: filter 0.15s, transform 0.15s; }
+.ob-btn-s:hover:not(:disabled) { filter: brightness(1.3); transform: translateY(-1px); }
+.ob-btn-s:disabled { opacity: 0.5; cursor: default; }
+.ob-c-blue { background: rgba(59, 130, 246, 0.14); color: #60a5fa; border-color: rgba(59, 130, 246, 0.45); }
+.ob-c-purple { background: rgba(139, 92, 246, 0.14); color: #a78bfa; border-color: rgba(139, 92, 246, 0.45); }
+.ob-c-teal { background: rgba(20, 184, 166, 0.14); color: #2dd4bf; border-color: rgba(20, 184, 166, 0.45); }
+.ob-c-green { background: rgba(16, 185, 129, 0.14); color: #34d399; border-color: rgba(16, 185, 129, 0.45); }
+.ob-c-amber { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.45); }
+.ob-c-red { background: rgba(239, 68, 68, 0.14); color: #f87171; border-color: rgba(239, 68, 68, 0.45); }
+.ob-c-slate { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.35); }
+.ob-back { display: inline-block; margin-bottom: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255, 122, 48, 0.5); background: rgba(255, 122, 48, 0.12); color: #FF7A30; font-size: 0.82rem; font-weight: 600; text-decoration: none; }
+.ob-back:hover { filter: brightness(1.25); }
 .ob-red { color: #f87171; }
 .ob-btn:disabled, .ob-btn-s:disabled { opacity: 0.5; cursor: default; }
 </style>

@@ -1,8 +1,9 @@
 <template>
   <div class="space-y-6">
     <div>
+      <router-link :to="{ name: 'resellers' }" class="rr-back">← Back to Resellers</router-link>
       <h2 class="rr-title">Reseller Routers &amp; Sales</h2>
-      <router-link :to="{ name: 'reseller-onboarding' }" class="rr-sub" style="color:#FF7A30">Applications, equipment plans &amp; financing →</router-link>
+      <router-link :to="{ name: 'reseller-onboarding' }" class="rr-btn-s rr-c-blue" style="margin: 6px 0">Applications, equipment plans &amp; financing →</router-link>
       <p class="rr-sub">Create resellers, assign routers, and see sales per router. HQ keeps the percent set on each assignment; the reseller gets the rest.</p>
     </div>
 
@@ -36,8 +37,8 @@
               <td>{{ rt.assignment ? rt.assignment.display_name : '-' }}</td>
               <td>{{ rt.assignment ? Number(rt.assignment.commission_percent) + '%' : '100%' }}</td>
               <td class="rr-act">
-                <button class="rr-btn-s" @click="startAssign(rt)">{{ rt.assignment ? 'Transfer / edit' : 'Assign' }}</button>
-                <button v-if="rt.assignment" class="rr-btn-s rr-btn-d" @click="unassign(rt)">Unassign</button>
+                <button class="rr-btn-s rr-c-blue" @click="startAssign(rt)">{{ rt.assignment ? 'Transfer / edit' : 'Assign' }}</button>
+                <button v-if="rt.assignment" class="rr-btn-s rr-c-red" @click="unassign(rt)">Unassign</button>
               </td>
             </tr>
             <tr v-if="!routers.length"><td colspan="6" class="rr-mut">No routers found</td></tr>
@@ -56,7 +57,7 @@
             <label class="rr-chk"><input type="checkbox" v-model="assigning.rename_router" /> Rename router everywhere</label>
             <div class="rr-act">
               <button class="rr-btn" :disabled="busy" @click="saveAssign">Save</button>
-              <button class="rr-btn-s" @click="assigning = null">Cancel</button>
+              <button class="rr-btn-s rr-c-slate" @click="assigning = null">Cancel</button>
             </div>
           </div>
         </div>
@@ -69,7 +70,7 @@
         <div class="rr-act">
           <input type="date" v-model="filters.from" class="rr-inp rr-sm" />
           <input type="date" v-model="filters.to" class="rr-inp rr-sm" />
-          <button class="rr-btn-s" @click="load">Apply</button>
+          <button class="rr-btn-s rr-c-green" @click="load">Apply</button>
         </div>
       </div>
       <div class="section-body rr-scroll">
@@ -228,7 +229,18 @@ onMounted(load)
 .rr-sm { width: 150px; }
 .rr-btn { background: #FF7A30; color: #fff; border: 0; padding: 9px 16px; border-radius: 10px; font-weight: 600; cursor: pointer; }
 .rr-btn:disabled { opacity: 0.5; cursor: default; }
-.rr-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; }
+.rr-btn-s { background: #1a1a24; color: #e5e7eb; border: 1px solid #2a2a38; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; transition: filter 0.15s, transform 0.15s; }
+.rr-btn-s:hover:not(:disabled) { filter: brightness(1.3); transform: translateY(-1px); }
+.rr-btn-s:disabled { opacity: 0.5; cursor: default; }
+.rr-c-blue { background: rgba(59, 130, 246, 0.14); color: #60a5fa; border-color: rgba(59, 130, 246, 0.45); }
+.rr-c-purple { background: rgba(139, 92, 246, 0.14); color: #a78bfa; border-color: rgba(139, 92, 246, 0.45); }
+.rr-c-teal { background: rgba(20, 184, 166, 0.14); color: #2dd4bf; border-color: rgba(20, 184, 166, 0.45); }
+.rr-c-green { background: rgba(16, 185, 129, 0.14); color: #34d399; border-color: rgba(16, 185, 129, 0.45); }
+.rr-c-amber { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.45); }
+.rr-c-red { background: rgba(239, 68, 68, 0.14); color: #f87171; border-color: rgba(239, 68, 68, 0.45); }
+.rr-c-slate { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.35); }
+.rr-back { display: inline-block; margin-bottom: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255, 122, 48, 0.5); background: rgba(255, 122, 48, 0.12); color: #FF7A30; font-size: 0.82rem; font-weight: 600; text-decoration: none; }
+.rr-back:hover { filter: brightness(1.25); }
 .rr-btn-d { color: #f87171; }
 .rr-act { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .rr-chk { color: #9ca3af; font-size: 0.8rem; display: flex; gap: 6px; align-items: center; }
