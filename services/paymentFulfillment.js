@@ -2,6 +2,7 @@ const db = require('../config/database');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { extendUserPackage } = require('../utils/packageEntitlement');
+const { recordRouterSplit } = require('./routerSplit');
 
 function generateVoucherCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -160,6 +161,19 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
        VALUES (?, 'success', ?, ?, ?, ?, NOW())`,
       [userId, title, details, isGift ? '/hotspot/subscribe' : '/hotspot/dashboard', isGift ? 'Tazama vocha' : 'Fungua dashboard']
     );
+  }
+
+  // Router/reseller revenue split. Never blocks the customer's payment.
+  try {
+    const split = await recordRouterSplit(executor, conn, {
+      orderReference, purpose, routerId: extra.router_id, amount: tx.amount, currency: orderCurrency, customerId: userId
+    });
+    if (split && split.recorded) {
+      logger.info('Router split recorded', { orderReference, router: extra.router_id, hq: split.hq, reseller: split.reseller });
+    }
+  } catch (e) {
+    if (e && e.code === 'ER_LOCK_DEADLOCK') throw e;
+    logger.error('Router split failed (payment still fulfilled)', { orderReference, error: e.message });
   }
 
   // Record in payments ledger

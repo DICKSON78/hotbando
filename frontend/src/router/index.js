@@ -60,6 +60,7 @@ const routes = [
       { path: 'routers', name: 'routers', component: () => import('../views/admin/Routers.vue') },
       { path: 'locations', name: 'locations', component: () => import('../views/admin/Locations.vue') },
       { path: 'resellers', name: 'resellers', component: () => import('../views/admin/Resellers.vue') },
+      { path: 'reseller-routers', name: 'reseller-routers', component: () => import('../views/admin/ResellerRouters.vue') },
       { path: 'withdrawals', name: 'withdrawals', component: () => import('../views/admin/Withdrawals.vue') },
       { path: 'campaigns', name: 'campaigns', component: () => import('../views/admin/Campaigns.vue') },
       { path: 'revenue', name: 'revenue', component: () => import('../views/admin/Revenue.vue') },
