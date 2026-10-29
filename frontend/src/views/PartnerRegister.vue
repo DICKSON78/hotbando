@@ -177,6 +177,10 @@ const handleNext = () => {
       error.value = 'Please select registration type'
       return
     }
+    if (form.value.type === 'reseller') {
+      router.push('/apply/reseller')
+      return
+    }
     step.value = 2
     return
   }

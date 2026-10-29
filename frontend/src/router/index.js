@@ -20,6 +20,8 @@ const routes = [
   { path: '/bank/login', redirect: '/login' },
   { path: '/franchise/login', redirect: '/login' },
   { path: '/reseller/login', redirect: '/login' },
+  { path: '/apply/reseller', name: 'reseller-apply', component: () => import('../views/ResellerApply.vue') },
+  { path: '/apply/status', name: 'reseller-apply-status', component: () => import('../views/ResellerApplyStatus.vue') },
   { path: '/investor/login', redirect: '/login' },
   { path: '/partner/login', redirect: '/login' },
   { path: '/partners/login', redirect: '/login' },
@@ -61,6 +63,7 @@ const routes = [
       { path: 'locations', name: 'locations', component: () => import('../views/admin/Locations.vue') },
       { path: 'resellers', name: 'resellers', component: () => import('../views/admin/Resellers.vue') },
       { path: 'reseller-routers', name: 'reseller-routers', component: () => import('../views/admin/ResellerRouters.vue') },
+      { path: 'reseller-onboarding', name: 'reseller-onboarding', component: () => import('../views/admin/ResellerOnboarding.vue') },
       { path: 'withdrawals', name: 'withdrawals', component: () => import('../views/admin/Withdrawals.vue') },
       { path: 'campaigns', name: 'campaigns', component: () => import('../views/admin/Campaigns.vue') },
       { path: 'revenue', name: 'revenue', component: () => import('../views/admin/Revenue.vue') },
@@ -100,7 +103,8 @@ const routes = [
       { path: 'vouchers', name: 'reseller-vouchers', component: () => import('../views/reseller/Vouchers.vue') },
       { path: 'withdraw', name: 'reseller-withdraw', component: () => import('../views/reseller/Withdraw.vue') },
       { path: 'topup', name: 'reseller-topup', component: () => import('../views/reseller/TopUp.vue') },
-      { path: 'settings', name: 'reseller-settings', component: () => import('../views/reseller/Settings.vue') }
+      { path: 'settings', name: 'reseller-settings', component: () => import('../views/reseller/Settings.vue') },
+      { path: 'application', name: 'reseller-application', component: () => import('../views/reseller/Application.vue') }
     ]
   },
   {

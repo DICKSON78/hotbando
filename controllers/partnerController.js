@@ -33,6 +33,9 @@ class PartnerController {
       if (type === 'franchiser' || type === 'franchise') role = 'franchise_owner';
       else if (type === 'partner' || type === 'bank') role = 'bank_partner';
       else if (type === 'sponsor') role = 'sponsor';
+      if (role === 'reseller') {
+        return res.status(400).json({ success: false, message: 'Reseller applications are submitted at /apply/reseller and reviewed by HQ before an account is created.' });
+      }
 
       const [result] = await db.execute(
         `INSERT INTO users (name, email, phone_number, password, role, is_active, is_verified, created_at)

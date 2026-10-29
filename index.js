@@ -224,6 +224,8 @@ app.use('/api/reseller', resellerRoutes);
 app.use('/api/clickpesa', clickpesaRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/partners', partnerRoutes);
+app.use('/api/reseller-applications', require('./routes/resellerApplications'));
+app.use('/api/reseller-portal', require('./routes/resellerPortal'));
 app.use('/api/payments', paymentRoutes);
 
 // Public packages listing (used by reseller portal)

@@ -2,6 +2,7 @@
   <div class="space-y-6">
     <div>
       <h2 class="rr-title">Reseller Routers &amp; Sales</h2>
+      <router-link :to="{ name: 'reseller-onboarding' }" class="rr-sub" style="color:#FF7A30">Applications, equipment plans &amp; financing →</router-link>
       <p class="rr-sub">Create resellers, assign routers, and see sales per router. HQ keeps the percent set on each assignment; the reseller gets the rest.</p>
     </div>
 
