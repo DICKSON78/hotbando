@@ -1,76 +1,189 @@
 <template>
-  <div class="ra-wrap">
-    <div class="ra-card">
-      <p class="ra-p">Unaelekezwa kwenye usajili wa hatua kwa hatua...</p>
-      <router-link to="/register" class="ra-btn">Endelea kwenye /register</router-link>
+  <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style="background: #0a0a0f">
+    <div class="absolute inset-0 pointer-events-none">
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" class="opacity-[0.07]">
+        <defs>
+          <pattern id="honeycomb-pr" x="0" y="0" width="56" height="97" patternUnits="userSpaceOnUse">
+            <path d="M28 0L56 16.2V48.5L28 64.7L0 48.5V16.2Z" fill="none" stroke="white" stroke-width="1.5"/>
+            <path d="M28 32.4L56 48.6V80.9L28 97L0 80.9V48.6Z" fill="none" stroke="white" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#honeycomb-pr)"/>
+      </svg>
+      <svg width="100%" height="100%" viewBox="0 0 400 400" class="absolute inset-0" preserveAspectRatio="none">
+        <path d="M0 300 Q 50 280 100 320 T 200 300 T 300 340 T 400 310 L 400 400 L 0 400Z" fill="rgba(255,122,48,0.04)"/>
+        <circle cx="50" cy="50" r="8" fill="rgba(255,122,48,0.06)"/>
+        <circle cx="350" cy="80" r="12" fill="rgba(255,122,48,0.05)"/>
+        <circle cx="180" cy="120" r="6" fill="rgba(255,122,48,0.07)"/>
+        <circle cx="80" cy="240" r="10" fill="rgba(255,122,48,0.05)"/>
+      </svg>
     </div>
-  </div>
-</template>
 
-      <form v-else @submit.prevent="onNext">
-        <input v-model="form.website" tabindex="-1" autocomplete="off" aria-hidden="true" class="ra-hp" />
-        <p class="ra-steps">Hatua {{ step }} ya 3: {{ ['Wewe', 'Eneo na biashara', 'Vifaa'][step - 1] }}</p>
+    <div class="rounded-2xl shadow-2xl p-8 w-full max-w-md relative" style="background: #111118; border: 1px solid #1e1e2a">
+      <div class="text-center mb-6">
+        <img src="/logo.png" class="h-16 mx-auto mb-4" alt="HotBando">
+        <h1 class="text-xl font-bold text-white mb-2">Omba kuwa Reseller</h1>
+        <p class="text-white/50 text-sm">HQ atakagua ombi lako, kisha utapangiwa siku ya kufungiwa vifaa</p>
+      </div>
 
-        <div v-if="step === 1" class="ra-grid">
-          <label class="ra-l">Jina kamili *<input v-model="form.name" class="ra-i" autocomplete="name" /></label>
-          <label class="ra-l">Jina la biashara<input v-model="form.business_name" class="ra-i" /></label>
-          <label class="ra-l">Namba ya simu *<input v-model="form.phone" class="ra-i" type="tel" placeholder="0712345678" autocomplete="tel" /></label>
-          <label class="ra-l">Barua pepe *<input v-model="form.email" class="ra-i" type="email" autocomplete="email" /></label>
-          <label class="ra-l">Nenosiri (herufi 8+) *
-            <input v-model="form.password" class="ra-i" :type="show ? 'text' : 'password'" autocomplete="new-password" />
-          </label>
-          <label class="ra-l">Rudia nenosiri *<input v-model="form.confirm" class="ra-i" :type="show ? 'text' : 'password'" autocomplete="new-password" /></label>
-          <label class="ra-chk"><input type="checkbox" v-model="show" /> Onyesha nenosiri</label>
+      <!-- Step Indicator -->
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center flex-1">
+          <div :class="step >= 1 ? 'bg-[#FF7A30] text-white' : 'bg-[#1e1e2a] text-white/40'" class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors">
+            1
+          </div>
+          <div :class="step >= 2 ? 'bg-[#FF7A30]' : 'bg-[#1e1e2a]'" class="flex-1 h-0.5 mx-2 transition-colors"></div>
+        </div>
+        <div class="flex items-center flex-1">
+          <div :class="step >= 2 ? 'bg-[#FF7A30] text-white' : 'bg-[#1e1e2a] text-white/40'" class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors">
+            2
+          </div>
+          <div :class="step >= 3 ? 'bg-[#FF7A30]' : 'bg-[#1e1e2a]'" class="flex-1 h-0.5 mx-2 transition-colors"></div>
+        </div>
+        <div :class="step >= 3 ? 'bg-[#FF7A30] text-white' : 'bg-[#1e1e2a] text-white/40'" class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors">
+          3
+        </div>
+      </div>
+      <div class="flex justify-between text-xs text-white/50 mb-6 -mt-4">
+        <span class="w-8 text-center">Wewe</span>
+        <span class="w-8 text-center">Eneo</span>
+        <span class="w-8 text-center">Usalama</span>
+      </div>
+
+      <form @submit.prevent="onNext" class="space-y-4">
+        <input v-model="form.website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />
+
+        <div v-if="done" class="space-y-4 text-center">
+          <p class="text-green-400 text-sm bg-green-500/10 p-3 rounded-lg">Ombi limepokelewa. HQ atakagua na kuwasiliana nawe.</p>
+          <p class="text-sm text-white/60">Namba ya ombi lako:</p>
+          <div class="text-2xl font-bold tracking-widest text-[#FF7A30] bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl py-3">{{ done.reference }}</div>
+          <p class="text-xs text-white/40">Ihifadhi. Utaihitaji pamoja na namba yako ya simu kuangalia hali ya ombi.</p>
+          <router-link to="/apply/status" class="block w-full bg-[#FF7A30] hover:bg-[#ea6a24] text-white font-semibold py-2.5 rounded-xl transition-all shadow-lg shadow-[#FF7A30]/20">Angalia hali ya ombi</router-link>
         </div>
 
-        <div v-if="step === 2" class="ra-grid">
-          <label class="ra-l">Mkoa *
-            <select v-model="form.region" class="ra-i">
-              <option value="">Chagua mkoa</option>
-              <option v-for="r in regions" :key="r" :value="r">{{ r }}</option>
-            </select>
-          </label>
-          <label class="ra-l">Wilaya *<input v-model="form.district" class="ra-i" /></label>
-          <label class="ra-l">Kata<input v-model="form.ward" class="ra-i" /></label>
-          <label class="ra-l">Mtaa / anwani<input v-model="form.address" class="ra-i" /></label>
-          <label class="ra-l">Alama ya karibu (kituo, shule, soko)<input v-model="form.landmark" class="ra-i" /></label>
-          <label class="ra-l">Aina ya biashara
-            <select v-model="form.business_type" class="ra-i">
-              <option value="">Chagua</option>
-              <option v-for="t in businessTypes" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </label>
-          <label class="ra-l">Wateja unaotarajia kwa siku<input v-model="form.expected_customers" class="ra-i" type="number" min="0" /></label>
-        </div>
-
-        <div v-if="step === 3">
-          <p class="ra-p">Chagua jinsi ungependa kupata vifaa. Unaweza pia kuchagua baadaye na HQ.</p>
-          <label class="ra-plan" :class="{ sel: form.plan_id === null }">
-            <input type="radio" :value="null" v-model="form.plan_id" /> <b>Sijaamua bado</b>
-          </label>
-          <label v-for="p in plans" :key="p.id" class="ra-plan" :class="{ sel: form.plan_id === p.id }">
-            <input type="radio" :value="p.id" v-model="form.plan_id" />
-            <b> {{ p.name }}</b> <span class="ra-tag">{{ typeLabel(p.plan_type) }}</span>
-            <div v-if="p.equipment_list" class="ra-m">{{ p.equipment_list }}</div>
-            <div v-if="p.partner_name" class="ra-m">Partner: {{ p.partner_name }}</div>
-            <div v-if="p.plan_type !== 'hq_supplied'" class="ra-m">Bei: TSh {{ p.total_price.toLocaleString() }}<span v-if="p.deposit > 0"> (awali TSh {{ p.deposit.toLocaleString() }})</span></div>
-            <div v-if="p.plan_type === 'financed'" class="ra-m">
-              Marejesho: {{ p.repayment_percent }}% ya sehemu yako ya kila vocha inayouzwa hadi deni la TSh {{ p.financed_amount.toLocaleString() }} liishe.
-              Baada ya hapo vifaa ni vyako na unalipa {{ p.maintenance_percent }}% tu ya matengenezo ya mfumo.
+        <template v-else>
+          <!-- Hatua 1: Wewe -->
+          <div v-if="step === 1" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Jina kamili <span class="text-red-400">*</span></label>
+              <input v-model="form.name" type="text" autocomplete="name" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
             </div>
-            <div v-if="p.plan_type === 'outright'" class="ra-m">Unalipa partner mwenyewe. Kisha unalipa {{ p.maintenance_percent }}% ya matengenezo ya mfumo.</div>
-            <div v-if="p.plan_type === 'hq_supplied'" class="ra-m">HotBando anaweka vifaa na anapata asilimia ya kila vocha itakayokubaliwa na HQ.</div>
-          </label>
-          <label class="ra-l">Maelezo ya ziada<textarea v-model="form.notes" class="ra-i" rows="3"></textarea></label>
-        </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Jina la biashara</label>
+              <input v-model="form.business_name" type="text" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Namba ya simu <span class="text-red-400">*</span></label>
+              <input v-model="form.phone" type="tel" placeholder="0712345678" autocomplete="tel" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Barua pepe <span class="text-red-400">*</span></label>
+              <input v-model="form.email" type="email" autocomplete="email" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+          </div>
 
-        <p v-if="error" class="ra-err">{{ error }}</p>
-        <div class="ra-row">
-          <button v-if="step > 1" type="button" class="ra-btn2" @click="step--">Rudi</button>
-          <button type="submit" class="ra-btn" :disabled="loading">{{ step < 3 ? 'Endelea' : (loading ? 'Inatuma...' : 'Tuma ombi') }}</button>
-        </div>
+          <!-- Hatua 2: Eneo na vifaa -->
+          <div v-if="step === 2" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Mkoa <span class="text-red-400">*</span></label>
+              <select v-model="form.region" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors">
+                <option value="">Chagua mkoa</option>
+                <option v-for="r in regions" :key="r" :value="r">{{ r }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Wilaya <span class="text-red-400">*</span></label>
+              <input v-model="form.district" type="text" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Kata</label>
+              <input v-model="form.ward" type="text" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Mtaa / anwani</label>
+              <input v-model="form.address" type="text" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Alama ya karibu (kituo, shule, soko)</label>
+              <input v-model="form.landmark" type="text" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Aina ya biashara</label>
+              <select v-model="form.business_type" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors">
+                <option value="">Chagua</option>
+                <option v-for="t in businessTypes" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Wateja unaotarajia kwa siku</label>
+              <input v-model="form.expected_customers" type="number" min="0" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Jinsi ya kupata vifaa</label>
+              <div class="space-y-2">
+                <label class="block border rounded-xl p-3 cursor-pointer" :class="form.plan_id === null ? 'border-[#FF7A30] bg-[#FF7A30]/5' : 'border-[#1e1e2a] bg-[#0a0a0f]'">
+                  <input type="radio" :value="null" v-model="form.plan_id" class="mr-2" />
+                  <span class="text-sm font-semibold text-white">Sijaamua bado</span>
+                </label>
+                <label v-for="p in plans" :key="p.id" class="block border rounded-xl p-3 cursor-pointer" :class="form.plan_id === p.id ? 'border-[#FF7A30] bg-[#FF7A30]/5' : 'border-[#1e1e2a] bg-[#0a0a0f]'">
+                  <input type="radio" :value="p.id" v-model="form.plan_id" class="mr-2" />
+                  <span class="text-sm font-semibold text-white">{{ p.name }}</span>
+                  <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-[#1e1e2a] text-[#FF7A30]">{{ typeLabel(p.plan_type) }}</span>
+                  <p v-if="p.equipment_list" class="text-xs text-white/50 mt-1">{{ p.equipment_list }}</p>
+                  <p v-if="p.partner_name" class="text-xs text-white/50 mt-1">Partner: {{ p.partner_name }}</p>
+                  <p v-if="p.plan_type !== 'hq_supplied'" class="text-xs text-white/50 mt-1">Bei: TSh {{ p.total_price.toLocaleString() }}<span v-if="p.deposit > 0"> (awali TSh {{ p.deposit.toLocaleString() }})</span></p>
+                  <p v-if="p.plan_type === 'financed'" class="text-xs text-white/50 mt-1">Marejesho: {{ p.repayment_percent }}% ya sehemu yako ya kila vocha hadi deni la TSh {{ p.financed_amount.toLocaleString() }} liishe. Kisha vifaa ni vyako na unalipa {{ p.maintenance_percent }}% tu ya matengenezo ya mfumo.</p>
+                  <p v-if="p.plan_type === 'outright'" class="text-xs text-white/50 mt-1">Unalipa partner mwenyewe. Kisha unalipa {{ p.maintenance_percent }}% ya matengenezo ya mfumo.</p>
+                  <p v-if="p.plan_type === 'hq_supplied'" class="text-xs text-white/50 mt-1">HotBando anaweka vifaa na anapata asilimia ya kila vocha, kama HQ atakavyokubaliana nawe.</p>
+                </label>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Maelezo ya ziada</label>
+              <textarea v-model="form.notes" rows="3" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 text-white focus:border-[#FF7A30] focus:outline-none transition-colors"></textarea>
+            </div>
+          </div>
+
+          <!-- Hatua 3: Usalama -->
+          <div v-if="step === 3" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Nenosiri <span class="text-red-400">*</span></label>
+              <div class="relative">
+                <input v-model="form.password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 pr-10 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+                <button type="button" @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70">
+                  <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                </button>
+              </div>
+              <p class="text-xs text-white/40 mt-1">Herufi 8 au zaidi</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/70 mb-1.5">Rudia nenosiri <span class="text-red-400">*</span></label>
+              <div class="relative">
+                <input v-model="form.confirm" :type="showConfirmPassword ? 'text' : 'password'" autocomplete="new-password" class="w-full bg-[#0a0a0f] border border-[#1e1e2a] rounded-xl px-4 py-3 pr-10 text-white focus:border-[#FF7A30] focus:outline-none transition-colors" />
+                <button type="button" @click="showConfirmPassword = !showConfirmPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70">
+                  <i :class="showConfirmPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <p v-if="error" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
+
+          <div class="flex gap-3">
+            <button v-if="step > 1" type="button" @click="step--" class="flex-1 bg-[#1e1e2a] hover:bg-[#2a2a3a] text-white font-semibold py-2.5 rounded-xl transition-all">Rudi</button>
+            <button type="submit" :disabled="loading" class="flex-1 bg-[#FF7A30] hover:bg-[#ea6a24] text-white font-semibold py-2.5 rounded-xl transition-all shadow-lg shadow-[#FF7A30]/20 disabled:opacity-50">
+              <i v-if="loading" class="fas fa-spinner fa-spin"></i>
+              <span v-if="step < 3">Endelea</span>
+              <span v-else>{{ loading ? 'Inatuma...' : 'Tuma ombi' }}</span>
+            </button>
+          </div>
+          <p class="text-center text-xs text-white/50">Una ombi tayari? <router-link to="/apply/status" class="text-[#FF7A30] hover:underline">Angalia hali</router-link></p>
+        </template>
       </form>
-      <p class="ra-p ra-c">Una ombi tayari? <router-link to="/apply/status" class="ra-a">Angalia hali</router-link> &middot; <router-link to="/login" class="ra-a">Ingia</router-link></p>
+
+      <p class="text-center text-sm text-white/50 mt-6">
+        Already have an account? <router-link to="/login" class="text-[#FF7A30] hover:underline">Sign in</router-link>
+      </p>
     </div>
   </div>
 </template>
@@ -85,11 +198,12 @@ const businessTypes = ['Duka', 'Saluni / Kinyozi', 'Mgahawa / Baa', 'Ofisi', 'Ki
 const typeLabel = (t) => ({ hq_supplied: 'HotBando anaweka vifaa', outright: 'Unanunua mwenyewe', financed: 'Mkopo wa vifaa' }[t] || t)
 
 const step = ref(1)
-const show = ref(false)
 const loading = ref(false)
 const error = ref('')
 const done = ref(null)
 const plans = ref([])
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const form = ref({
   name: '', business_name: '', phone: '', email: '', password: '', confirm: '', website: '',
   region: '', district: '', ward: '', address: '', landmark: '', business_type: '', expected_customers: '',
@@ -97,24 +211,27 @@ const form = ref({
 })
 
 onMounted(async () => {
-  try { const r = await api.get('/reseller-applications/plans'); plans.value = (r.data && r.data.plans) || [] } catch (e) { /* plans are optional */ }
+  try {
+    const r = await api.get('/reseller-applications/plans')
+    plans.value = (r.data && r.data.plans) || []
+  } catch (e) { /* mipango ni hiari */ }
 })
 
 function onNext() {
   error.value = ''
   const f = form.value
   if (step.value === 1) {
-    if (f.name.trim().length < 2) return (error.value = 'Andika jina lako kamili')
-    if (!/^(\+?255|0)[67]\d{8}$/.test(f.phone.replace(/\s/g, ''))) return (error.value = 'Namba ya simu si sahihi (mfano 0712345678)')
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return (error.value = 'Barua pepe si sahihi')
-    if (f.password.length < 8) return (error.value = 'Nenosiri liwe na herufi 8 au zaidi')
-    if (f.password !== f.confirm) return (error.value = 'Nenosiri hazifanani')
+    if (f.name.trim().length < 2) { error.value = 'Andika jina lako kamili'; return }
+    if (!/^(\+?255|0)[67]\d{8}$/.test(f.phone.replace(/\s/g, ''))) { error.value = 'Namba ya simu si sahihi (mfano 0712345678)'; return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) { error.value = 'Barua pepe si sahihi'; return }
     step.value = 2
   } else if (step.value === 2) {
-    if (!f.region) return (error.value = 'Chagua mkoa')
-    if (!f.district.trim()) return (error.value = 'Andika wilaya')
+    if (!f.region) { error.value = 'Chagua mkoa'; return }
+    if (!f.district.trim()) { error.value = 'Andika wilaya'; return }
     step.value = 3
   } else {
+    if (f.password.length < 8) { error.value = 'Nenosiri liwe na herufi 8 au zaidi'; return }
+    if (f.password !== f.confirm) { error.value = 'Nenosiri hazifanani'; return }
     submit()
   }
 }
@@ -137,31 +254,3 @@ async function submit() {
   }
 }
 </script>
-
-<style scoped>
-.ra-wrap { min-height: 100vh; background: #0a0a0f; display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; }
-.ra-card { width: 100%; max-width: 640px; background: #111118; border: 1px solid #1e1e2a; border-radius: 18px; padding: 24px; color: #e5e7eb; position: relative; }
-.ra-h1 { font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
-.ra-h2 { font-size: 1.15rem; font-weight: 700; color: #34d399; margin-bottom: 8px; }
-.ra-p { color: #9ca3af; font-size: 0.88rem; margin: 6px 0 12px; }
-.ra-c { text-align: center; margin-top: 16px; }
-.ra-a { color: #FF7A30; }
-.ra-steps { color: #FF7A30; font-size: 0.8rem; font-weight: 600; margin-bottom: 12px; }
-.ra-grid { display: grid; gap: 12px; }
-.ra-l { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: #9ca3af; }
-.ra-i { background: #0a0a0f; border: 1px solid #1e1e2a; color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; width: 100%; }
-.ra-i:focus { outline: none; border-color: #FF7A30; }
-.ra-chk { font-size: 0.8rem; color: #9ca3af; display: flex; gap: 6px; align-items: center; }
-.ra-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
-.ra-plan { display: block; border: 1px solid #1e1e2a; border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; background: #0a0a0f; }
-.ra-plan.sel { border-color: #FF7A30; background: rgba(255, 122, 48, 0.06); }
-.ra-tag { font-size: 0.7rem; background: #1a1a24; color: #FF7A30; border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
-.ra-m { font-size: 0.8rem; color: #9ca3af; margin-top: 4px; }
-.ra-err { color: #f87171; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 10px; font-size: 0.85rem; margin: 10px 0; }
-.ra-row { display: flex; gap: 10px; margin-top: 14px; }
-.ra-btn { flex: 1; text-align: center; background: #FF7A30; color: #fff; border: 0; border-radius: 12px; padding: 11px 16px; font-weight: 600; cursor: pointer; display: inline-block; }
-.ra-btn:disabled { opacity: 0.6; cursor: default; }
-.ra-btn2 { background: #1e1e2a; color: #fff; border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer; }
-.ra-ok { text-align: center; }
-.ra-ref { font-size: 1.6rem; font-weight: 800; letter-spacing: 2px; color: #FF7A30; background: #0a0a0f; border-radius: 12px; padding: 12px; margin: 8px 0; }
-</style>
