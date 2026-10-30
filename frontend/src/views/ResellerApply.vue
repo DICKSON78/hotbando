@@ -1,16 +1,11 @@
 <template>
   <div class="ra-wrap">
     <div class="ra-card">
-      <h1 class="ra-h1">Omba kuwa Reseller wa HotBando</h1>
-      <p class="ra-p">Jaza fomu hii. HQ atakagua ombi lako, kisha utapangiwa siku ya kufungiwa vifaa.</p>
-
-      <div v-if="done" class="ra-ok">
-        <h2 class="ra-h2">Ombi limepokelewa</h2>
-        <p class="ra-p">Namba ya ombi lako:</p>
-        <div class="ra-ref">{{ done.reference }}</div>
-        <p class="ra-p">Ihifadhi. Utaihitaji pamoja na namba yako ya simu kuangalia hali ya ombi.</p>
-        <router-link to="/apply/status" class="ra-btn">Angalia hali ya ombi</router-link>
-      </div>
+      <p class="ra-p">Unaelekezwa kwenye usajili wa hatua kwa hatua...</p>
+      <router-link to="/register" class="ra-btn">Endelea kwenye /register</router-link>
+    </div>
+  </div>
+</template>
 
       <form v-else @submit.prevent="onNext">
         <input v-model="form.website" tabindex="-1" autocomplete="off" aria-hidden="true" class="ra-hp" />
