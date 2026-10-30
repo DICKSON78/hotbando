@@ -178,12 +178,6 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
 app.use(express.static(frontendDist, { index: false }));
 
-// Return 404 for missing static assets instead of falling through to SPA catch-all
-app.use('/assets', (req, res) => {
-    res.set('Content-Type', 'application/json');
-    res.status(404).json({ error: 'Asset not found' });
-});
-
 function serveSPA(req, res) {
     const indexFile = path.join(frontendDist, 'index.html');
     if (fs.existsSync(indexFile)) {
@@ -416,10 +410,8 @@ app.get('/', (req, res, next) => {
 
 // Admin login handled by Vue SPA at /login
 
-// Server-side redirects for legacy paths
-app.get('/apply/reseller', (req, res) => {
-    res.redirect(301, '/register');
-});
+// Serve SPA for reseller apply path (use unified /register flow)
+app.get(['/apply/reseller', '/apply/reseller/*'], serveSPA);
 
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
