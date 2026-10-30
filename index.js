@@ -416,6 +416,11 @@ app.get('/', (req, res, next) => {
 
 // Admin login handled by Vue SPA at /login
 
+// Server-side redirects for legacy paths
+app.get('/apply/reseller', (req, res) => {
+    res.redirect(301, '/register');
+});
+
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
