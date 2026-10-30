@@ -94,6 +94,6 @@ onUnmounted(() => {
 
 async function logout() {
   await store.logout()
-  router.replace('/hotspot')
+  router.replace('/hotspot/login')
 }
 </script>

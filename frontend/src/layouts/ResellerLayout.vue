@@ -57,7 +57,7 @@ async function fetchNotifications() {
 }
 
 function logout() {
-  auth.logout().then(() => window.location.href = '/')
+  auth.logout().then(() => window.location.href = '/login')
 }
 
 let deferredPrompt = null

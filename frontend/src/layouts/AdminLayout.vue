@@ -90,7 +90,7 @@ const pageTitle = computed(() => {
 })
 
 function logout() {
-  auth.logout().then(() => window.location.href = '/')
+  auth.logout().then(() => window.location.href = '/login')
 }
 
 onMounted(async () => {
