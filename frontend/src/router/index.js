@@ -20,7 +20,7 @@ const routes = [
   { path: '/bank/login', redirect: '/login' },
   { path: '/franchise/login', redirect: '/login' },
   { path: '/reseller/login', redirect: '/login' },
-  { path: '/apply/reseller', name: 'reseller-apply', component: () => import('../views/ResellerApply.vue') },
+  { path: '/apply/reseller', redirect: '/register' },
   { path: '/apply/status', name: 'reseller-apply-status', component: () => import('../views/ResellerApplyStatus.vue') },
   { path: '/investor/login', redirect: '/login' },
   { path: '/partner/login', redirect: '/login' },
