@@ -32,12 +32,39 @@ router.get('/collectors', async (req, res) => {
 router.get('/routers', async (req, res) => {
     try {
         const [registered] = await db.execute(
-            `SELECT id, router_id, router_name, host, port, status, setup_status, ssid,
+            `SELECT id, router_id, router_name, host, port, status, setup_status, ssid, model,
                     latitude, longitude, last_seen, created_at
              FROM mikrotiks ORDER BY created_at DESC`
         );
 
-        res.json({ success: true, routers: registered });
+        // Augment with routers detected by collectors but not yet registered.
+        const detected = [];
+        if (collectorTunnel) {
+            for (const c of collectorTunnel.getCollectors()) {
+                const hb = collectorTunnel.getHeartbeatData(c.key);
+                if (!hb || !Array.isArray(hb.routers)) continue;
+                for (const r of hb.routers) {
+                    if (!r.connected) continue;
+                    const rid = r.identity ? `router-${r.identity.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}` : null;
+                    const alreadyRegistered = registered.some((x) => x.router_id === rid || x.host === r.host);
+                    if (alreadyRegistered) continue;
+                    detected.push({
+                        router_id: rid || `detected-${r.host}`,
+                        router_name: r.identity || `Router @ ${r.host}`,
+                        host: r.host,
+                        port: r.port || 8728,
+                        status: 'detected',
+                        setup_status: 'pending',
+                        model: r.model,
+                        firmware: r.firmware,
+                        last_seen: r.lastSeen,
+                        detected_by: c.key
+                    });
+                }
+            }
+        }
+
+        res.json({ success: true, routers: registered.concat(detected) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -81,11 +108,11 @@ router.post('/detect', async (req, res) => {
 // Proxy an arbitrary MikroTik API command through a collector tunnel.
 router.post('/mikrotik', async (req, res) => {
     try {
-        const { collectorKey, path, args } = req.body;
+        const { collectorKey, path, args, router } = req.body;
         if (!collectorKey || !path) {
             return res.status(400).json({ success: false, message: 'collectorKey and path are required' });
         }
-        const result = await proxyCommand(collectorKey, path, args || {});
+        const result = await proxyCommand(collectorKey, path, args || {}, router);
         res.json({ success: result.ok, data: result.data, error: result.error });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -123,13 +150,13 @@ router.post('/register', async (req, res) => {
     }
 });
 
-async function proxyCommand(key, path, args) {
+async function proxyCommand(key, path, args, router) {
     return new Promise((resolve) => {
         if (!collectorTunnel || !collectorTunnel.isConnected(key)) {
             return resolve({ ok: false, data: null, error: 'collector not connected' });
         }
         const id = 'fleet_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-        const msg = { type: 'mikrotik', id, path, args };
+        const msg = { type: 'mikrotik', id, path, args, router };
         const timer = setTimeout(() => {
             responseWaiters.delete(id);
             resolve({ ok: false, data: null, error: 'collector timeout' });

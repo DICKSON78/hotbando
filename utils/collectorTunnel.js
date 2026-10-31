@@ -18,6 +18,25 @@ const collectors = new Map();
 // ws -> collectorKey
 const wsToKey = new Map();
 
+// collectorKey -> latest heartbeat { at, routers[], collector }
+const heartbeatData = new Map();
+
+// Auto-register a router discovered by a collector into the HotBando DB.
+async function autoRegisterRouter(r, collectorKey) {
+    const db = require('../config/database');
+    const routerID = r.identity ? `router-${r.identity.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}` : null;
+    if (!routerID) return;
+    const [exists] = await db.execute('SELECT id FROM mikrotiks WHERE router_id = ?', [routerID]);
+    if (exists.length > 0) return;
+    await db.execute(
+        `INSERT INTO mikrotiks
+          (router_id, router_name, host, port, ssid, model, status, setup_status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'offline', 'detected', NOW(), NOW())`,
+        [routerID, r.identity, r.host, r.port || 8728, '', r.model || null]
+    );
+    console.log(`[collector-tunnel] auto-registered router ${routerID} (${r.host}) from ${collectorKey}`);
+}
+
 function setupCollectorTunnel(httpServer) {
     const wss = new WebSocket.Server({
         server: httpServer,
@@ -49,13 +68,23 @@ function setupCollectorTunnel(httpServer) {
         ws.on('message', (raw) => {
             try {
                 const msg = JSON.parse(raw);
-                // Collector-originated messages (heartbeat/announce/response)
-                // are handled by the REST layer via the response waiters.
                 if (msg && msg.type === 'mikrotik_response') {
                     const waiter = responseWaiters.get(msg.id);
                     if (waiter) {
                         waiter.resolve(msg);
                         responseWaiters.delete(msg.id);
+                    }
+                }
+                if (msg && msg.type === 'heartbeat') {
+                    // Store discovered routers for auto-registration.
+                    const key = wsToKey.get(ws);
+                    if (key && Array.isArray(msg.routers)) {
+                        heartbeatData.set(key, { at: msg.at, routers: msg.routers, collector: msg.collector });
+                        // Auto-register any router we haven't seen before.
+                        for (const r of msg.routers) {
+                            if (!r.connected || !r.identity) continue;
+                            autoRegisterRouter(r, key).catch(() => {});
+                        }
                     }
                 }
             } catch (_) {}
@@ -85,9 +114,18 @@ function setupCollectorTunnel(httpServer) {
         getCollectors() {
             const out = [];
             for (const [key, ws] of collectors) {
-                out.push({ key, connected: ws.readyState === WebSocket.OPEN });
+                const hb = heartbeatData.get(key);
+                out.push({
+                    key,
+                    connected: ws.readyState === WebSocket.OPEN,
+                    lastHeartbeat: hb ? hb.at : null,
+                    routers: hb ? hb.routers : []
+                });
             }
             return out;
+        },
+        getHeartbeatData(key) {
+            return heartbeatData.get(key) || null;
         },
         isConnected(key) {
             const ws = collectors.get(key);
