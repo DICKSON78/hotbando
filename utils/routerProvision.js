@@ -246,31 +246,138 @@ function generateBootstrapScript() {
 # After this import everything is automatic: register → owner Connect → full config.
 # ============================================================================
 
+# --- Step 1: Gather router info (with fallbacks for CHR/emulators) ---
 :global hotbandoBaseUrl "${PUBLIC_BASE_URL}"
 :global hotbandoSecret "${ROUTER_REGISTRATION_SECRET}"
-:global hbSerial [/system routerboard get serial-number]
-:global hbIdentity [/system identity get name]
-:global hbModel [/system resource get board-name]
-:global hbFirmware [/system resource get version]
+
+# Serial number: try routerboard first, fall back to identity + clock
+:global hbSerial ""
+:do {
+    :set hbSerial [/system routerboard get serial-number]
+} on-error={
+    :put "WARN: could not read serial-number, using fallback"
+}
+:if ([:len $hbSerial] = 0) do={
+    :set hbSerial ("CHR-" . [/system clock get date] . "-" . [/system clock get time])
+}
+
+# Identity
+:global hbIdentity ""
+:do {
+    :set hbIdentity [/system identity get name]
+} on-error={
+    :set hbIdentity "MikroTik"
+}
+
+# Model
+:global hbModel ""
+:do {
+    :set hbModel [/system resource get board-name]
+} on-error={
+    :set hbModel "unknown"
+}
+
+# Firmware
+:global hbFirmware ""
+:do {
+    :set hbFirmware [/system resource get version]
+} on-error={
+    :set hbFirmware "unknown"
+}
+
+# Normalize serial for URL (remove spaces/special chars)
+:global hbSerialClean $hbSerial
+:do {
+    :set hbSerialClean [:tostr $hbSerial]
+} on-error={}
 
 :put "============================================="
 :put "HotBando Zero-Touch Setup"
 :put ("Serial: " . $hbSerial)
+:put ("Identity: " . $hbIdentity)
+:put ("Model: " . $hbModel)
+:put ("Firmware: " . $hbFirmware)
 :put "============================================="
 
-:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
+# --- Step 2: Download provisioning script (with retry + HTTP fallback) ---
+:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean)
 
-/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=${PUBLIC_FETCH_MODE} output=none
-:delay 2
+# Use :global for variables modified across blocks (avoids scoping issues)
+:global dlOk false
+:global dlMode "${PUBLIC_FETCH_MODE}"
 
-:if ([:len [/file find name="hotbando-provision.rsc"]] = 0) do={
+# Try HTTPS first
+:for i from=1 to=3 do={
+    :if ($dlOk) do={ :break }
+    :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
+    :do {
+        /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=$dlMode output=none
+    } on-error={
+        :put "  fetch failed, retrying..."
+    }
+    :delay 3
+    :if ([:len [/file find name="hotbando-provision.rsc"]] > 0) do={
+        :set dlOk true
+        :put "Download successful!"
+    }
+}
+
+# Fall back to HTTP if HTTPS failed
+:if (!$dlOk) do={
+    :put "HTTPS failed, trying HTTP..."
+    :set dlMode "http"
+    :for i from=1 to=3 do={
+        :put ("HTTP attempt " . $i . " of 3...")
+        :do {
+            /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=http output=none
+        } on-error={
+            :put "  HTTP fetch failed, retrying..."
+        }
+        :delay 3
+        :if ([:len [/file find name="hotbando-provision.rsc"]] > 0) do={
+            :set dlOk true
+            :put "HTTP download successful!"
+        }
+        :if ($dlOk) do={ :break }
+    }
+}
+
+:if (!$dlOk) do={
+    :put "============================================="
     :put "ERROR: could not download provisioning script!"
-    :put "Check internet on the router, server IP/port, and secret."
+    :put "Check internet on the router (ping 8.8.8.8)."
+    :put "Check server IP/port and secret."
+    :put "============================================="
     :error "HotBando phone-home failed"
 }
 
+# --- Step 3: Verify downloaded file ---
+:global fileSize 0
+:do {
+    :set fileSize [/file get [/file find name="hotbando-provision.rsc"] size]
+} on-error={
+    :put "WARN: could not read file size"
+}
+:put ("Downloaded file size: " . $fileSize . " bytes")
+
+:if ($fileSize < 100) do={
+    :put "ERROR: downloaded file is too small (corrupt?)"
+    :error "HotBando phone-home failed"
+}
+
+# --- Step 4: Apply configuration ---
 :put "Applying HotBando configuration..."
-/import file-name="hotbando-provision.rsc"
+:do {
+    /import file-name="hotbando-provision.rsc"
+    :put "Configuration applied successfully!"
+} on-error={
+    :put "ERROR: failed to import provisioning script!"
+    :put "Check /file print and /log print for details."
+    :error "HotBando import failed"
+}
+
+# --- Step 5: Cleanup ---
+:do { /file remove "hotbando-provision.rsc" } on-error={}
 
 :put "============================================="
 :put "HotBando setup complete. Router is PENDING."
@@ -447,17 +554,15 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 #    WAN   = ether1 (uplink to modem)
 #    HOTSPOT = dedicated bridge containing every wireless radio (2.4 & 5 GHz)
 # ----------------------------------------------------------------------------
-:local wanIface ""
-:local hotspotIface "bridge-hotbando"
-
-# Detect WAN: hardcoded for compatibility (avoid RouterOS array syntax issues)
-:local wanIface "ether1"
+# Use :global for variables modified across blocks
+:global wanIface "ether1"
+:global hotspotIface "bridge-hotbando"
 
 # Create the hotspot bridge (never delete it here — removing it detaches radios
 # while DHCP/hotspot still reference it, which silently kills the portal).
 :do { /interface bridge add name=bridge-hotbando disabled=no comment="HotBando hotspot bridge" } on-error={}
 
-:local wirelessCount 0
+:global wirelessCount 0
 
 # RouterOS 6 / legacy wireless package (wlan1, wlan2, ...)
 :do {
