@@ -40,10 +40,9 @@ function onPrompt(e) {
   if (e && typeof e.preventDefault === 'function') e.preventDefault()
   const prompt = e && typeof e.prompt === 'function' ? e : window.deferredPrompt
   usePrompt(prompt)
-  // Auto-prompt shortly after capture
-  setTimeout(() => {
-    if (canInstall.value && deferredPrompt && !isStandalone.value) install()
-  }, 2000)
+  // Never auto-install or auto-open Chrome here. On a captive portal the page
+  // can sit inside a WebView where an intent:// navigation reloads the portal
+  // over and over. The customer must tap the button explicitly.
 }
 
 async function install() {
@@ -99,17 +98,6 @@ onMounted(() => {
   window.addEventListener('beforeinstallprompt', onPrompt)
   window.addEventListener('appinstallavailable', onPrompt)
   window.addEventListener('appinstalled', onInstalled)
-
-  // Auto-prompt install when available (helps non-technical users)
-  const tryAuto = () => {
-    if (canInstall.value && !isStandalone.value) {
-      setTimeout(() => {
-        if (canInstall.value && deferredPrompt) install()
-      }, 2000)
-    }
-  }
-  // trigger after a short delay in case prompt was already captured
-  setTimeout(tryAuto, 2500)
 })
 
 onUnmounted(() => {
