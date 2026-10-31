@@ -15,9 +15,19 @@
 :local hbSecret "d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6"
 
 # 1. Re-apply the shared secret on every RADIUS entry used by the hotspot.
+#    If no hotspot entry exists at all, create one.
 :local radiusIds [/radius find]
-:if ([:len $radiusIds] = 0) do={ /radius add service=hotspot address=$hbServer secret=$hbSecret authentication-port=1812 accounting-port=1813 timeout=3000ms comment="HotBando FreeRADIUS" }
-:if ([:len $radiusIds] > 0) do={ :foreach r in=$radiusIds do={ :local svc [/radius get $r service]; :if ([:typeof [:find $svc "hotspot"]] != "nil") do={ /radius set $r address=$hbServer secret=$hbSecret authentication-port=1812 accounting-port=1813 timeout=3000ms } } }
+:local hbUpdated 0
+:foreach r in=$radiusIds do={
+  :local svc [/radius get $r service]
+  :if ([:typeof [:find $svc "hotspot"]] != "nil") do={
+    /radius set $r address=$hbServer secret=$hbSecret authentication-port=1812 accounting-port=1813 timeout=3000ms
+    :set hbUpdated ($hbUpdated + 1)
+  }
+}
+:if ($hbUpdated = 0) do={
+  /radius add service=hotspot address=$hbServer secret=$hbSecret authentication-port=1812 accounting-port=1813 timeout=3000ms comment="HotBando FreeRADIUS"
+}
 
 # 2. Make every hotspot profile use RADIUS and accept MAC login.
 #    MAC login is what lets a paid phone reconnect by itself, even when the
