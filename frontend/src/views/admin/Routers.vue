@@ -4,13 +4,13 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
         <h2 class="text-lg font-bold text-white">Router Fleet Management</h2>
-        <p class="text-sm" style="color: #6b7280">Detect, configure and manage MikroTik routers with auto WireGuard</p>
+        <p class="text-sm" style="color: #6b7280">Onboard site routers with the zero-touch script, then manage them over WireGuard</p>
       </div>
       <div class="flex gap-2">
         <button @click="refreshAll()" class="btn btn-secondary btn-sm" :disabled="loading">
           <i class="fas fa-sync-alt" :class="{ 'animate-spin': loading }"></i> Refresh
         </button>
-        <button @click="activeTab = 'detect'" class="btn btn-primary btn-sm"><i class="fas fa-crosshairs mr-1"></i> Detect Router</button>
+        <button @click="activeTab = 'sitesetup'" class="btn btn-primary btn-sm"><i class="fas fa-location-dot mr-1"></i> Add Site Router</button>
       </div>
     </div>
 
@@ -61,7 +61,9 @@
           <h3 class="section-title"><i class="fas fa-bolt" style="color: #FF7A30"></i> Auto Detect & Configure</h3>
         </div>
         <div class="section-body space-y-3">
-          <p class="text-xs" style="color: #6b7280">Plug the MikroTik into this network, then press the button — the system finds it, logs in with default credentials and configures it automatically. No IP typing needed.</p>
+          <p class="text-xs" style="color: #6b7280">LAN Detect runs <b>on this cloud server</b>. It cannot see a router you plugged in at 192.168.88.1. For a new site router, use <b>Site Setup</b> and paste the script in WebFig.</p>
+          <button @click="activeTab = 'sitesetup'" class="btn btn-primary btn-sm"><i class="fas fa-location-dot mr-1"></i> Go to Site Setup</button>
+          <p class="text-xs" style="color: #6b7280">Use Auto-Detect only if this HotBando server is on the same LAN as the MikroTik (HQ install), or the router already has a WireGuard tunnel.</p>
           <div class="flex gap-2 flex-wrap">
             <button @click="autoDetect()" :disabled="autoDetecting || configRunning" class="btn btn-primary">
               <i class="fas mr-1" :class="autoDetecting ? 'fa-spinner fa-spin' : 'fa-radar'"></i>
@@ -84,6 +86,9 @@
             <p v-if="detectResult.credentialsAuto" class="text-xs mt-2" style="color: #FF7A30">
               <i class="fas fa-key mr-1"></i> Default credentials detected automatically — no password needed
             </p>
+            <button v-if="detectResult.useSiteSetup || (!detectResult.isMikrotik && detectResult.message)" @click="activeTab = 'sitesetup'" class="btn btn-primary btn-sm w-full mt-2">
+              <i class="fas fa-location-dot mr-1"></i> Open Site Setup
+            </button>
             <button v-if="detectResult.isMikrotik && !detectResult.inDatabase" @click="activeTab = 'configure'" class="btn btn-secondary btn-sm w-full mt-2">
               <i class="fas fa-sliders mr-1"></i> Custom Configure (name, location, SSID)
             </button>
@@ -214,30 +219,33 @@
     <!-- ===================== SITE SETUP TAB ===================== -->
     <template v-if="activeTab === 'sitesetup'">
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-bolt" style="color: #FF7A30"></i> 1. Same network</h3></div>
+        <div class="section-card lg:col-span-2">
+          <div class="section-header"><h3 class="section-title"><i class="fas fa-satellite-dish" style="color: #FF7A30"></i> Plug in a new router</h3></div>
           <div class="section-body space-y-2">
-            <p class="text-xs" style="color: #6b7280">PC and router on the same LAN. Open Detect, press <b>Auto-Detect Router</b>, then <b>Auto-Configure Now</b> — fully automatic.</p>
-            <button @click="activeTab = 'detect'" class="btn btn-primary btn-sm w-full"><i class="fas fa-crosshairs mr-1"></i> Go to Auto-Detect</button>
-          </div>
-        </div>
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-box-open" style="color: #60a5fa"></i> 2. Pre-provisioned</h3></div>
-          <div class="section-body space-y-2">
-            <p class="text-xs" style="color: #6b7280">Configure the router here first (path 1), then ship it to site. Site person only plugs WAN + power — tunnel comes up alone, portal opens for configured routers only.</p>
-          </div>
-        </div>
-        <div class="section-card">
-          <div class="section-header"><h3 class="section-title"><i class="fas fa-satellite-dish" style="color: #a78bfa"></i> 3. Remote site</h3></div>
-          <div class="section-body space-y-2">
-            <p class="text-xs" style="color: #6b7280">Router already far away? Send the script below (WhatsApp). Site person pastes it once into WebFig Terminal (<span class="font-mono">http://192.168.88.1</span>, router with internet). Everything after is automatic.</p>
-            <button @click="loadBootstrap()" :disabled="loadingBootstrap" class="btn btn-secondary btn-sm w-full">
-              <i class="fas mr-1" :class="loadingBootstrap ? 'fa-spinner fa-spin' : 'fa-file-code'"></i> {{ bootstrapScript ? 'Reload site script' : 'Show site script' }}
-            </button>
+            <ol class="text-xs space-y-1.5 list-decimal pl-4" style="color: #9ca3af">
+              <li>Connect WAN (internet) + power. Join the router WiFi or LAN, then open <span class="font-mono text-white">http://192.168.88.1</span>.</li>
+              <li>WebFig → Terminal. Copy the script below and paste it once, then press Enter.</li>
+              <li>The router phones home and appears under <b>Waiting for Connect</b> (PENDING). Press <b>Connect</b>.</li>
+            </ol>
+            <p class="text-xs" style="color: #6b7280">Do not use Auto-Detect or 192.168.88.1 from this admin portal — the server is in the cloud and cannot reach that IP.</p>
+            <div class="flex gap-2 flex-wrap">
+              <button @click="loadBootstrap()" :disabled="loadingBootstrap" class="btn btn-secondary btn-sm">
+                <i class="fas mr-1" :class="loadingBootstrap ? 'fa-spinner fa-spin' : 'fa-file-code'"></i> {{ bootstrapScript ? 'Reload script' : 'Load site script' }}
+              </button>
+              <button v-if="bootstrapScript" @click="copyBootstrap()" class="btn btn-primary btn-sm"><i class="fas fa-copy mr-1"></i> Copy script</button>
+              <button v-if="bootstrapScript" @click="downloadBootstrap()" class="btn btn-secondary btn-sm"><i class="fas fa-download mr-1"></i> Download .rsc</button>
+            </div>
             <div v-if="bootstrapScript">
               <pre class="p-3 rounded-xl text-[11px] font-mono overflow-x-auto max-h-64 overflow-y-auto" style="background: #0a0a0f; border: 1px solid var(--border); color: #9ca3af">{{ bootstrapScript }}</pre>
-              <button @click="copyBootstrap()" class="btn btn-primary btn-sm w-full mt-2"><i class="fas fa-copy mr-1"></i> Copy script</button>
             </div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-header"><h3 class="section-title"><i class="fas fa-box-open" style="color: #60a5fa"></i> Already configured</h3></div>
+          <div class="section-body space-y-2">
+            <p class="text-xs" style="color: #6b7280">If the router was configured here first, just plug WAN + power at site. The WireGuard tunnel comes up by itself.</p>
+            <p class="text-xs" style="color: #6b7280">LAN Detect is only for a MikroTik sitting on the same network as this server (HQ), not for a shop/campus install.</p>
+            <button @click="activeTab = 'detect'" class="btn btn-secondary btn-sm w-full"><i class="fas fa-crosshairs mr-1"></i> LAN Detect (HQ only)</button>
           </div>
         </div>
       </div>
@@ -355,8 +363,8 @@
           </div>
           <p class="text-white font-medium mb-1">No routers found</p>
           <p class="text-sm mb-4" style="color: #6b7280">{{ search || statusFilter ? 'No routers match filters' : 'Start by detecting your first MikroTik router' }}</p>
-          <button v-if="!search && !statusFilter" @click="activeTab = 'detect'" class="btn btn-primary btn-sm">
-            <i class="fas fa-crosshairs mr-1"></i> Detect First Router
+          <button v-if="!search && !statusFilter" @click="activeTab = 'sitesetup'" class="btn btn-primary btn-sm">
+            <i class="fas fa-location-dot mr-1"></i> Site Setup
           </button>
         </div>
       </div>
@@ -522,12 +530,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { adminGet, adminPost, adminPut, adminDelete } from '../../api/client'
 import TerminalModal from '../../components/TerminalModal.vue'
 
-const activeTab = ref('detect')
+const activeTab = ref('sitesetup')
 const tabs = [
-  { key: 'detect', label: 'Detect', icon: 'fas fa-crosshairs' },
-  { key: 'configure', label: 'Configure', icon: 'fas fa-cog' },
   { key: 'sitesetup', label: 'Site Setup', icon: 'fas fa-location-dot' },
   { key: 'fleet', label: 'Fleet', icon: 'fas fa-network-wired' },
+  { key: 'detect', label: 'LAN Detect', icon: 'fas fa-crosshairs' },
+  { key: 'configure', label: 'Configure', icon: 'fas fa-cog' },
   { key: 'wireguard', label: 'WireGuard', icon: 'fas fa-shield-halved' }
 ]
 
@@ -623,7 +631,7 @@ function showToast(message, type = 'success') {
 
 onMounted(async () => {
   loading.value = true
-  await Promise.all([loadRouters(), loadLocations(), loadWGStatus()])
+  await Promise.all([loadRouters(), loadLocations(), loadWGStatus(), loadBootstrap()])
   loading.value = false
   liveRefreshTimer = window.setInterval(() => loadRouters(), 60000)
 })
@@ -723,10 +731,19 @@ async function autoDetect() {
     await scanNetwork()
     const fresh = scanResults.value.filter(d => d.isMikrotik && !d.inDatabase)
     if (!fresh.length) {
+      const registered = scanResults.value.filter(d => d.inDatabase)
       if (!scanResults.value.length) {
-        detectResult.value = { isMikrotik: false, message: 'No devices found. Plug the MikroTik into this network and try again.' }
+        detectResult.value = {
+          isMikrotik: false,
+          useSiteSetup: true,
+          message: 'No router is visible to this cloud server. A factory MikroTik at 192.168.88.1 cannot be Auto-Detected from here. Open Site Setup and paste the site script in WebFig.'
+        }
       } else {
-        showToast('No NEW MikroTik found — all detected devices are already registered', 'error')
+        detectResult.value = {
+          isMikrotik: false,
+          useSiteSetup: true,
+          message: `Auto-Detect only found ${registered.length} router(s) already in HotBando — not the one you just plugged in. Those are existing fleet devices. For a new router at 192.168.88.1, use Site Setup (paste the script), not Detect.`
+        }
       }
       return
     }
@@ -885,10 +902,21 @@ async function loadBootstrap() {
 async function copyBootstrap() {
   try {
     await navigator.clipboard.writeText(bootstrapScript.value)
-    showToast('Site script copied — send it via WhatsApp', 'success')
+    showToast('Site script copied — paste it in WebFig Terminal', 'success')
   } catch (e) {
     showToast('Copy failed — select the text manually', 'error')
   }
+}
+
+function downloadBootstrap() {
+  if (!bootstrapScript.value) return
+  const blob = new Blob([bootstrapScript.value], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'hotbando-zero-touch.rsc'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ── Fleet management ──

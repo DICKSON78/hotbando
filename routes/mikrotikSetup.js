@@ -21,6 +21,19 @@ const RouterOSAPI = require('node-routeros').RouterOSAPI;
 const net = require('net');
 
 // Fast TCP pre-check (1.5s): avoids the ~4s API timeout per unreachable WG IP
+function isPrivateLanIp(ip) {
+    if (!ip) return false;
+    if (String(ip).startsWith('10.7.')) return false;
+    if (String(ip).startsWith('10.')) return true;
+    if (String(ip).startsWith('192.168.')) return true;
+    if (String(ip).startsWith('127.')) return true;
+    if (String(ip).startsWith('172.')) {
+        const second = parseInt(String(ip).split('.')[1], 10);
+        return second >= 16 && second <= 31;
+    }
+    return false;
+}
+
 function tcpOpen(ip, port, ms = 1500) {
     return new Promise((resolve) => {
         const s = new net.Socket();
@@ -107,8 +120,12 @@ router.get('/detect', async (req, res) => {
                 }
             } else if (result.authFailed) {
                 result.message = `A MikroTik responded at ${ip} but the credentials were rejected and no default credentials worked. Enter the correct admin password (Manual connect).`;
+            } else if (isPrivateLanIp(ip)) {
+                result.message = `This HotBando server cannot reach ${ip}:${parseInt(port)} — that address lives on the technician laptop/router LAN, not on the cloud. Auto-Detect and Detect-by-IP will never see a factory router at 192.168.88.1. Open Site Setup, copy the site script, paste it in WebFig Terminal at http://192.168.88.1 (WAN must have internet), then wait for PENDING and press Connect.`;
+                result.useSiteSetup = true;
             } else {
-                result.message = `Nothing responding at ${ip}:${parseInt(port)}. Check power, cable/WiFi, and that the router API (port ${parseInt(port)}) is reachable from this server. For a far-away router, use zero-touch phone-home instead of Detect-by-IP.`;
+                result.message = `Nothing responding at ${ip}:${parseInt(port)}. Check power, cable/WiFi, and that the router API (port ${parseInt(port)}) is reachable from this server. For a plugged-in factory router, use Site Setup (zero-touch script) instead of Detect-by-IP.`;
+                result.useSiteSetup = true;
             }
         }
 
