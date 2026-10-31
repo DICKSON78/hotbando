@@ -20,7 +20,6 @@ const collectorTunnel = setupCollectorTunnel(httpServer);
 // Router Fleet REST (remote auto-detect & MikroTik proxy via collectors).
 const routerFleetRoutes = require('./routes/routerFleet');
 routerFleetRoutes.setTunnel(collectorTunnel);
-app.use('/api/router-fleet', routerFleetRoutes);
 
 // Trust the first proxy hop (nginx in front). This makes req.ip the real
 // client IP so rate limiting/session tracking are per-user, not shared.
@@ -217,6 +216,7 @@ app.use('/api/routers', routerRoutes);
 app.use('/api/setup-wizard', setupWizardRoutes);
 app.use('/api/auto-detect', autoDetectRoutes);
 app.use('/api/admin/mikrotik-setup', mikrotikSetupRoutes);
+app.use('/api/router-fleet', routerFleetRoutes);
 
 // Zero-touch router provisioning (public, secret-gated)
 const zeroTouchRoutes = require('./routes/zeroTouch');
