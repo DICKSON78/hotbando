@@ -14,7 +14,11 @@
     <div v-if="selectedAd">
       <div class="mx-4 rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center">
         <video v-if="selectedAd.video_url" :src="selectedAd.video_url" controls autoplay class="w-full h-full" @ended="completeAd" ref="videoRef"></video>
-        <img v-else-if="selectedAd.image_url" :src="selectedAd.image_url" class="w-full h-full object-cover">
+        <img v-else-if="selectedAd.image_url && !selectedAd._imageFailed" :src="selectedAd.image_url" class="w-full h-full object-cover" @error="selectedAd._imageFailed = true">
+        <div v-else class="w-full h-full flex flex-col items-center justify-center text-white/50">
+          <i class="fa-solid fa-play text-4xl mb-2"></i>
+          <p class="text-sm">{{ selectedAd.title }}</p>
+        </div>
       </div>
 
       <div class="mx-4 mt-3 bg-[#111118] border border-[#1e1e2a] rounded-2xl p-4">
@@ -43,7 +47,7 @@
       <div class="px-4 space-y-3">
         <div v-for="ad in recommendedAds" :key="ad.id" class="bg-[#111118] border border-[#1e1e2a] rounded-2xl p-3 flex gap-3" @click="playAd(ad)">
           <div class="relative w-28 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#0d0d14]">
-            <img v-if="ad.image_url" :src="ad.image_url" class="w-full h-full object-cover" loading="lazy">
+            <img v-if="ad.image_url && !ad._imageFailed" :src="ad.image_url" class="w-full h-full object-cover" loading="lazy" @error="ad._imageFailed = true">
             <video v-else-if="ad.video_url" :src="ad.video_url" class="w-full h-full object-cover" preload="metadata" muted playsinline></video>
             <div v-else class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-play text-white/40"></i></div>
             <span class="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">{{ ad.duration }}s</span>
@@ -85,7 +89,7 @@
       <div class="px-4 space-y-3">
         <div v-for="ad in adsList" :key="ad.id" class="bg-[#111118] border border-[#1e1e2a] rounded-2xl p-3 flex gap-3" :class="{ 'opacity-50 pointer-events-none': adsRemaining <= 0 }" @click="playAd(ad)">
           <div class="relative w-28 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#0d0d14]">
-            <img v-if="ad.image_url" :src="ad.image_url" class="w-full h-full object-cover" loading="lazy">
+            <img v-if="ad.image_url && !ad._imageFailed" :src="ad.image_url" class="w-full h-full object-cover" loading="lazy" @error="ad._imageFailed = true">
             <video v-else-if="ad.video_url" :src="ad.video_url" class="w-full h-full object-cover" preload="metadata" muted playsinline></video>
             <div v-else class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-play text-white/40"></i></div>
             <span class="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">{{ ad.duration }}s</span>
@@ -229,13 +233,15 @@ async function completeAd() {
   try {
     const r = await hotspotPost('/complete-ad', { ad_id: adId, watched_duration: Math.round(watched) })
     if (r.success) {
-      message.value = `Umepata ${r.addedMB || 0} MB!`
-      messageError.value = false
       adsWatchedToday.value = r.adsWatchedToday || 0
       adsRemaining.value = r.adsRemaining || 0
+      // fetchList() clears the message, so set the reward text after it.
       await fetchList()
+      message.value = r.message || `Umepata ${r.addedMB || 0} MB!`
+      messageError.value = false
       if (imageTimer) clearTimeout(imageTimer)
-      setTimeout(backToList, 1200)
+      // Keep the result on screen long enough to read the router warning.
+      setTimeout(backToList, r.pendingRouter ? 4000 : 1600)
     } else {
       message.value = r.message || 'Imeshindikana kukamilisha tangazo.'
       messageError.value = true

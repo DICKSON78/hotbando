@@ -420,21 +420,82 @@ router.post('/campaigns/:id/lifecycle', async (req, res) => {
   }
 });
 
-// POST /ads — Create video ad (fix broken sponsor_id requirement)
+// POST /ads — Create an ad (admin). Ads created here are approved and active
+// immediately because an admin is the approver.
 router.post('/ads', async (req, res) => {
   try {
-    const { title, description, video_url, image_url, reward_mb, duration_seconds } = req.body;
-    if (!title) return res.status(400).json({ success: false, message: 'Title is required' });
+    const {
+      title, description, video_url, image_url,
+      reward_mb, reward_bytes: rewardBytesInput,
+      duration, duration_seconds, sponsor_id, is_active
+    } = req.body;
 
-    const reward_bytes = reward_mb ? reward_mb * 1024 * 1024 : 0;
+    if (!title) return res.status(400).json({ success: false, message: 'Title is required' });
+    if (!video_url && !image_url) {
+      return res.status(400).json({ success: false, message: 'Video URL or Image URL is required' });
+    }
+
+    const parsedDuration = parseInt(duration ?? duration_seconds, 10);
+    const durationSeconds = Number.isFinite(parsedDuration) && parsedDuration > 0 ? parsedDuration : 30;
+
+    const rewardBytes = rewardBytesInput != null
+      ? Math.max(0, parseInt(rewardBytesInput, 10) || 0)
+      : Math.max(0, Math.round((Number(reward_mb) || 0) * 1024 * 1024));
+
+    const active = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
+
     const [result] = await db.execute(
-      `INSERT INTO ads (title, description, video_url, image_url, reward_bytes, is_active, created_at)
-       VALUES (?, ?, ?, ?, ?, 0, NOW())`,
-      [title, description || '', video_url || '', image_url || '', reward_bytes]
+      `INSERT INTO ads
+        (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, approved, is_active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())`,
+      [title, description || '', image_url || '', video_url || '', durationSeconds, rewardBytes,
+       sponsor_id || null, active]
     );
-    res.json({ success: true, id: result.insertId, message: 'Ad created' });
+    res.json({ success: true, id: result.insertId, message: 'Ad created and published' });
   } catch (error) {
     console.error('Ad create error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /ads/:id — Edit an ad or toggle it on/off
+router.put('/ads/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const updates = [];
+    const values = [];
+
+    if (body.title !== undefined) { updates.push('title = ?'); values.push(body.title); }
+    if (body.description !== undefined) { updates.push('description = ?'); values.push(body.description || ''); }
+    if (body.image_url !== undefined) { updates.push('image_url = ?'); values.push(body.image_url || ''); }
+    if (body.video_url !== undefined) { updates.push('video_url = ?'); values.push(body.video_url || ''); }
+    if (body.sponsor_id !== undefined) { updates.push('sponsor_id = ?'); values.push(body.sponsor_id || null); }
+    if (body.duration !== undefined || body.duration_seconds !== undefined) {
+      const parsed = parseInt(body.duration ?? body.duration_seconds, 10);
+      if (Number.isFinite(parsed) && parsed > 0) { updates.push('duration = ?'); values.push(parsed); }
+    }
+    if (body.reward_mb !== undefined || body.reward_bytes !== undefined) {
+      const bytes = body.reward_bytes != null
+        ? Math.max(0, parseInt(body.reward_bytes, 10) || 0)
+        : Math.max(0, Math.round((Number(body.reward_mb) || 0) * 1024 * 1024));
+      updates.push('reward_bytes = ?'); values.push(bytes);
+    }
+    if (body.is_active !== undefined) {
+      updates.push('is_active = ?');
+      values.push(body.is_active === false || body.is_active === 0 || body.is_active === '0' ? 0 : 1);
+    }
+    if (body.approved !== undefined) {
+      updates.push('approved = ?');
+      values.push(body.approved === false || body.approved === 0 || body.approved === '0' ? 0 : 1);
+    }
+
+    if (!updates.length) return res.status(400).json({ success: false, message: 'No valid fields' });
+    values.push(id);
+    await db.execute(`UPDATE ads SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`, values);
+    res.json({ success: true, message: 'Ad updated' });
+  } catch (error) {
+    console.error('Ad update error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });

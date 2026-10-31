@@ -176,16 +176,18 @@
     <div v-if="showCreateAd" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px)">
       <div class="relative w-full max-w-md rounded-2xl p-6" style="background: #111118; border: 1px solid #1e1e2a">
         <button @click="showCreateAd = false" class="absolute top-4 right-4" style="color: #6b7280"><i class="fas fa-times text-lg hover:text-white"></i></button>
-        <h3 class="text-lg font-bold text-white mb-4">Create Video Ad</h3>
+        <h3 class="text-lg font-bold text-white mb-4">Create Ad</h3>
         <div class="space-y-3">
           <div><label class="input-label">Title *</label><input v-model="adForm.title" class="form-input" placeholder="Ad title"></div>
           <div><label class="input-label">Description</label><textarea v-model="adForm.description" class="form-input" rows="2" placeholder="Ad description"></textarea></div>
-          <div><label class="input-label">Video URL</label><input v-model="adForm.video_url" class="form-input" placeholder="https://..."></div>
+          <div><label class="input-label">Video URL</label><input v-model="adForm.video_url" class="form-input" placeholder="https://.../ad.mp4"></div>
+          <div><label class="input-label">Image URL</label><input v-model="adForm.image_url" class="form-input" placeholder="https://.../ad.jpg (required if no video)"></div>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="input-label">Reward (MB)</label><input v-model.number="adForm.reward_mb" type="number" class="form-input" placeholder="50"></div>
-            <div><label class="input-label">Duration (sec)</label><input v-model.number="adForm.duration_seconds" type="number" class="form-input" placeholder="30"></div>
+            <div><label class="input-label">Reward (MB)</label><input v-model.number="adForm.reward_mb" type="number" min="1" class="form-input" placeholder="15"></div>
+            <div><label class="input-label">Duration (sec)</label><input v-model.number="adForm.duration_seconds" type="number" min="5" class="form-input" placeholder="30"></div>
           </div>
-          <button @click="createAd()" class="btn btn-primary w-full" :disabled="!adForm.title || creating"><i v-if="creating" class="fas fa-spinner fa-spin mr-1"></i> Create Ad</button>
+          <p class="text-xs" style="color: #6b7280">The ad is published immediately. Use the toggle in the table to pause it.</p>
+          <button @click="createAd()" class="btn btn-primary w-full" :disabled="!adForm.title || (!adForm.video_url && !adForm.image_url) || creating"><i v-if="creating" class="fas fa-spinner fa-spin mr-1"></i> Create Ad</button>
         </div>
       </div>
     </div>
@@ -243,7 +245,7 @@ const campaignStats = ref({})
 const showCreateAd = ref(false)
 const showCreateCampaign = ref(false)
 
-const adForm = ref({ title: '', description: '', video_url: '', reward_mb: 50, duration_seconds: 30 })
+const adForm = ref({ title: '', description: '', video_url: '', image_url: '', reward_mb: 15, duration_seconds: 30 })
 const campForm = ref({ name: '', campaign_type: 'general', budget: 0, daily_budget: 0, start_date: '', end_date: '', target_audience: 'all' })
 
 const toast = ref({ show: false, message: '', type: 'success' })
@@ -270,9 +272,9 @@ async function createAd() {
   creating.value = true
   try {
     await adminPost('/business/ads', adForm.value)
-    showToast('Ad created')
+    showToast('Ad created and published')
     showCreateAd.value = false
-    adForm.value = { title: '', description: '', video_url: '', reward_mb: 50, duration_seconds: 30 }
+    adForm.value = { title: '', description: '', video_url: '', image_url: '', reward_mb: 15, duration_seconds: 30 }
     loadAll()
   } catch (e) { showToast('Failed: ' + (e.response?.data?.message || e.message), 'error') }
   creating.value = false
@@ -280,7 +282,7 @@ async function createAd() {
 
 async function approveAd(ad) {
   try {
-    await adminPost('/approve-ad/' + ad.id)
+    await adminPut('/business/ads/' + ad.id, { approved: 1, is_active: 1 })
     showToast('Ad approved')
     loadAll()
   } catch (e) { showToast('Failed', 'error') }
@@ -288,7 +290,7 @@ async function approveAd(ad) {
 
 async function declineAd(ad) {
   try {
-    await adminPost('/decline-ad/' + ad.id)
+    await adminPut('/business/ads/' + ad.id, { approved: 0, is_active: 0 })
     showToast('Ad deactivated')
     loadAll()
   } catch (e) { showToast('Failed', 'error') }

@@ -119,6 +119,24 @@ function secondsUntilMidnight() {
     return Math.floor((next - now) / 1000);
 }
 
+// Each ad can carry its own reward. When an ad has no reward configured we
+// fall back to the platform default (ad_watch_reward_mb) so a customer is
+// never shown "0 MB" for a valid ad.
+async function resolveAdRewardBytes(ad) {
+    const configured = Number(ad && ad.reward_bytes) || 0;
+    if (configured > 0) return configured;
+    try {
+        const [rows] = await db.execute(
+            'SELECT setting_value FROM system_settings WHERE setting_key = "ad_watch_reward_mb"'
+        );
+        const fallbackMB = rows.length > 0 ? parseFloat(rows[0].setting_value) : 15;
+        return Math.max(0, Math.round((Number.isFinite(fallbackMB) ? fallbackMB : 15) * 1024 * 1024));
+    } catch (err) {
+        console.warn('⚠️ Could not read ad_watch_reward_mb:', err.message);
+        return 15 * 1024 * 1024;
+    }
+}
+
 // Controller methods
 const hotspotController = {
     // Process user login - REAL DEVICE INTEGRATION
@@ -573,7 +591,8 @@ const hotspotController = {
             }
             
             const ad = ads[0];
-            const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
+            const rewardBytes = await resolveAdRewardBytes(ad);
+            const rewardMB = Math.round(rewardBytes / (1024 * 1024));
             
             // Server-side start tracking: record when this ad was served.
             // completeAd will verify enough wall-clock time has passed.
@@ -595,7 +614,7 @@ const hotspotController = {
                     video_url: ad.video_url,
                     duration: ad.duration,
                     reward_mb: rewardMB,
-                    reward_bytes: ad.reward_bytes,
+                    reward_bytes: rewardBytes,
                     is_video: !!ad.video_url
                 }
             });
@@ -630,26 +649,36 @@ const hotspotController = {
             );
             const dailyAdLimit = adLimitSetting.length > 0 ? parseInt(adLimitSetting[0].setting_value) : 8;
 
+            const [rewardSetting] = await db.execute(
+                'SELECT setting_value FROM system_settings WHERE setting_key = "ad_watch_reward_mb"'
+            );
+            const fallbackRewardMB = rewardSetting.length > 0 ? parseFloat(rewardSetting[0].setting_value) : 15;
+            const fallbackRewardBytes = Math.max(0, Math.round((Number.isFinite(fallbackRewardMB) ? fallbackRewardMB : 15) * 1024 * 1024));
+
+            // LEFT JOIN: platform-owned ads (sponsor_id NULL) must be visible too.
             const [ads] = await db.execute(
-                'SELECT a.*, u.name AS sponsor_name, u.company_name FROM ads a JOIN users u ON a.sponsor_id = u.id WHERE a.approved = 1 AND a.is_active = 1 ORDER BY a.created_at DESC, a.id DESC'
+                'SELECT a.*, u.name AS sponsor_name, u.company_name FROM ads a LEFT JOIN users u ON a.sponsor_id = u.id WHERE a.approved = 1 AND a.is_active = 1 ORDER BY a.created_at DESC, a.id DESC'
             );
 
             res.json({
                 success: true,
-                ads: ads.map(ad => ({
-                    id: ad.id,
-                    title: ad.title,
-                    description: ad.description,
-                    image_url: ad.image_url,
-                    video_url: ad.video_url,
-                    duration: ad.duration,
-                    reward_mb: Math.round(ad.reward_bytes / (1024 * 1024)),
-                    reward_bytes: ad.reward_bytes,
-                    is_video: !!ad.video_url,
-                    sponsor_name: ad.sponsor_name,
-                    company_name: ad.company_name,
-                    views_count: ad.views_count
-                })),
+                ads: ads.map(ad => {
+                    const rewardBytes = Number(ad.reward_bytes) > 0 ? Number(ad.reward_bytes) : fallbackRewardBytes;
+                    return {
+                        id: ad.id,
+                        title: ad.title,
+                        description: ad.description,
+                        image_url: ad.image_url,
+                        video_url: ad.video_url,
+                        duration: ad.duration,
+                        reward_mb: Math.round(rewardBytes / (1024 * 1024)),
+                        reward_bytes: rewardBytes,
+                        is_video: !!ad.video_url,
+                        sponsor_name: ad.sponsor_name,
+                        company_name: ad.company_name,
+                        views_count: ad.views_count
+                    };
+                }),
                 adsWatchedToday: todayViews[0].count,
                 adsRemaining: Math.max(0, dailyAdLimit - todayViews[0].count),
                 resetIn: secondsUntilMidnight()
@@ -706,6 +735,7 @@ const hotspotController = {
             }
             
             const ad = ads[0];
+            const rewardBytes = await resolveAdRewardBytes(ad);
 
             // Validate watched_duration: must watch at least 80% of ad duration
             const [minPctSetting] = await db.execute(
@@ -762,12 +792,12 @@ const hotspotController = {
 
                 await conn.execute(
                     'INSERT INTO ad_views (user_id, ad_id, watched_duration, data_earned, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-                    [user.id, ad_id, actualDuration, ad.reward_bytes, req.ip, req.headers['user-agent']]
+                    [user.id, ad_id, actualDuration, rewardBytes, req.ip, req.headers['user-agent']]
                 );
 
                 await conn.execute(
-                    'UPDATE users SET free_bytes = free_bytes + ? WHERE id = ?',
-                    [ad.reward_bytes, user.id]
+                    'UPDATE users SET free_bytes = free_bytes + ?, total_data_earned = COALESCE(total_data_earned, 0) + ? WHERE id = ?',
+                    [rewardBytes, rewardBytes, user.id]
                 );
 
                 await conn.execute(
@@ -784,7 +814,7 @@ const hotspotController = {
             }
             
             // Update session data
-            const newFreeBytes = Number(user.free_bytes) + Number(ad.reward_bytes);
+            const newFreeBytes = Number(user.free_bytes) + Number(rewardBytes);
             req.session.hotbando_user.free_bytes = newFreeBytes;
 
             // Push the new allowance to the router too. Without this the DB
@@ -806,17 +836,21 @@ const hotspotController = {
                 console.warn('⚠️ Could not extend router data after ad:', routerErr.message);
             }
             
-            const rewardMB = Math.round(ad.reward_bytes / (1024 * 1024));
+            const rewardMB = Math.round(rewardBytes / (1024 * 1024));
             const newTotalMB = Math.round(newFreeBytes / (1024 * 1024));
-            
+            const pendingRouter = !routerConnected;
+
             res.json({ 
                 success: true, 
                 addedMB: rewardMB,
                 totalMB: newTotalMB,
                 routerConnected,
+                pendingRouter,
                 adsWatchedToday: views[0].count + 1,
                 adsRemaining: Math.max(0, dailyAdLimit - (views[0].count + 1)),
-                message: `Umepata ${rewardMB}MB ya data bure kutoka kwa ${ad.title}!`
+                message: pendingRouter
+                    ? `Umepata ${rewardMB}MB ya data bure kutoka kwa ${ad.title}. MB imeongezwa kwenye akaunti yako; itatumika mara router itakapounganishwa.`
+                    : `Umepata ${rewardMB}MB ya data bure kutoka kwa ${ad.title}!`
             });
             
         } catch (error) {
