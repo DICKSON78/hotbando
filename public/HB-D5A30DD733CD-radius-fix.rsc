@@ -33,7 +33,7 @@
 :do { /ip service set api port=8728 } on-error={}
 :do { /ip service set api address="10.7.0.0/24" } on-error={}
 :local wgIds [/interface wireguard find]
-:if ([:len $wgIds] > 0) do={ :local wgName [/interface wireguard get [:pick $wgIds 0] name]; :if ([:len [/ip firewall filter find comment="HotBando WG management"]] = 0) do={ /ip firewall filter add chain=input in-interface=$wgName protocol=tcp dst-port=8728 action=accept place-before=0 comment="HotBando WG management" } }
+:if ([:len $wgIds] > 0) do={ :local wgName [/interface wireguard get [:pick $wgIds 0] name]; :if ([:len [/ip firewall filter find comment="HotBando WG management"]] = 0) do={ :do { /ip firewall filter add chain=input in-interface=$wgName protocol=tcp dst-port=8728 action=accept place-before=0 comment="HotBando WG management" } on-error={} } }
 
 # 4. Verification output
 :put "============================================="
