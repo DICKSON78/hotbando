@@ -303,6 +303,8 @@ router.post('/resellers/:id/status', async (req, res) => {
 // CAMPAIGNS — Ads, Voucher Campaigns, Conversion Tracking
 // ═══════════════════════════════════════════════════════════════
 
+const MARKETING_TYPES = ['social_media','sms','email','radio','tv','flyer','event','referral','other'];
+
 // GET /campaigns — List all campaigns (both legacy ads + modern campaigns)
 router.get('/campaigns', async (req, res) => {
   try {
@@ -325,13 +327,26 @@ router.get('/campaigns', async (req, res) => {
        ORDER BY mc.created_at DESC LIMIT ${parseInt(limit)} OFFSET ${offset}`, params
     );
 
-    // Legacy ads
+    // Ads served to customers (platform + partner campaign ads)
     const [ads] = await db.execute(
-      `SELECT a.*,
+      `SELECT a.*, u.name AS sponsor_name, u.company_name,
               (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id) as view_count,
               (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id AND av.watched_duration >= a.duration) as completed_views
        FROM ads a
+       LEFT JOIN users u ON a.sponsor_id = u.id
        ORDER BY a.created_at DESC LIMIT 50`
+    );
+
+    // Partner campaigns (sponsors / bank partners) awaiting approval or running
+    const [partnerCampaigns] = await db.execute(
+      `SELECT c.*, u.name AS owner_name, u.company_name, u.role AS owner_role,
+              cc.content_type, cc.video_url, cc.image_url, cc.duration_seconds,
+              (SELECT id FROM ads a WHERE a.campaign_id = c.id LIMIT 1) AS ad_id,
+              (SELECT COUNT(*) FROM campaign_completions x WHERE x.campaign_id = c.id) AS total_completions
+       FROM campaigns c
+       LEFT JOIN users u ON c.owner_id = u.id
+       LEFT JOIN campaign_content cc ON cc.campaign_id = c.id
+       ORDER BY (c.approved_by IS NULL) DESC, c.created_at DESC LIMIT 100`
     );
 
     const [countResult] = await db.execute(`SELECT COUNT(*) as total FROM marketing_campaigns mc WHERE ${where}`, params);
@@ -353,9 +368,16 @@ router.get('/campaigns', async (req, res) => {
        FROM ads`
     );
 
+    const [partnerStats] = await db.execute(
+      `SELECT COUNT(*) AS partner_campaigns,
+              SUM(CASE WHEN approved_by IS NULL THEN 1 ELSE 0 END) AS pending_partner_campaigns,
+              SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_partner_campaigns
+       FROM campaigns`
+    );
+
     res.json({
-      success: true, campaigns, ads,
-      stats: { ...stats[0], ...adStats[0] },
+      success: true, campaigns, ads, partnerCampaigns,
+      stats: { ...stats[0], ...adStats[0], ...partnerStats[0] },
       pagination: { page: parseInt(page), limit: parseInt(limit), total: countResult[0].total, pages: Math.ceil(countResult[0].total / parseInt(limit)) }
     });
   } catch (error) {
@@ -367,16 +389,20 @@ router.get('/campaigns', async (req, res) => {
 // POST /campaigns — Create marketing campaign
 router.post('/campaigns', async (req, res) => {
   try {
-    const { name, description, campaign_type, target_audience, budget, daily_budget, start_date, end_date, target_locations, target_age_min, target_age_max, target_gender } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
+    const { name, campaign_name, description, campaign_type, target_audience, budget, start_date, end_date, notes } = req.body;
+    const campaignName = (campaign_name || name || '').trim();
+    if (!campaignName) return res.status(400).json({ success: false, message: 'Name is required' });
+
+    const type = MARKETING_TYPES.includes(campaign_type) ? campaign_type : 'other';
+    const startDate = start_date || new Date().toISOString().slice(0, 10);
 
     const [result] = await db.execute(
-      `INSERT INTO marketing_campaigns (campaign_name, description, campaign_type, target_audience, budget, daily_budget,
-       start_date, end_date, status, managed_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, NOW())`,
-      [name, description || '', campaign_type || 'general', target_audience || 'all',
-       budget || 0, daily_budget || 0, start_date || null, end_date || null,
-       req.session.admin_user?.id]
+      `INSERT INTO marketing_campaigns (campaign_name, description, campaign_type, target_audience, budget,
+       start_date, end_date, status, managed_by, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, NOW())`,
+      [campaignName, description || '', type, target_audience || 'all',
+       Number(budget) || 0, startDate, end_date || null,
+       req.session.admin_user?.id || null, notes || null]
     );
     res.json({ success: true, id: result.insertId, message: 'Campaign created' });
   } catch (error) {
@@ -389,8 +415,10 @@ router.post('/campaigns', async (req, res) => {
 router.put('/campaigns/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = req.body;
-    const allowed = ['name','description','status','budget','daily_budget','start_date','end_date','target_audience','target_locations'];
+    const fields = { ...req.body };
+    if (fields.name !== undefined && fields.campaign_name === undefined) fields.campaign_name = fields.name;
+    if (fields.campaign_type !== undefined && !MARKETING_TYPES.includes(fields.campaign_type)) fields.campaign_type = 'other';
+    const allowed = ['campaign_name','description','campaign_type','status','budget','spent','start_date','end_date','target_audience','notes'];
     const updates = []; const vals = [];
     for (const [k,v] of Object.entries(fields)) {
       if (allowed.includes(k)) { updates.push(`${k}=?`); vals.push(v); }

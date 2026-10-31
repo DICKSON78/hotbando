@@ -386,7 +386,8 @@ CREATE TABLE IF NOT EXISTS `ads` (
   `video_url` VARCHAR(500) NULL,
   `duration` INT NOT NULL DEFAULT 60,
   `reward_bytes` BIGINT NOT NULL DEFAULT 15728640, -- 15MB
-  `sponsor_id` INT(11) NOT NULL,
+  `sponsor_id` INT(11) NULL,
+  `campaign_id` INT(11) NULL, -- set when the ad was generated from a partner campaign
   `approved` TINYINT(1) DEFAULT 0,
   `is_active` TINYINT(1) DEFAULT 1,
   `views_count` INT DEFAULT 0,

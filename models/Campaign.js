@@ -259,6 +259,120 @@ class Campaign extends BaseModel {
     }
 
     /**
+     * Mirror an approved ad campaign (ad_video / ad_image) into the `ads`
+     * table so customers see it through the normal "Watch Ads" flow.
+     * Non-ad campaigns (bank forms, surveys, app installs) are left alone.
+     */
+    async syncAdFromCampaign(campaignId) {
+        const [rows] = await this.db.query(
+            `SELECT c.*, cc.video_url, cc.image_url, cc.duration_seconds
+             FROM campaigns c
+             LEFT JOIN campaign_content cc ON cc.campaign_id = c.id
+             WHERE c.id = ? LIMIT 1`,
+            [campaignId]
+        );
+        const campaign = rows[0];
+        if (!campaign || !['ad_video', 'ad_image'].includes(campaign.campaign_type)) return null;
+
+        const approved = campaign.approved_by ? 1 : 0;
+        const now = new Date();
+        const started = !campaign.start_date || new Date(campaign.start_date) <= now;
+        const ended = campaign.end_date && new Date(campaign.end_date) < now;
+        const isActive = approved && Number(campaign.is_active) === 1 && started && !ended ? 1 : 0;
+        const duration = Number(campaign.duration_seconds) > 0 ? Number(campaign.duration_seconds) : 30;
+
+        const [existing] = await this.db.query('SELECT id FROM ads WHERE campaign_id = ? LIMIT 1', [campaignId]);
+        if (existing.length) {
+            await this.db.query(
+                `UPDATE ads SET title = ?, description = ?, image_url = ?, video_url = ?, duration = ?,
+                        reward_bytes = ?, sponsor_id = ?, approved = ?, is_active = ?, updated_at = NOW()
+                 WHERE id = ?`,
+                [campaign.campaign_name, campaign.description || '', campaign.image_url || '', campaign.video_url || '',
+                 duration, Number(campaign.reward_bytes) || 0, campaign.owner_id, approved, isActive, existing[0].id]
+            );
+            return existing[0].id;
+        }
+
+        const [result] = await this.db.query(
+            `INSERT INTO ads (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, campaign_id, approved, is_active, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [campaign.campaign_name, campaign.description || '', campaign.image_url || '', campaign.video_url || '',
+             duration, Number(campaign.reward_bytes) || 0, campaign.owner_id, campaignId, approved, isActive]
+        );
+        return result.insertId;
+    }
+
+    /**
+     * Record a completion for a campaign-backed ad that was already rewarded
+     * through the ads flow: logs the lead, bumps campaign stats and charges the
+     * advertiser. Returns false when the user already completed this campaign.
+     */
+    async recordAdCampaignCompletion(campaignId, userId, data = {}) {
+        const connection = await this.beginTransaction();
+        try {
+            const [campaigns] = await connection.query('SELECT * FROM campaigns WHERE id = ? FOR UPDATE', [campaignId]);
+            const campaign = campaigns[0];
+            if (!campaign) { await connection.rollback(); connection.release(); return false; }
+
+            const [done] = await connection.query(
+                'SELECT id FROM campaign_completions WHERE campaign_id = ? AND user_id = ? LIMIT 1',
+                [campaignId, userId]
+            );
+            if (done.length) { await connection.rollback(); connection.release(); return false; }
+
+            const cost = Number(campaign.cost_per_action) || 0;
+            await connection.query('INSERT INTO campaign_completions SET ?', {
+                campaign_id: campaignId,
+                user_id: userId,
+                completion_type: 'video_watch',
+                watch_duration_seconds: data.watch_duration_seconds || 0,
+                completion_percentage: data.completion_percentage || 100,
+                reward_granted: 1,
+                reward_type: campaign.reward_type,
+                reward_duration_hours: 0,
+                reward_bytes: data.reward_bytes || campaign.reward_bytes || 0,
+                cost_charged: cost,
+                ip_address: data.ip_address || null,
+                user_agent: data.user_agent || null,
+                location_id: data.location_id || null
+            });
+            await connection.query(
+                'UPDATE campaigns SET completions = completions + 1, views = views + 1, spent_budget = spent_budget + ? WHERE id = ?',
+                [cost, campaignId]
+            );
+            if (cost > 0 && campaign.owner_type === 'advertiser') {
+                await connection.query(
+                    'UPDATE wallets SET balance = balance - ?, total_spent = total_spent + ? WHERE user_id = ?',
+                    [cost, cost, campaign.owner_id]
+                );
+                await connection.query(
+                    `INSERT INTO transactions
+                     (wallet_id, user_id, transaction_type, amount, reference_type, reference_id, description, status, processed_at)
+                     SELECT id, ?, 'campaign_charge', ?, 'campaign', ?, 'Campaign completion charge', 'completed', NOW()
+                     FROM wallets WHERE user_id = ?`,
+                    [campaign.owner_id, cost, campaignId, campaign.owner_id]
+                );
+            }
+            // Budget exhausted or total limit reached: pause the campaign.
+            const spent = Number(campaign.spent_budget) + cost;
+            const completions = Number(campaign.completions) + 1;
+            const budgetOut = Number(campaign.total_budget) > 0 && spent >= Number(campaign.total_budget);
+            const limitOut = Number(campaign.total_limit) > 0 && completions >= Number(campaign.total_limit);
+            if (budgetOut || limitOut) {
+                await connection.query('UPDATE campaigns SET is_active = 0 WHERE id = ?', [campaignId]);
+                await connection.query('UPDATE ads SET is_active = 0 WHERE campaign_id = ?', [campaignId]);
+            }
+            await connection.commit();
+            connection.release();
+            return true;
+        } catch (error) {
+            await connection.rollback();
+            connection.release();
+            throw error;
+        }
+    }
+
+    /**
      * Get campaign statistics
      */
     async getCampaignStats(campaignId) {

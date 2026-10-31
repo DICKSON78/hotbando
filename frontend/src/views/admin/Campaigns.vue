@@ -39,7 +39,7 @@
       </div>
       <div class="stat-card">
         <div class="flex items-center justify-between">
-          <div><p class="stat-label">Campaigns</p><p class="stat-value" style="color: #FF7A30">{{ campaignStats.total_campaigns || 0 }}</p></div>
+          <div><p class="stat-label">Partner Campaigns</p><p class="stat-value" style="color: #FF7A30">{{ campaignStats.partner_campaigns || 0 }}</p><p v-if="campaignStats.pending_partner_campaigns > 0" class="text-[10px]" style="color:#f59e0b">{{ campaignStats.pending_partner_campaigns }} awaiting approval</p></div>
           <div class="stat-icon" style="background: rgba(255,122,48,0.1); color: #FF7A30"><i class="fas fa-bullhorn"></i></div>
         </div>
       </div>
@@ -48,10 +48,12 @@
     <!-- Tabs -->
     <div class="section-card" style="padding: 4px">
       <div class="flex gap-1">
-        <button v-for="t in ['ads','campaigns']" :key="t" @click="activeTab = t"
+        <button v-for="t in ['ads','partners','campaigns']" :key="t" @click="activeTab = t"
           class="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
           :style="activeTab === t ? 'background: linear-gradient(135deg, #FF7A30, #ea6a24); color: #fff' : 'background: transparent; color: #6b7280'">
-          {{ t === 'ads' ? 'Video Ads (' + ads.length + ')' : 'Marketing Campaigns (' + campaigns.length + ')' }}
+          <template v-if="t === 'ads'">Customer Ads ({{ ads.length }})</template>
+          <template v-else-if="t === 'partners'">Partner Campaigns ({{ partnerCampaigns.length }})<span v-if="pendingCount" class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300">{{ pendingCount }} pending</span></template>
+          <template v-else>Marketing Campaigns ({{ campaigns.length }})</template>
         </button>
       </div>
     </div>
@@ -114,6 +116,72 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- PARTNER CAMPAIGNS TAB -->
+    <template v-if="activeTab === 'partners'">
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title"><i class="fas fa-handshake" style="color: #FF7A30"></i> Sponsor &amp; Bank Campaigns</h3>
+        </div>
+        <div class="section-body">
+          <div v-for="c in partnerCampaigns" :key="c.id" class="p-4 rounded-xl mb-3" style="background: #0a0a0f; border: 1px solid var(--border)">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style="background: rgba(59,130,246,0.1)">
+                  <img v-if="c.image_url" :src="c.image_url" class="w-full h-full object-cover" @error="$event.target.style.display='none'">
+                  <i v-else class="fas" :class="c.campaign_type === 'ad_video' ? 'fa-video' : c.campaign_type === 'bank_form' ? 'fa-file-signature' : 'fa-bullhorn'" style="color: #60a5fa"></i>
+                </div>
+                <div class="min-w-0">
+                  <p class="font-medium text-white text-sm truncate">{{ c.campaign_name }}</p>
+                  <p class="text-xs" style="color: #6b7280">{{ typeLabel(c.campaign_type) }} &bull; {{ c.company_name || c.owner_name || 'Partner' }} ({{ c.owner_role === 'bank_partner' ? 'Bank' : 'Sponsor' }})</p>
+                  <p v-if="c.description" class="text-xs truncate max-w-md" style="color: #6b7280">{{ c.description }}</p>
+                </div>
+              </div>
+              <div class="flex gap-1 flex-shrink-0">
+                <template v-if="!c.approved_by">
+                  <button @click="approvePartner(c)" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400"><i class="fas fa-check mr-1"></i>Approve</button>
+                  <button @click="rejectPartner(c)" class="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400"><i class="fas fa-times mr-1"></i>Reject</button>
+                </template>
+                <template v-else>
+                  <button @click="togglePartner(c)" class="text-xs px-3 py-1.5 rounded-lg" :class="c.is_active ? 'bg-yellow-500/10 text-yellow-400' : 'bg-green-500/10 text-green-400'">
+                    <i class="fas mr-1" :class="c.is_active ? 'fa-pause' : 'fa-play'"></i>{{ c.is_active ? 'Pause' : 'Resume' }}
+                  </button>
+                </template>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+              <div class="p-2 rounded-lg" style="background: rgba(139,92,246,0.05)">
+                <p class="text-xs" style="color: #6b7280">Status</p>
+                <p class="text-sm font-medium" :style="{ color: !c.approved_by ? '#f59e0b' : c.is_active ? '#34d399' : '#6b7280' }">{{ !c.approved_by ? 'PENDING' : c.is_active ? 'LIVE' : 'PAUSED' }}</p>
+              </div>
+              <div class="p-2 rounded-lg" style="background: rgba(255,122,48,0.05)">
+                <p class="text-xs" style="color: #6b7280">Reward</p>
+                <p class="text-sm font-medium text-white">{{ fmtMB(c.reward_bytes) }}</p>
+              </div>
+              <div class="p-2 rounded-lg" style="background: rgba(59,130,246,0.05)">
+                <p class="text-xs" style="color: #6b7280">Budget</p>
+                <p class="text-sm font-medium text-white">TSh {{ fmtNum(c.total_budget) }}</p>
+              </div>
+              <div class="p-2 rounded-lg" style="background: rgba(239,68,68,0.05)">
+                <p class="text-xs" style="color: #6b7280">Spent</p>
+                <p class="text-sm font-medium text-white">TSh {{ fmtNum(c.spent_budget) }}</p>
+              </div>
+              <div class="p-2 rounded-lg" style="background: rgba(16,185,129,0.05)">
+                <p class="text-xs" style="color: #6b7280">Completions</p>
+                <p class="text-sm font-medium text-white">{{ c.total_completions || 0 }}</p>
+              </div>
+              <div class="p-2 rounded-lg" style="background: rgba(245,158,11,0.05)">
+                <p class="text-xs" style="color: #6b7280">CPA</p>
+                <p class="text-sm font-medium text-white">TSh {{ fmtNum(c.cost_per_action) }}</p>
+              </div>
+            </div>
+            <p v-if="c.video_url" class="text-xs mt-2 truncate" style="color: #6b7280"><i class="fas fa-link mr-1"></i>{{ c.video_url }}</p>
+            <p v-if="c.ad_id" class="text-xs mt-1" style="color: #34d399"><i class="fas fa-eye mr-1"></i>Served to customers as ad #{{ c.ad_id }}</p>
+          </div>
+          <div v-if="!partnerCampaigns.length" class="text-center py-12" style="color: #6b7280"><p>No partner campaigns submitted yet.</p></div>
         </div>
       </div>
     </template>
@@ -201,16 +269,20 @@
           <div><label class="input-label">Campaign Name *</label><input v-model="campForm.name" class="form-input" placeholder="Q4 Growth Campaign"></div>
           <div><label class="input-label">Type</label>
             <select v-model="campForm.campaign_type" class="form-input">
-              <option value="general">General</option>
               <option value="social_media">Social Media</option>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+              <option value="radio">Radio</option>
+              <option value="tv">TV</option>
+              <option value="flyer">Flyers</option>
+              <option value="event">Event</option>
               <option value="referral">Referral</option>
-              <option value="voucher">Voucher</option>
-              <option value="brand_awareness">Brand Awareness</option>
+              <option value="other">Other</option>
             </select>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="input-label">Budget (TSh)</label><input v-model.number="campForm.budget" type="number" class="form-input" placeholder="1000000"></div>
-            <div><label class="input-label">Daily Budget</label><input v-model.number="campForm.daily_budget" type="number" class="form-input" placeholder="50000"></div>
+            <div><label class="input-label">Description</label><input v-model="campForm.description" class="form-input" placeholder="Short note"></div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="input-label">Start Date</label><input v-model="campForm.start_date" type="date" class="form-input"></div>
@@ -234,8 +306,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { adminGet, adminPost, adminPut } from '../../api/client'
+import { ref, computed, onMounted } from 'vue'
+import { adminGet, adminPost, adminPut, apiPost } from '../../api/client'
 
 const activeTab = ref('ads')
 const creating = ref(false)
@@ -246,7 +318,10 @@ const showCreateAd = ref(false)
 const showCreateCampaign = ref(false)
 
 const adForm = ref({ title: '', description: '', video_url: '', image_url: '', reward_mb: 15, duration_seconds: 30 })
-const campForm = ref({ name: '', campaign_type: 'general', budget: 0, daily_budget: 0, start_date: '', end_date: '', target_audience: 'all' })
+const partnerCampaigns = ref([])
+const pendingCount = computed(() => partnerCampaigns.value.filter(c => !c.approved_by).length)
+const emptyCampForm = () => ({ name: '', description: '', campaign_type: 'social_media', budget: 0, start_date: new Date().toISOString().slice(0, 10), end_date: '', target_audience: 'all' })
+const campForm = ref(emptyCampForm())
 
 const toast = ref({ show: false, message: '', type: 'success' })
 function showToast(msg, type = 'success') { toast.value = { show: true, message: msg, type }; setTimeout(() => toast.value.show = false, 3000) }
@@ -263,6 +338,7 @@ async function loadAll() {
   try {
     const r = await adminGet('/business/campaigns')
     ads.value = r.ads || []
+    partnerCampaigns.value = r.partnerCampaigns || []
     campaigns.value = r.campaigns || []
     campaignStats.value = r.stats || {}
   } catch (e) { console.error(e) }
@@ -302,10 +378,38 @@ async function createCampaign() {
     await adminPost('/business/campaigns', campForm.value)
     showToast('Campaign created')
     showCreateCampaign.value = false
-    campForm.value = { name: '', campaign_type: 'general', budget: 0, daily_budget: 0, start_date: '', end_date: '', target_audience: 'all' }
+    campForm.value = emptyCampForm()
     loadAll()
   } catch (e) { showToast('Failed: ' + (e.response?.data?.message || e.message), 'error') }
   creating.value = false
+}
+
+function typeLabel(t) { return { ad_video: 'Video Ad', ad_image: 'Image Ad', bank_form: 'Lead Form', survey: 'Survey', app_install: 'App Install' }[t] || t }
+
+async function approvePartner(c) {
+  try {
+    const r = await apiPost('/campaigns/admin/' + c.id + '/approve')
+    showToast(r.ad_id ? 'Approved — now visible to customers' : 'Campaign approved')
+    loadAll()
+  } catch (e) { showToast('Failed: ' + (e.response?.data?.error || e.message), 'error') }
+}
+
+async function rejectPartner(c) {
+  const reason = window.prompt('Reason for rejecting "' + c.campaign_name + '" (sent to the partner):', '')
+  if (reason === null) return
+  try {
+    await apiPost('/campaigns/admin/' + c.id + '/reject', { reason })
+    showToast('Campaign rejected')
+    loadAll()
+  } catch (e) { showToast('Failed: ' + (e.response?.data?.error || e.message), 'error') }
+}
+
+async function togglePartner(c) {
+  try {
+    await apiPost('/campaigns/' + c.id + '/toggle')
+    showToast(c.is_active ? 'Campaign paused' : 'Campaign resumed')
+    loadAll()
+  } catch (e) { showToast('Failed: ' + (e.response?.data?.error || e.message), 'error') }
 }
 
 async function lifecycle(c, action) {

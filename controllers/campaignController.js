@@ -43,10 +43,18 @@ const campaignController = {
                 play_store_url
             } = req.body;
 
-            const user = req.session.admin_user || req.session.sponsor_user || req.session.bank_user;
+            const user = req.user || req.session.admin_user || req.session.sponsor_user || req.session.bank_user;
 
             if (!user) {
                 return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const validTypes = ['bank_form', 'app_install', 'ad_video', 'ad_image', 'survey'];
+            if (!campaign_name || !String(campaign_name).trim()) {
+                return res.status(400).json({ error: 'Campaign name is required' });
+            }
+            if (!validTypes.includes(campaign_type)) {
+                return res.status(400).json({ error: `Invalid campaign type. Use one of: ${validTypes.join(', ')}` });
             }
 
             // Determine owner type
@@ -57,28 +65,57 @@ const campaignController = {
                 owner_type = 'advertiser';
             }
 
+            // The partner forms send simplified fields; map them onto the model.
+            const budget = Number(total_budget ?? req.body.budget) || 0;
+            const cpa = Number(cost_per_action) || 0;
+            let rewardBytesValue = Number(reward_bytes) || 0;
+            if (!rewardBytesValue && req.body.reward_mb != null) {
+                rewardBytesValue = Math.max(0, Math.round((Number(req.body.reward_mb) || 0) * 1024 * 1024));
+            }
+            if (!rewardBytesValue && ['ad_video', 'ad_image'].includes(campaign_type)) {
+                const [setting] = await db.query('SELECT setting_value FROM system_settings WHERE setting_key = "ad_watch_reward_mb"');
+                const defaultMB = setting.length ? parseFloat(setting[0].setting_value) : 15;
+                rewardBytesValue = Math.round((Number.isFinite(defaultMB) ? defaultMB : 15) * 1024 * 1024);
+            }
+
+            const mediaUrl = req.body.media_url || null;
+            const resolvedVideo = video_url || (campaign_type === 'ad_video' ? mediaUrl : null);
+            const resolvedImage = image_url || (campaign_type === 'ad_image' ? mediaUrl : null);
+            if (campaign_type === 'ad_video' && !resolvedVideo) {
+                return res.status(400).json({ error: 'A video URL is required for a video ad campaign' });
+            }
+            if (campaign_type === 'ad_image' && !resolvedImage) {
+                return res.status(400).json({ error: 'An image URL is required for an image ad campaign' });
+            }
+
             // For advertisers, check wallet balance
-            if (owner_type === 'advertiser' && total_budget > 0) {
+            if (owner_type === 'advertiser' && budget > 0) {
                 const balance = await Wallet.getBalance(user.id);
-                if (balance < total_budget) {
+                if (balance < budget) {
                     return res.status(400).json({
                         error: 'Insufficient wallet balance',
                         balance,
-                        required: total_budget
+                        required: budget
                     });
                 }
             }
 
+            const toDateTime = (value, fallback) => {
+                if (!value) return fallback;
+                const d = new Date(value);
+                return Number.isNaN(d.getTime()) ? fallback : d;
+            };
+
             // Prepare campaign data
             const campaignData = {
-                campaign_name,
+                campaign_name: String(campaign_name).trim(),
                 campaign_type,
                 owner_id: user.id,
                 owner_type,
-                description,
-                instructions,
-                start_date,
-                end_date: end_date || null,
+                description: description || null,
+                instructions: instructions || req.body.target_url || null,
+                start_date: toDateTime(start_date, new Date()),
+                end_date: toDateTime(end_date, null),
                 is_active: 0, // Needs approval
                 requires_approval: 1,
                 target_locations: target_locations ? JSON.stringify(target_locations) : null,
@@ -86,23 +123,28 @@ const campaignController = {
                 target_age_min: target_age_min || null,
                 target_age_max: target_age_max || null,
                 target_gender: target_gender || 'all',
-                total_budget: total_budget || 0,
-                cost_per_action: cost_per_action || 0,
+                total_budget: budget,
+                cost_per_action: cpa,
                 reward_type: reward_type || 'data_bytes',
-                reward_duration_hours: reward_duration_hours || 0,
-                reward_bytes: reward_bytes || 0,
-                daily_limit: daily_limit || 0,
-                total_limit: total_limit || 0
+                reward_duration_hours: Number(reward_duration_hours) || 0,
+                reward_bytes: rewardBytesValue,
+                daily_limit: Number(daily_limit) || 0,
+                total_limit: Number(total_limit) || 0
             };
 
             // Prepare content data
+            const defaultContentType = {
+                ad_video: 'video', ad_image: 'image', bank_form: 'form', survey: 'survey', app_install: 'app_link'
+            }[campaign_type];
+            const resolvedContentType = content_type || defaultContentType;
             let contentData = null;
-            if (content_type) {
+            if (resolvedContentType) {
+                const parsedDuration = parseInt(req.body.duration_seconds, 10);
                 contentData = {
-                    content_type,
-                    video_url: video_url || null,
-                    image_url: image_url || null,
-                    duration_seconds: req.body.duration_seconds || 0,
+                    content_type: resolvedContentType,
+                    video_url: resolvedVideo || null,
+                    image_url: resolvedImage || null,
+                    duration_seconds: Number.isFinite(parsedDuration) && parsedDuration > 0 ? parsedDuration : (campaign_type === 'ad_video' ? 30 : 10),
                     form_fields: form_fields ? JSON.stringify(form_fields) : null,
                     app_name: app_name || null,
                     app_package: app_package || null,
@@ -234,6 +276,7 @@ const campaignController = {
             });
 
             await Campaign.update(id, updateData);
+            await Campaign.syncAdFromCampaign(id);
 
             res.json({
                 success: true,
@@ -271,6 +314,7 @@ const campaignController = {
             const newStatus = campaign.is_active ? 0 : 1;
 
             await Campaign.update(id, { is_active: newStatus });
+            await Campaign.syncAdFromCampaign(id);
 
             res.json({
                 success: true,
@@ -554,6 +598,12 @@ const campaignController = {
             // Get campaign details for notification
             const [campaigns] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
             const campaign = campaigns[0];
+            if (!campaign) {
+                return res.status(404).json({ error: 'Campaign not found' });
+            }
+
+            // Ad campaigns go straight to the customer "Watch Ads" list.
+            const adId = await Campaign.syncAdFromCampaign(id);
 
             // Notify owner
             await db.query(
@@ -564,7 +614,8 @@ const campaignController = {
 
             res.json({
                 success: true,
-                message: 'Campaign approved successfully'
+                message: 'Campaign approved successfully',
+                ad_id: adId
             });
         } catch (error) {
             console.error('Error approving campaign:', error);
@@ -588,8 +639,12 @@ const campaignController = {
             // Get campaign details
             const [campaigns] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
             const campaign = campaigns[0];
+            if (!campaign) {
+                return res.status(404).json({ error: 'Campaign not found' });
+            }
 
-            // Delete campaign
+            // Delete campaign (and any ad generated from it)
+            await db.query('DELETE FROM ads WHERE campaign_id = ?', [id]);
             await Campaign.delete(id);
 
             // Notify owner

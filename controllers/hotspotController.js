@@ -3,6 +3,7 @@ const db = require('../config/database');
 const mikrotikService = require('../utils/mikrotik');
 const bcrypt = require('bcryptjs');
 const { extendUserPackage } = require('../utils/packageEntitlement');
+const Campaign = require('../models/Campaign');
 
 // Utility functions
 function formatRemainingTime(seconds) {
@@ -816,6 +817,21 @@ const hotspotController = {
             // Update session data
             const newFreeBytes = Number(user.free_bytes) + Number(rewardBytes);
             req.session.hotbando_user.free_bytes = newFreeBytes;
+
+            // Campaign-backed ad: log the lead and charge the advertiser once per user.
+            if (ad.campaign_id) {
+                try {
+                    await Campaign.recordAdCampaignCompletion(ad.campaign_id, user.id, {
+                        watch_duration_seconds: actualDuration,
+                        completion_percentage: Math.min(100, Math.round((actualDuration / Math.max(1, ad.duration)) * 100)),
+                        reward_bytes: rewardBytes,
+                        ip_address: req.ip,
+                        user_agent: req.headers['user-agent']
+                    });
+                } catch (campaignErr) {
+                    console.warn('⚠️ Could not record campaign completion:', campaignErr.message);
+                }
+            }
 
             // Push the new allowance to the router too. Without this the DB
             // shows the extra MBs but RouterOS keeps the old byte cap.

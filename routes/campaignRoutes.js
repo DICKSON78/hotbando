@@ -24,12 +24,12 @@ router.get('/my-leads', sponsorAuth, async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Not authenticated' });
 
     const [leads] = await db.execute(
-      `SELECT cc.*, c.campaign_name as campaign_name, c.campaign_type, c.budget,
+      `SELECT cc.*, c.campaign_name as campaign_name, c.campaign_type, c.total_budget as budget,
               u.name as customer_name, u.phone_number as customer_phone
        FROM campaign_completions cc
-       JOIN marketing_campaigns c ON cc.campaign_id = c.id
+       JOIN campaigns c ON cc.campaign_id = c.id
        LEFT JOIN users u ON cc.user_id = u.id
-       WHERE c.managed_by = ?
+       WHERE c.owner_id = ?
        ORDER BY cc.completed_at DESC LIMIT 200`,
       [userId]
     );
