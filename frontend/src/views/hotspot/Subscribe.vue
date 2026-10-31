@@ -17,7 +17,17 @@
             <p class="text-base font-bold tracking-wider text-[#FF7A30] mt-1">{{ returnVoucher }}</p>
             <button class="pay-copy mt-2" @click="copyReturnVoucher"><i class="fa-solid fa-copy"></i> {{ returnCopied ? 'Copied!' : 'Copy Voucher' }}</button>
           </div>
-          <button class="ig-btn ig-btn-primary text-xs mt-3 px-4 py-2" @click="router.push('/hotspot/dashboard')">Go to Dashboard</button>
+          <div v-if="returnStatus === 'completed'" class="mt-3 space-y-2">
+            <p v-if="reconnectMsg" class="text-xs" :class="reconnectOk ? 'text-green-400' : 'text-yellow-300'">{{ reconnectMsg }}</p>
+            <div class="flex flex-wrap gap-2">
+              <button class="ig-btn ig-btn-primary text-xs px-4 py-2" :disabled="reconnecting" @click="reconnectAfterPayment">
+                <i v-if="reconnecting" class="fas fa-spinner fa-spin mr-1"></i>
+                {{ reconnecting ? 'Inaunganisha…' : 'Unganisha / Reconnect' }}
+              </button>
+              <button class="ig-btn ig-btn-outline text-xs px-4 py-2" @click="router.push('/hotspot/dashboard')">Go to Dashboard</button>
+            </div>
+          </div>
+          <button v-else class="ig-btn ig-btn-primary text-xs mt-3 px-4 py-2" @click="router.push('/hotspot/dashboard')">Go to Dashboard</button>
         </div>
       </div>
     </div>
@@ -162,11 +172,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { hotspotGet, hotspotPost } from '../../api/client'
 import { apiPost, apiGet } from '../../api/client'
+import { useHotspotStore } from '../../stores/hotspot'
 import PhoneInput from '../../components/PhoneInput.vue'
 import ClickPesaCheckoutModal from '../../components/PesapalCheckoutModal.vue'
 
 const route = useRoute()
 const router = useRouter()
+const store = useHotspotStore()
 const packages = ref([])
 const loading = ref(true)
 const voucherCode = ref('')
@@ -189,6 +201,9 @@ const returnStatus = ref('')
 const returnMessage = ref('')
 const returnVoucher = ref('')
 const returnCopied = ref(false)
+const reconnecting = ref(false)
+const reconnectMsg = ref('')
+const reconnectOk = ref(false)
 const showCheckout = ref(false)
 const checkoutUrl = ref('')
 const checkoutTracking = ref('')
@@ -226,6 +241,7 @@ async function handlePaymentReturn() {
       returnStatus.value = 'completed'
       returnMessage.value = r.message || 'Malipo yamekamilika!'
       returnVoucher.value = r.voucher || ''
+      if (!returnVoucher.value) reconnectAfterPayment()
     } else if (r.status === 'failed') {
       returnStatus.value = 'failed'
       returnMessage.value = r.message || 'Malipo hayajakamilika. Tafadhali jaribu tena.'
@@ -245,6 +261,34 @@ async function copyReturnVoucher() {
     returnCopied.value = true
     setTimeout(() => { returnCopied.value = false }, 2000)
   } catch {}
+}
+
+// After a confirmed payment, ask the router to let this device back in. The
+// session is deliberately kept alive: logging out here was what made customers
+// lose their portal session right after paying. If the router is unreachable
+// (for example its API is down) we tell the customer the one action that always
+// works: toggle Wi-Fi so the router can re-authenticate the device by MAC.
+async function reconnectAfterPayment() {
+  if (reconnecting.value) return
+  reconnecting.value = true
+  reconnectMsg.value = ''
+  try {
+    await store.refreshUser()
+    const r = await hotspotPost('/connect')
+    if (r?.success) {
+      reconnectOk.value = true
+      reconnectMsg.value = 'Umeunganishwa! Fungua dashboard kuanza kutumia internet.'
+      await store.refreshUser()
+    } else {
+      reconnectOk.value = false
+      reconnectMsg.value = 'Malipo yamekamilika. Zima na washa WiFi ya simu (au fungua ukurasa huu upya) ili kifaa chako kiingie mtandaoni.'
+    }
+  } catch (e) {
+    reconnectOk.value = false
+    reconnectMsg.value = 'Malipo yamekamilika. Zima na washa WiFi ya simu (au fungua ukurasa huu upya) ili kifaa chako kiingie mtandaoni.'
+  } finally {
+    reconnecting.value = false
+  }
 }
 
 function formatPrice(v) { return Number(v || 0).toLocaleString() }
@@ -285,6 +329,7 @@ function onCheckoutCompleted(payload) {
   returnStatus.value = 'completed'
   returnMessage.value = payload?.message || 'Malipo yamekamilika!'
   returnVoucher.value = payload?.voucher || ''
+  if (!returnVoucher.value) reconnectAfterPayment()
 }
 
 function onCheckoutFailed(payload) {

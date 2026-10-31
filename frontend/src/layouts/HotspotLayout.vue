@@ -47,19 +47,25 @@ const publicRoutes = ['hotspot-index', 'hotspot-login', 'hotspot-signup']
 const authRoutes = ['hotspot-dashboard', 'hotspot-subscribe', 'hotspot-ads']
 const isPublic = computed(() => publicRoutes.includes(route.name))
 
-let offlineCheckInterval = null
+let visibilityTimer = null
 
-const forceLogoutToLogin = async () => {
+// A captive portal reports navigator.onLine === false until the device is
+// authorised, and pagehide fires on every normal navigation/reload. Neither is
+// a reason to destroy the server session: doing that made the portal bounce
+// between login and dashboard and logged customers out right after paying.
+async function refreshSessionQuietly() {
+  if (!store.isLoggedIn) return
   try {
-    if (store.isLoggedIn) {
-      await store.logout()
-    }
-    if (!publicRoutes.includes(route.name)) {
-      router.replace('/hotspot/login')
-    }
+    await store.refreshUser()
   } catch (e) {
-    // ignore
+    // Keep the current session; the next request will retry.
   }
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState !== 'visible' || !store.isLoggedIn) return
+  if (visibilityTimer) clearTimeout(visibilityTimer)
+  visibilityTimer = setTimeout(refreshSessionQuietly, 800)
 }
 
 onMounted(async () => {
@@ -70,26 +76,14 @@ onMounted(async () => {
     router.replace('/hotspot/login')
   }
 
-  window.addEventListener('offline', forceLogoutToLogin)
-  window.addEventListener('pagehide', forceLogoutToLogin)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      if (!navigator.onLine) forceLogoutToLogin()
-    }
-    if (document.visibilityState === 'visible' && !navigator.onLine) {
-      forceLogoutToLogin()
-    }
-  })
-
-  offlineCheckInterval = setInterval(() => {
-    if (!navigator.onLine) forceLogoutToLogin()
-  }, 3000)
+  window.addEventListener('online', refreshSessionQuietly)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('offline', forceLogoutToLogin)
-  window.removeEventListener('pagehide', forceLogoutToLogin)
-  if (offlineCheckInterval) clearInterval(offlineCheckInterval)
+  window.removeEventListener('online', refreshSessionQuietly)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (visibilityTimer) clearTimeout(visibilityTimer)
 })
 
 async function logout() {

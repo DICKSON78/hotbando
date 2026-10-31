@@ -180,7 +180,7 @@ const props = defineProps({
   providerFee: { type: [Number, String], default: 0 },
   totalAmount: { type: [Number, String], default: 0 },
   successMessage: { type: String, default: 'Your payment was received.' },
-  pollInterval: { type: Number, default: 15000 },
+  pollInterval: { type: Number, default: 5000 },
   maxPollMs: { type: Number, default: 15 * 60 * 1000 }
 })
 
