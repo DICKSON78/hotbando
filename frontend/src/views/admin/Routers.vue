@@ -317,7 +317,7 @@
                   <div class="flex-1 h-1.5 rounded-full" style="background: #1e1e2a">
                     <div class="h-full rounded-full" :style="{ width: (r.cpu_load || 0) + '%', background: (r.cpu_load || 0) > 80 ? '#f87171' : '#60a5fa' }"></div>
                   </div>
-                  <span class="text-xs font-mono text-white">{{ r.cpu_load || 0 }}%</span>
+                  <span class="text-xs font-mono text-white">{{ r.apiReachable ? `${r.cpu_load || 0}%` : '—' }}</span>
                 </div>
               </div>
               <div class="p-2 rounded-lg" style="background: rgba(139,92,246,0.08)">
@@ -326,15 +326,15 @@
                   <div class="flex-1 h-1.5 rounded-full" style="background: #1e1e2a">
                     <div class="h-full rounded-full" :style="{ width: (r.memory_usage || 0) + '%', background: (r.memory_usage || 0) > 80 ? '#f87171' : '#a78bfa' }"></div>
                   </div>
-                  <span class="text-xs font-mono text-white">{{ r.memory_usage || 0 }}%</span>
+                  <span class="text-xs font-mono text-white">{{ r.apiReachable ? `${r.memory_usage || 0}%` : '—' }}</span>
                 </div>
               </div>
             </div>
             <div class="flex items-center justify-between pt-3" style="border-top: 1px solid var(--border)">
               <div class="flex items-center gap-3">
-                <span class="flex items-center gap-1 text-xs">
-                  <i class="fas fa-users" :class="r.active_users > 0 ? 'text-green-400' : 'text-gray-600'"></i>
-                  <span :class="r.active_users > 0 ? 'text-green-400' : 'text-gray-600'">{{ r.active_users || 0 }}</span>
+                <span class="flex items-center gap-1 text-xs" :title="`${r.customer_count || 0} customer accounts; ${r.active_bundle_users || 0} with active bundles`">
+                  <i class="fas fa-users" :class="r.customer_count > 0 ? 'text-green-400' : 'text-gray-600'"></i>
+                  <span :class="r.customer_count > 0 ? 'text-green-400' : 'text-gray-600'">{{ r.customer_count || 0 }}</span>
                 </span>
                 <span v-if="r.wireguard_ip" class="text-xs font-mono" style="color: #6b7280">{{ r.wireguard_ip }}</span>
               </div>
@@ -433,15 +433,20 @@
           <button @click="detailRouter = null" class="p-2 rounded-lg" style="color: #6b7280"><i class="fas fa-times text-lg hover:text-white"></i></button>
         </div>
         <div class="p-5 space-y-4">
-          <div class="grid grid-cols-4 gap-3">
-            <div class="p-3 rounded-xl text-center" style="background: rgba(59,130,246,0.08)">
-              <p class="text-xl font-bold text-white">{{ detailRouter.active_users || 0 }}</p><p class="text-xs" style="color: #6b7280">Users</p>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div class="p-3 rounded-xl text-center" style="background: rgba(59,130,246,0.08)" :title="`${detailRouter.active_bundle_users || 0} with active bundles`">
+              <p class="text-xl font-bold text-white">{{ detailRouter.customer_count ?? detailRouter.total_users ?? 0 }}</p><p class="text-xs" style="color: #6b7280">Customers</p>
+              <p class="text-[10px]" style="color:#6b7280">{{ detailRouter.active_bundle_users || 0 }} active bundles</p>
+            </div>
+            <div class="p-3 rounded-xl text-center" style="background: rgba(34,197,94,0.08)">
+              <p class="text-xl font-bold text-white">{{ detailRouter.apiReachable ? (detailRouter.active_users || 0) : '—' }}</p><p class="text-xs" style="color: #6b7280">Router sessions</p>
+              <p v-if="!detailRouter.apiReachable" class="text-[10px]" style="color:#f59e0b">Router API unavailable</p>
             </div>
             <div class="p-3 rounded-xl text-center" style="background: rgba(16,185,129,0.08)">
-              <p class="text-xl font-bold text-white">{{ detailRouter.cpu_load || 0 }}%</p><p class="text-xs" style="color: #6b7280">CPU</p>
+              <p class="text-xl font-bold text-white">{{ detailRouter.apiReachable ? `${detailRouter.cpu_load || 0}%` : '—' }}</p><p class="text-xs" style="color: #6b7280">CPU</p>
             </div>
             <div class="p-3 rounded-xl text-center" style="background: rgba(139,92,246,0.08)">
-              <p class="text-xl font-bold text-white">{{ detailRouter.memory_usage || 0 }}%</p><p class="text-xs" style="color: #6b7280">Memory</p>
+              <p class="text-xl font-bold text-white">{{ detailRouter.apiReachable ? `${detailRouter.memory_usage || 0}%` : '—' }}</p><p class="text-xs" style="color: #6b7280">Memory</p>
             </div>
             <div class="p-3 rounded-xl text-center" style="background: rgba(245,158,11,0.08)">
               <p class="text-xl font-bold text-white">{{ detailRouter.wireguard_ip || '---' }}</p><p class="text-xs" style="color: #6b7280">WG IP</p>
@@ -639,9 +644,11 @@ async function loadRouters() {
       return current ? {
         ...router,
         status: current.isOnline ? 'online' : 'offline',
-        active_users: Number(current.activeUsers || 0),
-        cpu_load: Number(current.cpu || 0),
-        memory_usage: Number(current.memory || 0),
+        apiReachable: !!current.apiReachable,
+        total_users: Number(current.totalUsers ?? router.customer_count ?? 0),
+        active_users: current.apiReachable ? Number(current.activeUsers || 0) : null,
+        cpu_load: current.apiReachable ? Number(current.cpu || 0) : null,
+        memory_usage: current.apiReachable ? Number(current.memory || 0) : null,
         live_checked_at: new Date().toISOString(),
       } : router
     })

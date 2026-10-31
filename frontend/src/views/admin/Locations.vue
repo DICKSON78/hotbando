@@ -46,7 +46,7 @@
       <div class="stat-card">
         <div class="flex items-center justify-between">
           <div>
-            <p class="stat-label">Total Users</p>
+            <p class="stat-label">Customers</p>
             <p class="stat-value" style="color: #a78bfa">{{ totalUsers }}</p>
           </div>
           <div class="stat-icon" style="background: rgba(139,92,246,0.1); color: #a78bfa"><i class="fas fa-users"></i></div>
@@ -148,7 +148,7 @@
                   <p class="text-xs font-medium text-white truncate">{{ r.router_name || r.router_id }}</p>
                   <p class="text-xs truncate" style="color: #6b7280">{{ r.location_name || r.host }}</p>
                 </div>
-                <span class="text-xs" style="color: #6b7280">{{ r.active_users || 0 }}u</span>
+                <span class="text-xs" style="color: #6b7280">{{ r.customer_count || r.total_users || 0 }}u</span>
               </div>
               <div v-if="!routersWithCoords.length" class="text-center py-4" style="color: #6b7280">
                 <p class="text-xs">No routers with coordinates</p>
@@ -260,23 +260,23 @@
                   <p class="text-xs" style="color: #6b7280">CPU</p>
                   <div class="flex items-center gap-1 mt-0.5">
                     <div class="flex-1 h-1 rounded-full" style="background: #1e1e2a">
-                      <div class="h-full rounded-full" :style="{ width: (r.cpu_load||0)+'%', background: (r.cpu_load||0)>80?'#f87171':'#60a5fa' }"></div>
+                      <div class="h-full rounded-full" :style="{ width: (r.apiReachable ? (r.cpu_load||0) : 0)+'%', background: (r.cpu_load||0)>80?'#f87171':'#60a5fa' }"></div>
                     </div>
-                    <span class="text-xs font-mono text-white">{{ r.cpu_load||0 }}%</span>
+                    <span class="text-xs font-mono text-white">{{ r.apiReachable ? `${r.cpu_load||0}%` : '—' }}</span>
                   </div>
                 </div>
                 <div class="p-1.5 rounded-lg" style="background: rgba(139,92,246,0.08)">
                   <p class="text-xs" style="color: #6b7280">Memory</p>
                   <div class="flex items-center gap-1 mt-0.5">
                     <div class="flex-1 h-1 rounded-full" style="background: #1e1e2a">
-                      <div class="h-full rounded-full" :style="{ width: (r.memory_usage||0)+'%', background: (r.memory_usage||0)>80?'#f87171':'#a78bfa' }"></div>
+                      <div class="h-full rounded-full" :style="{ width: (r.apiReachable ? (r.memory_usage||0) : 0)+'%', background: (r.memory_usage||0)>80?'#f87171':'#a78bfa' }"></div>
                     </div>
-                    <span class="text-xs font-mono text-white">{{ r.memory_usage||0 }}%</span>
+                    <span class="text-xs font-mono text-white">{{ r.apiReachable ? `${r.memory_usage||0}%` : '—' }}</span>
                   </div>
                 </div>
               </div>
               <div class="flex items-center justify-between pt-3" style="border-top: 1px solid var(--border)">
-                <span class="text-xs" style="color: #6b7280"><i class="fas fa-users mr-1"></i>{{ r.active_users || 0 }} users</span>
+                <span class="text-xs" style="color: #6b7280"><i class="fas fa-users mr-1"></i>{{ r.customer_count || r.total_users || 0 }} customers</span>
                 <div class="flex gap-1">
                   <button @click="flyToRouter(r); activeTab='map'" class="p-1.5 rounded-lg transition-colors" style="color: #6b7280" title="Show on map"><i class="fas fa-map-marked-alt hover:text-blue-400 text-xs"></i></button>
                   <button @click="remoteReboot(r)" class="p-1.5 rounded-lg transition-colors" style="color: #6b7280" title="Reboot"><i class="fas fa-sync-alt hover:text-yellow-400 text-xs"></i></button>
@@ -304,17 +304,21 @@
         <button @click="selectedRouter = null" class="p-1 rounded-lg" style="color: #6b7280"><i class="fas fa-times"></i></button>
       </div>
 
-      <div class="grid grid-cols-3 gap-2 mb-3">
+      <div class="grid grid-cols-4 gap-2 mb-3">
         <div class="p-2 rounded-lg text-center" style="background: rgba(59,130,246,0.08)">
-          <p class="text-lg font-bold text-white">{{ selectedRouter.active_users || 0 }}</p>
-          <p class="text-xs" style="color: #6b7280">Users</p>
+          <p class="text-lg font-bold text-white">{{ selectedRouter.customer_count ?? selectedRouter.total_users ?? 0 }}</p>
+          <p class="text-xs" style="color: #6b7280">Customers</p>
+        </div>
+        <div class="p-2 rounded-lg text-center" style="background: rgba(34,197,94,0.08)">
+          <p class="text-lg font-bold text-white">{{ selectedRouter.apiReachable ? (selectedRouter.active_users || 0) : '—' }}</p>
+          <p class="text-xs" style="color: #6b7280">Sessions</p>
         </div>
         <div class="p-2 rounded-lg text-center" style="background: rgba(16,185,129,0.08)">
-          <p class="text-lg font-bold text-white">{{ selectedRouter.cpu_load || 0 }}%</p>
+          <p class="text-lg font-bold text-white">{{ selectedRouter.apiReachable ? `${selectedRouter.cpu_load || 0}%` : '—' }}</p>
           <p class="text-xs" style="color: #6b7280">CPU</p>
         </div>
         <div class="p-2 rounded-lg text-center" style="background: rgba(139,92,246,0.08)">
-          <p class="text-lg font-bold text-white">{{ selectedRouter.memory_usage || 0 }}%</p>
+          <p class="text-lg font-bold text-white">{{ selectedRouter.apiReachable ? `${selectedRouter.memory_usage || 0}%` : '—' }}</p>
           <p class="text-xs" style="color: #6b7280">Memory</p>
         </div>
       </div>
@@ -476,7 +480,7 @@ const locationTypes = ['University', 'Hostel', 'Mall', 'Market', 'Office', 'Rest
 
 const routersOnline = computed(() => routers.value.filter(r => r.status === 'online').length)
 const routersOffline = computed(() => routers.value.filter(r => r.status !== 'online').length)
-const totalUsers = computed(() => routers.value.reduce((s, r) => s + (r.active_users || 0), 0))
+const totalUsers = computed(() => routers.value.reduce((s, r) => s + Number(r.customer_count || r.total_users || 0), 0))
 
 const routersWithCoords = computed(() => routers.value.filter(r => r.latitude && r.longitude))
 
@@ -551,9 +555,11 @@ async function loadRouters() {
       return current ? {
         ...router,
         status: current.isOnline ? 'online' : 'offline',
-        active_users: Number(current.activeUsers || 0),
-        cpu_load: Number(current.cpu || 0),
-        memory_usage: Number(current.memory || 0),
+        apiReachable: !!current.apiReachable,
+        total_users: Number(current.totalUsers ?? router.customer_count ?? 0),
+        active_users: current.apiReachable ? Number(current.activeUsers || 0) : null,
+        cpu_load: current.apiReachable ? Number(current.cpu || 0) : null,
+        memory_usage: current.apiReachable ? Number(current.memory || 0) : null,
         live_checked_at: live.timestamp || new Date().toISOString(),
       } : router
     })
@@ -631,7 +637,7 @@ function updateMarkers() {
     locations.value.forEach(loc => {
       if (!loc.latitude || !loc.longitude) return
       const routerCount = routersForLocation(loc.id).length
-      const liveUsers = routersForLocation(loc.id).reduce((sum, router) => sum + Number(router.active_users || 0), 0)
+      const customers = routersForLocation(loc.id).reduce((sum, router) => sum + Number(router.customer_count || router.total_users || 0), 0)
       if (Number(loc.coverage_radius_m) > 0) {
         L.circle([loc.latitude, loc.longitude], {
           radius: Number(loc.coverage_radius_m), color: '#3b82f6', weight: 1,
@@ -648,7 +654,7 @@ function updateMarkers() {
           <div style="font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:4px">${loc.name}</div>
           <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${loc.city || ''}, ${loc.region || ''}</div>
           <div style="font-size:12px;color:#3b82f6">Routers: ${routerCount} &bull; ${loc.location_type}</div>
-          <div style="font-size:12px;color:#6b7280">Branch: ${loc.branch_name || 'Unassigned'} &bull; Live active users: ${liveUsers}</div>
+          <div style="font-size:12px;color:#6b7280">Branch: ${loc.branch_name || 'Unassigned'} &bull; Customers: ${customers}</div>
           ${Number(loc.coverage_radius_m) > 0 ? `<div style="font-size:12px;color:#6b7280">Configured coverage estimate: ${Number(loc.coverage_radius_m)} m</div>` : '<div style="font-size:12px;color:#b45309">Coverage radius not configured</div>'}
         </div>
       `)
@@ -685,7 +691,7 @@ function updateMarkers() {
         <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${r.host}:${r.port || 8728}</div>
         <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${r.ssid || 'No SSID'}</div>
         <div style="font-size:12px;color:#6b7280;margin-bottom:4px">Branch: ${r.branch_name || r.location_branch_name || 'Unassigned'}</div>
-        <div style="font-size:12px;color:#FF7A30;margin-bottom:8px">Users: ${r.active_users || 0} &bull; ${r.status || 'offline'}</div>
+        <div style="font-size:12px;color:#FF7A30;margin-bottom:8px">Customers: ${r.total_users ?? r.customer_count ?? 0} &bull; Live sessions: ${r.apiReachable ? (r.active_users || 0) : 'unknown'} &bull; ${r.status || 'offline'}</div>
         <button onclick="window.__selectRouter && window.__selectRouter(${r.id})" style="width:100%;padding:6px 12px;background:#FF7A30;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Remote Control</button>
       </div>
     `, { maxWidth: 250 })

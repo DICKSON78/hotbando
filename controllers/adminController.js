@@ -1215,7 +1215,13 @@ async getAdViewsForAnalytics(req, res) {
   async getRouters(req, res) {
     try {
       const [routers] = await db.execute(`
-        SELECT m.*, l.name as location_name, l.city, b.name as branch_name
+        SELECT m.*,
+               COALESCE(l.name, m.location_name) as location_name,
+               COALESCE(l.city, m.location_city) as city,
+               COALESCE(l.region, m.location_region) as region,
+               b.name as branch_name,
+               (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id AND u.role = 'customer') as customer_count,
+               (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id AND u.role = 'customer' AND u.usage_until > NOW()) as active_bundle_users
         FROM mikrotiks m
         LEFT JOIN locations l ON m.location_id = l.id
         LEFT JOIN branches b ON b.id = l.branch_id
@@ -1346,6 +1352,7 @@ async getAdViewsForAnalytics(req, res) {
     try {
       const [routers] = await db.execute(`
         SELECT m.router_id, m.router_name, m.setup_status, m.wireguard_configured,
+               (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id AND u.role = 'customer') AS total_users,
                (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id
                  AND u.usage_until > NOW() AND u.role = 'customer') AS active_users
         FROM mikrotiks m
@@ -1362,10 +1369,12 @@ async getAdViewsForAnalytics(req, res) {
             routerId: router.router_id,
             routerName: router.router_name,
             isOnline,
-            activeUsers: health.status === 'online' ? (health.connectedUsers || 0) : (isOnline ? Number(router.active_users) || 0 : 0),
-            cpu: health.cpu || 0,
-            memory: health.memory || 0,
-            uptime: health.uptime || (tunnelOnline ? 'WireGuard connected' : 'N/A')
+            apiReachable: health.status === 'online',
+            totalUsers: Number(router.total_users) || 0,
+            activeUsers: health.status === 'online' ? (health.connectedUsers || 0) : null,
+            cpu: health.status === 'online' ? (health.cpu || 0) : null,
+            memory: health.status === 'online' ? (health.memory || 0) : null,
+            uptime: health.status === 'online' ? (health.uptime || 'N/A') : (tunnelOnline ? 'WireGuard connected' : 'N/A')
           };
         } catch (e) {
           const tunnelOnline = wgPeers.get(String(router.router_id))?.status === 'online';
@@ -1373,9 +1382,11 @@ async getAdViewsForAnalytics(req, res) {
             routerId: router.router_id,
             routerName: router.router_name,
             isOnline: tunnelOnline,
-            activeUsers: tunnelOnline ? Number(router.active_users) || 0 : 0,
-            cpu: 0,
-            memory: 0,
+            apiReachable: false,
+            totalUsers: Number(router.total_users) || 0,
+            activeUsers: null,
+            cpu: null,
+            memory: null,
             uptime: tunnelOnline ? 'WireGuard connected' : 'N/A'
           };
         }
