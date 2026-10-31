@@ -60,6 +60,7 @@ const routes = [
       { path: 'reports', name: 'reports', component: () => import('../views/admin/Reports.vue') },
       { path: 'users', name: 'users', component: () => import('../views/admin/Users.vue') },
       { path: 'routers', name: 'routers', component: () => import('../views/admin/Routers.vue') },
+      { path: 'router-fleet', name: 'router-fleet', component: () => import('../views/admin/RouterFleet.vue') },
       { path: 'locations', name: 'locations', component: () => import('../views/admin/Locations.vue') },
       { path: 'resellers', name: 'resellers', component: () => import('../views/admin/Resellers.vue') },
       { path: 'reseller-routers', name: 'reseller-routers', component: () => import('../views/admin/ResellerRouters.vue') },

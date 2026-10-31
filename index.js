@@ -4,12 +4,23 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const helmet = require('helmet');
 const db = require('./config/database');
 const { connectRedis } = require('./config/redis');
 const { securityHeaders, sanitizeBody, rateLimit, csrfProtection } = require('./middleware/security');
+const { setupCollectorTunnel } = require('./utils/collectorTunnel');
 
 const app = express();
+const httpServer = http.createServer(app);
+
+// Reverse WebSocket tunnel for remote router collectors (customer LAN).
+const collectorTunnel = setupCollectorTunnel(httpServer);
+
+// Router Fleet REST (remote auto-detect & MikroTik proxy via collectors).
+const routerFleetRoutes = require('./routes/routerFleet');
+routerFleetRoutes.setTunnel(collectorTunnel);
+app.use('/api/router-fleet', routerFleetRoutes);
 
 // Trust the first proxy hop (nginx in front). This makes req.ip the real
 // client IP so rate limiting/session tracking are per-user, not shared.
@@ -439,18 +450,19 @@ const PORT = process.env.PORT || 3000;
 
 // Connect Redis before starting server
 connectRedis().then(() => {
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
         const logger = require('./utils/logger');
         logger.info(`HotBando server started on http://localhost:${PORT}`);
         logger.info(`Hotspot: http://localhost:${PORT}/hotspot`);
         logger.info(`Admin: http://localhost:${PORT}/admin`);
+        logger.info(`Collector tunnel: ws://localhost:${PORT}/api/collector/ws`);
 
         // Start background scheduler for expired package disconnection
         const expiryScheduler = require('./utils/expiryScheduler');
         expiryScheduler.start(60000); // Check every 60 seconds
     });
 }).catch(() => {
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
         const logger = require('./utils/logger');
         logger.warn('Starting without Redis');
         logger.info(`HotBando server started on http://localhost:${PORT}`);
