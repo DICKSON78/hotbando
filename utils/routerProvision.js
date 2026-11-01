@@ -376,7 +376,20 @@ function generateBootstrapScript() {
     :error "HotBando import failed"
 }
 
-# --- Step 5: Cleanup ---
+# --- Step 5: Verification (auto-check everything) ---
+:put "--- Auto-Verifying configuration ---"
+:put "/interface wireguard:"
+/interface wireguard print detail where name="wg-hotbando"
+:put "/ip address on tunnel:"
+/ip address print where interface="wg-hotbando"
+:put "/heartbeat scheduler:"
+/system scheduler print where name="hotbando-heartbeat"
+:put "/poll scheduler:"
+/system scheduler print where name="hotbando-poll"
+:put "/ping server:"
+/ping ${SERVER_PUBLIC_HOST} count=3
+
+# --- Step 6: Cleanup ---
 :do { /file remove "hotbando-provision.rsc" } on-error={}
 
 :put "============================================="
