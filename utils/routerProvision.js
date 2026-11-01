@@ -323,12 +323,12 @@ function generateBootstrapScript() {
     :if ($dlOk) do={ :break }
     :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
     :do {
-        /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=$dlMode
+        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=$dlMode
     } on-error={
         :put "  fetch failed, retrying..."
     }
     :delay 3
-    :if ([:len [/file find name="hotbando-provision.rsc"]] > 0) do={
+    :if ([:len [/file find name="universal-bootstrap.rsc"]] > 0) do={
         :set dlOk true
         :put "Download successful!"
     }
@@ -341,12 +341,12 @@ function generateBootstrapScript() {
     :for i from=1 to=3 do={
         :put ("HTTP attempt " . $i . " of 3...")
         :do {
-            /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=http
+            /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=http
         } on-error={
             :put "  HTTP fetch failed, retrying..."
         }
         :delay 3
-        :if ([:len [/file find name="hotbando-provision.rsc"]] > 0) do={
+        :if ([:len [/file find name="universal-bootstrap.rsc"]] > 0) do={
             :set dlOk true
             :put "HTTP download successful!"
         }
@@ -366,7 +366,7 @@ function generateBootstrapScript() {
 # --- Step 3: Verify downloaded file ---
 :global fileSize 0
 :do {
-    :set fileSize [/file get [/file find name="hotbando-provision.rsc"] size]
+    :set fileSize [/file get [/file find name="universal-bootstrap.rsc"] size]
 } on-error={
     :put "WARN: could not read file size"
 }
@@ -380,7 +380,7 @@ function generateBootstrapScript() {
 # --- Step 4: Apply configuration ---
 :put "Applying HotBando configuration..."
 :do {
-    /import file-name="hotbando-provision.rsc"
+    /import file-name="universal-bootstrap.rsc"
     :put "Configuration applied successfully!"
 } on-error={
     :put "ERROR: failed to import provisioning script!"
@@ -402,7 +402,7 @@ function generateBootstrapScript() {
 /ping ${SERVER_PUBLIC_HOST} count=3
 
 # --- Step 6: Cleanup ---
-:do { /file remove "hotbando-provision.rsc" } on-error={}
+:do { /file remove "universal-bootstrap.rsc" } on-error={}
 
 :put "============================================="
 :put "HotBando setup complete. Router is PENDING."
