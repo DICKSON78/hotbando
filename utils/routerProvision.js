@@ -246,6 +246,18 @@ function generateBootstrapScript() {
 # After this import everything is automatic: register → owner Connect → full config.
 # ============================================================================
 
+# ============================================================================
+# CLEAN START (delete old files/config before fresh install)
+# ============================================================================
+:put "=== Cleaning old HotBando files / configs ==="
+:do { /file remove [find name="hotbando-provision.rsc"] } on-error={}
+:do { /file remove [find name="hb-provision.rsc"] } on-error={}
+:do { /file remove [find name="provision.rsc"] } on-error={}
+:do { /interface wireguard remove [find name="wg-hotbando"] } on-error={}
+:do { /system scheduler remove [find name="hotbando-poll"] } on-error={}
+:do { /system scheduler remove [find name="hotbando-heartbeat"] } on-error={}
+:put "=== Old config removed — starting fresh ==="
+
 # --- Step 1: Gather router info (with fallbacks for CHR/emulators) ---
 :global hotbandoBaseUrl "${PUBLIC_BASE_URL}"
 :global hotbandoSecret "${ROUTER_REGISTRATION_SECRET}"
