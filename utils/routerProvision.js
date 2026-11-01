@@ -311,7 +311,7 @@ function generateBootstrapScript() {
     :if ($dlOk) do={ :break }
     :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
     :do {
-        /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=$dlMode output=none
+        /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=$dlMode
     } on-error={
         :put "  fetch failed, retrying..."
     }
@@ -329,7 +329,7 @@ function generateBootstrapScript() {
     :for i from=1 to=3 do={
         :put ("HTTP attempt " . $i . " of 3...")
         :do {
-            /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=http output=none
+            /tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=http
         } on-error={
             :put "  HTTP fetch failed, retrying..."
         }

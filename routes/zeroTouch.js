@@ -17,7 +17,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { registerRouter, provisionRouter, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
+const { registerRouter, provisionRouter, generateBootstrapScript: genBootScript, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 
@@ -73,7 +73,7 @@ router.get('/register', authRegister, handleRegister);
 // Router fetches this once on first boot: /tool fetch url=.../bootstrap dst-path=bootstrap.rsc
 router.get('/bootstrap', async (req, res) => {
     try {
-        const script = generateBootstrapScript();
+        const script = genBootScript();
         res.set('Content-Type', 'text/plain; charset=utf-8');
         res.set('X-HotBando-Script', 'bootstrap');
         res.send(script);
