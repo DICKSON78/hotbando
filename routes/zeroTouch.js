@@ -69,6 +69,20 @@ async function handleRegister(req, res) {
 router.post('/register', authRegister, handleRegister);
 router.get('/register', authRegister, handleRegister);
 
+// ── GET /bootstrap — public bootstrap script (no auth, router not yet registered) ──
+// Router fetches this once on first boot: /tool fetch url=.../bootstrap dst-path=bootstrap.rsc
+router.get('/bootstrap', async (req, res) => {
+    try {
+        const script = generateBootstrapScript();
+        res.set('Content-Type', 'text/plain; charset=utf-8');
+        res.set('X-HotBando-Script', 'bootstrap');
+        res.send(script);
+    } catch (error) {
+        logger.error('bootstrap error:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // ── POST /register-json — same but returns structured payload (for debugging) ──
 router.post('/register-json', authRegister, async (req, res) => {
     try {
