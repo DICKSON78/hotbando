@@ -431,7 +431,8 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
   :local size 0
   /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE}
   :delay 2
-  :set size [/file get [$tmp] size]
+  :local fileId [/file find where name=$tmp]
+  :if ([:len $fileId] > 0) do={ :set size [/file get $fileId size] }
   :if ($size > 300) do={
     :put "HotBando: pulling approved configuration (${routerID})"
     :log info ("HotBando pulling approved configuration for " . $hbRouterId)
@@ -444,7 +445,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-header-field="Content-Type: application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -768,7 +769,7 @@ ${serverWalledGardenRules()}
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-header-field="Content-Type: application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------
