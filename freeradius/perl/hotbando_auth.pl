@@ -178,7 +178,7 @@ sub post_auth {
     } elsif ($seconds_left <= 0 && $free_bytes <= 0 && $paid_bytes <= 0) {
         # User is registered but has no active time/data. Give a short
         # session (5 min) so they can reach the portal to buy more internet.
-        $RAD_REPLY{'Session-Timeout'} = 300;
+        $RAD_REPLY{'Session-Timeout'} = 120;
     }
 
     # A capped paid package gets a RouterOS byte limit. When paid entitlement
