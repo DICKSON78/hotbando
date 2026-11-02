@@ -48,26 +48,51 @@ class MikrotikService {
             const dbWhere = isNumericId ? 'id = ?' : 'router_id = ?';
             const dbValue = isNumericId ? parseInt(routerID) : routerID;
 
-            // Create new connection (works via WireGuard if host is WG IP)
-            const conn = new RouterOSAPI({
-                host: router.host,
-                user: router.user,
-                password: routerPassword,
-                port: router.port || 8728,
-                timeout: router.timeout || 10
-            });
+            // Try passwords: DB password first, then 'admin' (provisioning default),
+            // then empty (default RouterOS)
+            const passwordsToTry = [routerPassword];
+            if (routerPassword !== 'admin') passwordsToTry.push('admin');
+            if (routerPassword !== '') passwordsToTry.push('');
 
-            await conn.connect();
-            this.connections.set(routerID, conn);
+            let lastError = null;
+            for (const pwd of passwordsToTry) {
+                try {
+                    // Create new connection (works via WireGuard if host is WG IP)
+                    const conn = new RouterOSAPI({
+                        host: router.host,
+                        user: router.user,
+                        password: pwd,
+                        port: router.port || 8728,
+                        timeout: router.timeout || 10
+                    });
 
-            // Update router status
-            await db.execute(
-                `UPDATE mikrotiks SET status = "online", last_seen = NOW() WHERE ${dbWhere}`,
-                [dbValue]
-            );
+                    await conn.connect();
+                    this.connections.set(routerID, conn);
 
-            console.log(`✅ Connected to router ${router.router_name} (${router.host})`);
-            return conn;
+                    // If a different password worked, update DB to match
+                    if (pwd !== routerPassword) {
+                        const { encrypt } = require('./encryption');
+                        await db.execute(
+                            `UPDATE mikrotiks SET password = ? WHERE ${dbWhere}`,
+                            [encrypt(pwd), dbValue]
+                        );
+                        console.log(`⚠️ Updated router ${router.router_name} password to match router`);
+                    }
+
+                    // Update router status
+                    await db.execute(
+                        `UPDATE mikrotiks SET status = "online", last_seen = NOW() WHERE ${dbWhere}`,
+                        [dbValue]
+                    );
+
+                    console.log(`✅ Connected to router ${router.router_name} (${router.host})`);
+                    return conn;
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            throw lastError;
         } catch (error) {
             console.error(`❌ Router connection error for ${routerID}:`, error.message);
 
