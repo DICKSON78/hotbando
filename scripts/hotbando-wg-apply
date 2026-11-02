@@ -127,6 +127,8 @@ PEERS=$(wg show wg0 peers 2>/dev/null | wc -l)
 ACTIVE=$(wg show wg0 latest-handshakes 2>/dev/null | awk '$2 > 0' | wc -l)
 HANDSHAKES=$(wg show wg0 latest-handshakes 2>/dev/null \
     | awk 'BEGIN { sep = "" } { printf "%s\"%s\":%s", sep, $1, $2; sep = "," }')
+ALLOWED_JSON=$(wg show wg0 allowed-ips 2>/dev/null \
+    | awk -F'[ \t]+' 'BEGIN { sep = "" } { for (i = 2; i <= NF; i++) { split($i, a, "/"); if (a[1] != "") { printf "%s\"%s\"", sep, a[1]; sep = "," } } }')
 
-printf '{"running":%s,"wgPeers":%d,"activePeers":%d,"peerHandshakes":{%s},"updatedAt":%d}\n' \
-    "$RUNNING" "$PEERS" "$ACTIVE" "$HANDSHAKES" "$(date +%s)" > "$STATUS"
+printf '{"running":%s,"wgPeers":%d,"activePeers":%d,"peerHandshakes":{%s},"allowedIps":[%s],"updatedAt":%d}\n' \
+    "$RUNNING" "$PEERS" "$ACTIVE" "$HANDSHAKES" "$ALLOWED_JSON" "$(date +%s)" > "$STATUS"

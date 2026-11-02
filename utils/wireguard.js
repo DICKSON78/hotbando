@@ -120,6 +120,15 @@ class WireGuardService {
                 }
             } catch (e) { /* peers dir may not exist yet */ }
 
+            // Include every live host peer, including static peers that were
+            // configured before the app existed (e.g. 10.7.0.2 / 10.7.0.4).
+            try {
+                const status = JSON.parse(fs.readFileSync(WG_STATUS_FILE, 'utf8'));
+                for (const ip of (status.allowedIps || [])) {
+                    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) usedIps.add(ip);
+                }
+            } catch (e) { /* status file may not exist yet */ }
+
             // Scan the full /16 (10.7.0.2 .. 10.7.255.254) for scale
             for (let b = 0; b <= 255; b++) {
                 for (let i = (b === 0 ? 2 : 1); i <= 254; i++) {
