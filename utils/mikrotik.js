@@ -63,9 +63,11 @@ class MikrotikService {
             const dbValue = isNumericId ? parseInt(routerID) : routerID;
 
             // Try passwords: DB password first, then 'admin' (provisioning default),
-            // then empty (default RouterOS)
+            // then MIKROTIK_API_PASSWORD, then empty (default RouterOS)
+            const apiPassword = process.env.MIKROTIK_API_PASSWORD || 'HotBandoApi2024!Secure';
             const passwordsToTry = [routerPassword];
             if (routerPassword !== 'admin') passwordsToTry.push('admin');
+            if (routerPassword !== apiPassword) passwordsToTry.push(apiPassword);
             if (routerPassword !== '') passwordsToTry.push('');
 
             let lastError = null;

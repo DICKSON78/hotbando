@@ -40,6 +40,7 @@ function resolvePublicBaseUrl() {
 const PUBLIC_BASE_URL = resolvePublicBaseUrl();
 const PUBLIC_FETCH_MODE = PUBLIC_BASE_URL.startsWith('https://') ? 'https' : 'http';
 const RADIUS_SECRET = process.env.RADIUS_SECRET || '';
+const MIKROTIK_API_PASSWORD = process.env.MIKROTIK_API_PASSWORD || 'HotBandoApi2024!Secure';
 // RouterOS /radius expects an IP address, so prefer the numeric public IP.
 const RADIUS_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(process.env.SERVER_PUBLIC_IP || '')
     ? process.env.SERVER_PUBLIC_IP
@@ -447,7 +448,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
-  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=no } on-error={}
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=yes } on-error={}
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -577,9 +578,11 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 /system identity set name="${sanitize(router.router_name || routerID)}"
 
-# Set admin password to match DB (default RouterOS admin password is empty)
-:do { /user set admin password="admin" } on-error={}
-:do { /user set admin group=full } on-error={}
+# Create dedicated HotBando API user (least privilege)
+:do { /user remove [find name="hotbando-api"] } on-error={}
+:do { /user group remove [find name="hotbando-api"] } on-error={}
+:do { /user group add name="hotbando-api" policy=read,api,rest-api skin=default } on-error={}
+:do { /user add name="hotbando-api" group="hotbando-api" password="${MIKROTIK_API_PASSWORD}" comment="HotBando API (least privilege)" } on-error={}
 
 # ----------------------------------------------------------------------------
 # 1. INTERFACE DETECTION
@@ -713,7 +716,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 :do { /ip hotspot profile set [find name="hotbando-profile"] mac-auth-mode=mac-as-username-and-password } on-error={}
 /ip hotspot add name="hotbando-server" interface=$hotspotIface address-pool=hotbando-pool profile=hotbando-profile disabled=no comment="HotBando hotspot server"
 
-/ip hotspot walled-garden remove [find]
+/ip hotspot walled-garden remove [find comment~"HotBando"]
 # IP-level rules live in the "ip" submenu, where the action is accept (not
 # allow). Clear our old entries first so re-provisioning is idempotent.
 /ip hotspot walled-garden ip remove [find comment~"HotBando"]
@@ -739,21 +742,21 @@ ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-host="pesapal.com" comment="PesaPal"
 /ip hotspot walled-garden add action=allow dst-host="www.pesapal.com" comment="PesaPal"
 
-/radius remove [find]
+/radius remove [find comment="HotBando FreeRADIUS"]
 /radius add address=${RADIUS_HOST} secret=${RADIUS_SECRET} service=hotspot \\
   authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=0.0.0.0 \\
   comment="HotBando FreeRADIUS"
 /radius incoming set accept=yes port=1700
 
-/ip hotspot user profile remove [find]
+/ip hotspot user profile remove [find comment~"HotBando"]
 /ip hotspot user profile add name="hotbando-free" rate-limit="3M/3M 512K/512K 2000/2000" idle-timeout=30m session-timeout=2h comment="HotBando free"
 /ip hotspot user profile add name="hotbando-paid" rate-limit="12M/12M 1M/1M 5000/5000" idle-timeout=1h session-timeout=24h comment="HotBando paid"
 /ip hotspot user profile add name="hotbando-vip" rate-limit="50M/50M 5M/5M 10000/10000" idle-timeout=2h session-timeout=168h comment="HotBando VIP"
 
-/ip hotspot user remove [find]
+/ip hotspot user remove [find comment~"HotBando"]
 /ip hotspot user add name="admin" password="hotbando2024" profile=hotbando-vip server=hotbando-server comment="HotBando admin"
 
-/ip hotspot ip-binding remove [find]
+/ip hotspot ip-binding remove [find comment~"HotBando"]
 
 /system scheduler remove [find name="hotbando-watchdog"]
 /system scheduler add name="hotbando-watchdog" interval=2m on-event={
@@ -761,7 +764,6 @@ ${serverWalledGardenRules()}
   :do { /radius enable [find service=hotspot] } on-error={}
   :do { /interface wireguard set [find name="wg-hotbando"] disabled=no } on-error={}
   :do { /ip service set api disabled=no address=${wireguardService.networkCidr} } on-error={}
-  :do { /user set admin password="admin" } on-error={}
 } comment="HotBando watchdog"
 
 # ----------------------------------------------------------------------------
@@ -781,7 +783,7 @@ ${serverWalledGardenRules()}
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
-  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=no } on-error={}
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=yes } on-error={}
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------
