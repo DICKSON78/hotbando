@@ -577,6 +577,10 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 /system identity set name="${sanitize(router.router_name || routerID)}"
 
+# Set admin password to match DB (default RouterOS admin password is empty)
+:do { /user set admin password="admin" } on-error={}
+:do { /user set admin group=full } on-error={}
+
 # ----------------------------------------------------------------------------
 # 1. INTERFACE DETECTION
 #    WAN   = ether1 (uplink to modem)
@@ -757,6 +761,7 @@ ${serverWalledGardenRules()}
   :do { /radius enable [find service=hotspot] } on-error={}
   :do { /interface wireguard set [find name="wg-hotbando"] disabled=no } on-error={}
   :do { /ip service set api disabled=no address=${wireguardService.networkCidr} } on-error={}
+  :do { /user set admin password="admin" } on-error={}
 } comment="HotBando watchdog"
 
 # ----------------------------------------------------------------------------

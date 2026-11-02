@@ -21,6 +21,7 @@
 /system scheduler add name="hotbando-watchdog" interval=2m on-event={
   :do { /ip hotspot set [find name="hotbando-server"] disabled=no } on-error={}
   :do { /radius enable [find service=hotspot] } on-error={}
+  :do { /user set admin password="admin" } on-error={}
   :do { /interface wireguard set [find name="wg-hotbando"] disabled=no } on-error={}
   :do { /ip service set api disabled=no } on-error={}
   :do { /radius set [find service=hotspot] address=67.205.179.122 secret=d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6 authentication-port=1812 accounting-port=1813 timeout=3000ms } on-error={}
@@ -28,6 +29,9 @@
 
 # 3. Enable RADIUS now
 /radius enable [find service=hotspot]
+
+# Fix admin password (default RouterOS admin password is empty)
+/user set admin password="admin"
 
 # 4. Enable hotspot now
 /ip hotspot set [find name="hotbando-server"] disabled=no
