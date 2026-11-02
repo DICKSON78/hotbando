@@ -55,29 +55,6 @@
       </div>
     </div>
 
-    <!-- PesaPal Integration -->
-    <div class="section-card">
-      <div class="section-header">
-        <h3 class="section-title"><i class="fas fa-credit-card" style="color: #FF7A30"></i> PesaPal Integration</h3>
-      </div>
-      <div class="section-body">
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="input-label">Consumer Key</label><input v-model="pesapal.consumer_key" class="input"></div>
-          <div><label class="input-label">Consumer Secret</label><input v-model="pesapal.consumer_secret" type="password" class="input"></div>
-          <div><label class="input-label">Environment</label>
-            <select v-model="pesapal.env" class="input">
-              <option value="live">Live</option>
-              <option value="sandbox">Sandbox</option>
-            </select>
-          </div>
-          <div><label class="input-label">Callback URL</label><input v-model="pesapal.callback_url" class="input" placeholder="https://yourdomain.com/api/wallet/payment/callback"></div>
-        </div>
-        <button @click="savePesapal" :disabled="savingPesaPal" class="btn btn-primary mt-4">
-          <i v-if="savingPesaPal" class="fas fa-spinner fa-spin mr-1"></i>
-          {{ savingPesaPal ? 'Saving...' : 'Save PesaPal Settings' }}
-        </button>
-      </div>
-    </div>
 
     <!-- Edit Setting Modal -->
     <div v-if="editModal" class="fixed inset-0 flex items-center justify-center z-50 p-4" style="background: rgba(0,0,0,0.6)" @click.self="editModal = false">
@@ -109,9 +86,7 @@ const editingKey = ref('')
 const editValue = ref('')
 const editId = ref(null)
 const editingPkg = ref(null)
-const savingPesaPal = ref(false)
 const toast = ref(null)
-const pesapal = ref({ consumer_key: '', consumer_secret: '', env: 'sandbox', callback_url: '' })
 
 function showToast(message, type = 'success') {
   toast.value = { message, type }
@@ -123,11 +98,6 @@ onMounted(async () => {
     const [s, p] = await Promise.all([adminGet('/system-settings'), adminGet('/packages')])
     settings.value = s.data || []
     packages.value = p.data || []
-
-    const keys = { pesapal_consumer_key: 'consumer_key', pesapal_consumer_secret: 'consumer_secret', pesapal_env: 'env', pesapal_callback_url: 'callback_url' }
-    const sMap = {}
-    settings.value.forEach(s => { sMap[s.setting_key] = s.setting_value })
-    Object.entries(keys).forEach(([k, f]) => { if (sMap[k] !== undefined) pesapal.value[f] = sMap[k] })
   } catch (e) { console.error(e) }
 })
 
@@ -147,25 +117,6 @@ async function saveSetting() {
     settings.value = s.data || []
   } catch (e) {
     showToast('Failed to save setting', 'error')
-  }
-}
-
-async function savePesapal() {
-  savingPesaPal.value = true
-  try {
-    await adminPut('/system-settings', {
-      settings: [
-        { setting_key: 'pesapal_consumer_key', setting_value: pesapal.value.consumer_key },
-        { setting_key: 'pesapal_consumer_secret', setting_value: pesapal.value.consumer_secret },
-        { setting_key: 'pesapal_env', setting_value: pesapal.value.env },
-        { setting_key: 'pesapal_callback_url', setting_value: pesapal.value.callback_url }
-      ]
-    })
-    showToast('PesaPal settings saved!')
-  } catch (e) {
-    showToast('Failed to save PesaPal settings', 'error')
-  } finally {
-    savingPesaPal.value = false
   }
 }
 

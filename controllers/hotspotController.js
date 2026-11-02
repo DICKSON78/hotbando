@@ -1497,7 +1497,7 @@ const hotspotController = {
             if (verifiedPayments.length === 0) {
                 // No unclaimed payment — maybe the webhook already activated it.
                 const [done] = await db.execute(
-                    'SELECT id FROM payments WHERE user_id = ? AND package_id = ? AND status = "completed" AND activated = 1 AND payment_method IN ("clickpesa","voucher","pesapal") AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE) LIMIT 1',
+                    'SELECT id FROM payments WHERE user_id = ? AND package_id = ? AND status = "completed" AND activated = 1 AND payment_method IN ("clickpesa","voucher") AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE) LIMIT 1',
                     [user.id, package_id]
                 );
                 if (done.length > 0) {

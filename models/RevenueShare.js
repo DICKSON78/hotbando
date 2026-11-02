@@ -75,24 +75,13 @@ class RevenueShare extends BaseModel {
                    AND COALESCE(m.location_id, customer.location_id) = ?`,
                 [startDate, endDate, locationId]
             );
-            const [pesapalResult] = await connection.query(
-                `SELECT COALESCE(SUM(pr.amount), 0) AS total_revenue, COUNT(*) AS total_completions
-                 FROM payment_requests pr
-                 LEFT JOIN users customer ON customer.id = pr.user_id
-                 LEFT JOIN mikrotiks m ON m.router_id = JSON_UNQUOTE(JSON_EXTRACT(pr.callback_data, '$.router_id'))
-                 WHERE pr.payment_method = 'pesapal' AND pr.status = 'completed'
-                   AND pr.completed_at BETWEEN ? AND ?
-                   AND COALESCE(m.location_id, customer.location_id) = ?`,
-                [startDate, endDate, locationId]
-            );
-
             const campaignRevenue = includeCampaigns ? Number(campaignResult[0].total_revenue || 0) : 0;
             const subscriptionRevenue = includeSubscriptions
-                ? Number(clickpesaResult[0].total_revenue || 0) + Number(pesapalResult[0].total_revenue || 0)
+                ? Number(clickpesaResult[0].total_revenue || 0)
                 : 0;
             const totalRevenue = campaignRevenue + subscriptionRevenue;
             const totalCompletions = (includeCampaigns ? Number(campaignResult[0].total_completions || 0) : 0)
-                + (includeSubscriptions ? Number(clickpesaResult[0].total_completions || 0) + Number(pesapalResult[0].total_completions || 0) : 0);
+                + (includeSubscriptions ? Number(clickpesaResult[0].total_completions || 0) : 0);
 
             if (totalRevenue === 0) {
                 return {

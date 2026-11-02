@@ -422,20 +422,14 @@ router.get('/revenue', async (req, res) => {
     const { from, to } = req.query;
 
     const clickParams = [];
-    const pesapalParams = [];
     let clickWhere = "WHERE ct.status IN ('SUCCESS','SETTLED')";
-    let pesapalWhere = "WHERE pr.status = 'completed' AND pr.payment_method = 'pesapal'";
     if (from) {
       clickWhere += ' AND ct.created_at >= ?';
       clickParams.push(from + ' 00:00:00');
-      pesapalWhere += ' AND COALESCE(pr.completed_at, pr.created_at) >= ?';
-      pesapalParams.push(from + ' 00:00:00');
     }
     if (to) {
       clickWhere += ' AND ct.created_at <= ?';
       clickParams.push(to + ' 23:59:59');
-      pesapalWhere += ' AND COALESCE(pr.completed_at, pr.created_at) <= ?';
-      pesapalParams.push(to + ' 23:59:59');
     }
 
     const [clickTransactions] = await db.execute(
@@ -446,85 +440,39 @@ router.get('/revenue', async (req, res) => {
        ORDER BY ct.created_at DESC LIMIT 200`, clickParams
     );
 
-    const [pesapalTransactions] = await db.execute(
-      `SELECT pr.id, pr.reference_number, pr.amount, pr.created_at, pr.completed_at, pr.callback_data,
-              u.name AS user_name, u.phone_number
-       FROM payment_requests pr
-       LEFT JOIN users u ON pr.user_id = u.id
-       ${pesapalWhere}
-       ORDER BY COALESCE(pr.completed_at, pr.created_at) DESC LIMIT 200`, pesapalParams
-    );
-
-    const pesapalRows = pesapalTransactions.map((pr) => {
-      let data = {};
-      try {
-        data = typeof pr.callback_data === 'string' ? JSON.parse(pr.callback_data) : (pr.callback_data || {});
-      } catch (_) { data = {}; }
-      const purpose = data.type === 'wallet_topup'
-        ? 'wallet_topup'
-        : data.gift
-          ? 'gift_purchase'
-          : 'package_purchase';
-      return {
-        id: `pesapal-${pr.id}`,
-        order_reference: pr.reference_number,
-        user_name: pr.user_name,
-        phone: pr.phone_number,
-        purpose,
-        amount: pr.amount,
-        channel: 'pesapal',
-        status: 'SUCCESS',
-        created_at: pr.completed_at || pr.created_at,
-      };
-    });
-
-    const transactions = [
-      ...clickTransactions.map((row) => ({ ...row, phone: row.phone || row.phone_number, channel: row.channel || 'clickpesa' })),
-      ...pesapalRows,
-    ]
+    const transactions = clickTransactions.map((row) => ({ ...row, phone: row.phone || row.phone_number, channel: row.channel || 'clickpesa' }))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 200);
 
     const [clickTotal] = await db.execute(
       `SELECT COALESCE(SUM(ct.amount),0) AS totalRevenue FROM clickpesa_transactions ct ${clickWhere}`, clickParams
     );
-    const [pesapalTotal] = await db.execute(
-      `SELECT COALESCE(SUM(pr.amount),0) AS totalRevenue FROM payment_requests pr ${pesapalWhere}`, pesapalParams
-    );
-    const totalRevenue = Number(clickTotal[0]?.totalRevenue || 0) + Number(pesapalTotal[0]?.totalRevenue || 0);
+    const totalRevenue = Number(clickTotal[0]?.totalRevenue || 0);
 
     const todayClickWhere = clickWhere + ' AND DATE(ct.created_at) = CURDATE()';
-    const todayPesapalWhere = pesapalWhere + ' AND DATE(COALESCE(pr.completed_at, pr.created_at)) = CURDATE()';
     const [clickToday] = await db.execute(
       `SELECT COALESCE(SUM(ct.amount),0) AS todayRevenue, COUNT(*) AS totalOrders FROM clickpesa_transactions ct ${todayClickWhere}`, clickParams
-    );
-    const [pesapalToday] = await db.execute(
-      `SELECT COALESCE(SUM(pr.amount),0) AS todayRevenue, COUNT(*) AS totalOrders FROM payment_requests pr ${todayPesapalWhere}`, pesapalParams
     );
 
     const [vouchersAgg] = await db.execute(
       `SELECT COUNT(*) AS vouchersSold, COALESCE(SUM(price),0) AS vouchersRevenue FROM vouchers WHERE is_used = 1 AND used_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`
     );
 
-    // Chart data: last 7 days, both gateways
+    // Chart data: last 7 days
     const [chartRows] = await db.execute(
       `SELECT day, COALESCE(SUM(total),0) AS total FROM (
          SELECT DATE(ct.created_at) AS day, ct.amount AS total
          FROM clickpesa_transactions ct
          ${clickWhere} AND ct.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-         UNION ALL
-         SELECT DATE(COALESCE(pr.completed_at, pr.created_at)) AS day, pr.amount AS total
-         FROM payment_requests pr
-         ${pesapalWhere} AND COALESCE(pr.completed_at, pr.created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-       ) x GROUP BY day ORDER BY day`, [...clickParams, ...pesapalParams]
+       ) x GROUP BY day ORDER BY day`, clickParams
     );
 
     res.json({
       success: true,
       transactions,
       totalRevenue,
-      todayRevenue: Number(clickToday[0]?.todayRevenue || 0) + Number(pesapalToday[0]?.todayRevenue || 0),
-      totalOrders: Number(clickToday[0]?.totalOrders || 0) + Number(pesapalToday[0]?.totalOrders || 0),
+      todayRevenue: Number(clickToday[0]?.todayRevenue || 0),
+      totalOrders: Number(clickToday[0]?.totalOrders || 0),
       vouchersSold: vouchersAgg[0]?.vouchersSold || 0,
       chartData: {
         labels: chartRows.map(r => {
@@ -578,55 +526,6 @@ router.get('/payments', async (req, res) => {
 
     const rows = [];
     const push = (row) => rows.push(row);
-
-    // 1) PesaPal + legacy mobile-money payment requests
-    if (source === 'all' || source === 'pesapal' || source === 'mobile_money') {
-      const params = [];
-      let sql = `SELECT pr.id, pr.user_id, pr.payment_method, pr.amount, pr.phone_number,
-                        pr.reference_number, pr.merchant_request_id, pr.status, pr.status_message,
-                        pr.callback_data, pr.completed_at, pr.created_at,
-                        u.name AS user_name, u.role AS user_role, u.company_name
-                 FROM payment_requests pr
-                 LEFT JOIN users u ON pr.user_id = u.id
-                 WHERE 1=1`;
-      sql += whereDate('pr.created_at', params);
-      sql += ' ORDER BY pr.created_at DESC LIMIT 3000';
-      const [list] = await db.execute(sql, params);
-      for (const pr of list) {
-        const src = pr.payment_method === 'pesapal' ? 'pesapal' : 'mobile_money';
-        if (source !== 'all' && source !== src) continue;
-        let data = {};
-        try {
-          data = typeof pr.callback_data === 'string' ? JSON.parse(pr.callback_data) : (pr.callback_data || {});
-        } catch (_) { data = {}; }
-        const purpose = data.type === 'wallet_topup'
-          ? 'Wallet top-up'
-          : data.gift
-            ? 'Gift voucher'
-            : data.package_id
-              ? 'Package purchase'
-              : 'Payment';
-        push({
-          id: `${src}-${pr.id}`,
-          source: src,
-          direction: 'inflow',
-          reference: pr.reference_number || pr.merchant_request_id || `PR-${pr.id}`,
-          user_id: pr.user_id,
-          user_name: pr.user_name || 'Customer',
-          user_role: pr.user_role || 'customer',
-          business_name: pr.company_name || '',
-          phone: pr.phone_number,
-          amount: Number(pr.amount || 0),
-          currency: 'TZS',
-          status: normalizeStatus(pr.status),
-          raw_status: String(pr.status || '').toUpperCase(),
-          purpose,
-          payment_method: pr.payment_method,
-          created_at: pr.created_at,
-          completed_at: pr.completed_at
-        });
-      }
-    }
 
     // 2) ClickPesa transactions
     if (source === 'all' || source === 'clickpesa') {

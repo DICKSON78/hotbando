@@ -571,11 +571,6 @@ const hqController = {
          FROM clickpesa_transactions WHERE YEAR(created_at) = ?
            AND UPPER(status) IN ('SUCCESS', 'SETTLED', 'COMPLETED') GROUP BY MONTH(created_at)`, [yr]
       );
-      const [pesapal] = await db.execute(
-        `SELECT MONTH(completed_at) AS month, COALESCE(SUM(amount), 0) AS total
-         FROM payment_requests WHERE YEAR(completed_at) = ? AND status = 'completed' AND payment_method = 'pesapal'
-         GROUP BY MONTH(completed_at)`, [yr]
-      );
       const [manual] = await db.execute(
         `SELECT MONTH(created_at) AS month, COALESCE(SUM(amount), 0) AS total
          FROM payments WHERE YEAR(created_at) = ? AND LOWER(status) IN ('completed', 'success', 'paid')
@@ -599,13 +594,12 @@ const hqController = {
       const pl = months.map(m => {
         const amount = rows => Number(rows.find(row => Number(row.month) === m)?.total || 0);
         const clickpesaAmount = amount(clickpesa);
-        const pesapalAmount = amount(pesapal);
         const manualAmount = amount(manual);
         const operatingExpenses = amount(expenses);
         const partnerPayoutAmount = amount(partnerPayouts);
-        const rev = clickpesaAmount + pesapalAmount + manualAmount;
+        const rev = clickpesaAmount + manualAmount;
         const exp = operatingExpenses + partnerPayoutAmount;
-        return { month: m, revenue: rev, expenses: exp, operating_expenses: operatingExpenses, partner_payouts: partnerPayoutAmount, clickpesa: clickpesaAmount, pesapal: pesapalAmount, manual: manualAmount, profit: rev - exp };
+        return { month: m, revenue: rev, expenses: exp, operating_expenses: operatingExpenses, partner_payouts: partnerPayoutAmount, clickpesa: clickpesaAmount, manual: manualAmount, profit: rev - exp };
       });
 
       const totalRevenue = pl.reduce((s, r) => s + r.revenue, 0);
@@ -625,10 +619,6 @@ const hqController = {
         `SELECT purpose, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
          FROM clickpesa_transactions GROUP BY purpose, status`
       );
-      const [pesaRows] = await db.execute(
-        `SELECT payment_method, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
-         FROM payment_requests GROUP BY payment_method, status`
-      );
       const [manualRows] = await db.execute(
         `SELECT payment_method, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
          FROM payments WHERE LOWER(COALESCE(payment_method, '')) IN ('cash', 'manual', 'agent', 'bank_transfer')
@@ -642,9 +632,8 @@ const hqController = {
 
       const isSettled = status => ['success', 'settled', 'completed', 'paid'].includes(String(status || '').toLowerCase());
       const clickpesaSettled = clickRows.filter(row => isSettled(row.status)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-      const pesapalSettled = pesaRows.filter(row => row.payment_method === 'pesapal' && isSettled(row.status)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
       const manualSettled = manualRows.filter(row => isSettled(row.status)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-      const totalRevenue = clickpesaSettled + pesapalSettled + manualSettled;
+      const totalRevenue = clickpesaSettled + manualSettled;
       const operatingExpenses = Number(expResult[0].total || 0);
       const partnerPayouts = Number(partnerPayoutResult[0].total || 0);
       const totalExpenses = operatingExpenses + partnerPayouts;
@@ -672,7 +661,6 @@ const hqController = {
           budget_utilization: budgetTotal > 0 ? Math.round((budgetUsed / budgetTotal) * 100) : 0,
           revenue_by_source: {
             clickpesa: sourceSummary(clickRows),
-            pesapal: sourceSummary(pesaRows, row => row.payment_method === 'pesapal'),
             manual: sourceSummary(manualRows),
           },
           expense_breakdown: { operating_expenses: operatingExpenses, partner_payouts: partnerPayouts }

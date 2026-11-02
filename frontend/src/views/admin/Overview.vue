@@ -343,7 +343,6 @@ const toast = ref(null)
 const financial = ref({})
 const revenueSourceRows = computed(() => [
   { key: 'clickpesa', label: 'ClickPesa', value: financial.value.revenue_by_source?.clickpesa },
-  { key: 'pesapal', label: 'PesaPal', value: financial.value.revenue_by_source?.pesapal },
   { key: 'manual', label: 'Cash / Manual', value: financial.value.revenue_by_source?.manual },
 ])
 const ticketStats = ref({})

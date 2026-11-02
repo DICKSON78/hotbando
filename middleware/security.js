@@ -173,9 +173,9 @@ const securityHeaders = (req, res, next) => {
         "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; " +
         "img-src 'self' data: https: blob: https://*.tile.openstreetmap.org https://*.openstreetmap.org; " +
         "media-src 'self' https: blob:; " +
-        "connect-src 'self' https://*.tile.openstreetmap.org https://cdn.jsdelivr.net https://unpkg.com https://pay.pesapal.com https://cybqa.pesapal.com https://*.pesapal.com https://api.clickpesa.com https://*.clickpesa.com; " +
-        "frame-src 'self' https://pay.pesapal.com https://cybqa.pesapal.com https://*.pesapal.com https://*.clickpesa.com; " +
-        "child-src 'self' https://pay.pesapal.com https://cybqa.pesapal.com https://*.pesapal.com https://*.clickpesa.com; " +
+        "connect-src 'self' https://*.tile.openstreetmap.org https://cdn.jsdelivr.net https://unpkg.com https://api.clickpesa.com https://*.clickpesa.com; " +
+        "frame-src 'self' https://*.clickpesa.com; " +
+        "child-src 'self' https://*.clickpesa.com; " +
         "frame-ancestors 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self';"

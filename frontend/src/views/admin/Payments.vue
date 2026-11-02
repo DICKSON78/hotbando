@@ -34,7 +34,6 @@
             <label class="form-label">Source</label>
             <select v-model="filters.source" class="form-input">
               <option value="all">All sources</option>
-              <option value="pesapal">PesaPal</option>
               <option value="clickpesa">ClickPesa</option>
               <option value="mobile_money">Mobile money</option>
               <option value="wallet">Wallet ledger</option>
@@ -316,8 +315,6 @@ const filters = ref({
 })
 
 const SOURCE_LABELS = {
-  pesapal: 'PesaPal',
-  clickpesa: 'ClickPesa',
   mobile_money: 'Mobile money',
   wallet: 'Wallet',
   withdrawal: 'Withdrawal',
@@ -340,7 +337,6 @@ const ROLE_LABELS = {
 }
 
 const SOURCE_STYLES = {
-  pesapal: 'background: rgba(255,122,48,0.12); color: #FF7A30',
   clickpesa: 'background: rgba(59,130,246,0.12); color: #60a5fa',
   mobile_money: 'background: rgba(139,92,246,0.12); color: #a78bfa',
   wallet: 'background: rgba(20,184,166,0.12); color: #2dd4bf',

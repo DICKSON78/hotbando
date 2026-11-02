@@ -141,8 +141,6 @@ app.get('/api/csrf', (req, res) => {
 // CSRF protection for state-changing requests (skip webhooks/zero-touch/public provisioning)
 app.use((req, res, next) => {
     const skipPaths = [
-        '/api/payments/ipn',
-        '/api/payments/callback',
         '/api/clickpesa/webhook',
         '/api/webhooks/clickpesa',
         '/api/partners/register',
@@ -199,7 +197,6 @@ const webhookRoutes = require('./routes/webhooks');
 const partnerRoutes = require('./routes/partners');
 const hqRoutes = require('./routes/hq');
 const legacyAdminRoutes = require('./routes/adminLegacy');
-const paymentRoutes = require('./routes/paymentRoutes');
 
 // Vue SPA build — served for ALL portals
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
@@ -249,7 +246,6 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/partners', partnerRoutes);
 app.use('/api/reseller-applications', require('./routes/resellerApplications'));
 app.use('/api/reseller-portal', require('./routes/resellerPortal'));
-app.use('/api/payments', paymentRoutes);
 
 // Public packages listing (used by reseller portal)
 app.get('/api/packages', async (req, res) => {
@@ -262,7 +258,7 @@ app.get('/api/packages', async (req, res) => {
   }
 });
 
-// PesaPal routes are mounted at /api/payments (callback + IPN are public)
+// Payment routes: ClickPesa only (/api/clickpesa and /api/webhooks)
 
 // ==================== Website / portal auth API (JSON) ====================
 
