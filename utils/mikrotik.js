@@ -2,16 +2,14 @@
 // Extended MikroTik Service with full remote management via WireGuard
 const RouterOSAPI = require('node-routeros').RouterOSAPI;
 
-// Handle !empty replies from RouterOS (no results found) - these are thrown
+// Handle !empty and timeout replies from RouterOS - these are thrown
 // as uncaught exceptions by node-routeros and crash the process
-process.on('uncaughtException', (error) => {
-    if (error && error.message && error.message.includes('!empty')) {
-        console.warn('Ignoring !empty reply from router (no results found)');
+process.on('unhandledRejection', (reason, promise) => {
+    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('Timed out') || reason.errno === 'SOCKTMOUT' || reason.errno === 'UNKNOWNREPLY')) {
+        console.warn('Ignoring transient RouterOS rejection:', reason.message || reason.errno);
         return;
     }
-    // Re-throw other errors to maintain normal crash behavior
-    console.error('Uncaught exception:', error);
-    process.exit(1);
+    console.error('Unhandled rejection:', reason);
 });
 
 class MikrotikService {
@@ -30,13 +28,17 @@ class MikrotikService {
             // Check if we have an existing connection
             if (this.connections.has(routerID)) {
                 const existingConn = this.connections.get(routerID);
-                // Test if connection is still alive
+                // Test if connection is still alive (with timeout)
                 try {
-                    await existingConn.write('/system/identity/print');
+                    await Promise.race([
+                        existingConn.write('/system/identity/print'),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection test timeout')), 5000))
+                    ]);
                     return existingConn;
                 } catch (e) {
                     // Connection is dead, remove it
                     this.connections.delete(routerID);
+                    try { existingConn.close(); } catch (e2) {}
                 }
             }
 
@@ -505,9 +507,15 @@ class MikrotikService {
         try {
             const conn = await this.getRouterConnection(routerID);
             
-            // Get system resources
-            const [resource] = await conn.write('/system/resource/print');
-            const [identity] = await conn.write('/system/identity/print');
+            // Get system resources with timeout
+            const [resource] = await Promise.race([
+                conn.write('/system/resource/print'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Resource query timeout')), 5000))
+            ]);
+            const [identity] = await Promise.race([
+                conn.write('/system/identity/print'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Identity query timeout')), 5000))
+            ]);
             const sessions = await this.getActiveSessions(routerID);
             
             return {
@@ -522,6 +530,7 @@ class MikrotikService {
                 lastSeen: new Date()
             };
         } catch (error) {
+            console.error(`❌ Router health check error for ${routerID}:`, error.message);
             return {
                 routerID: routerID,
                 status: 'offline',
