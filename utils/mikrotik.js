@@ -204,7 +204,7 @@ class MikrotikService {
             const profiles = await conn.write('/ip/hotspot/profile/print');
             let hasMac = false;
             for (const p of profiles) {
-                if (!p.name || !/^hotbando/i.test(p.name)) continue;
+                if (!p.name || (!/^(hotbando|hb-)/i.test(p.name) && p.name !== 'default')) continue;
                 const loginBy = String(p['login-by'] || '')
                     .split(',').map(s => s.trim()).filter(Boolean);
                 const needsLogin = !loginBy.includes('mac');
