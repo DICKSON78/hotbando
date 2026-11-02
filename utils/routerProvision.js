@@ -25,7 +25,7 @@ const wireguardService = require('./wireguard');
 const logger = require('./logger');
 const { encrypt } = require('./encryption');
 
-const ROUTER_REGISTRATION_SECRET = process.env.ROUTER_REGISTRATION_SECRET || process.env.RADIUS_SECRET || '';
+const ROUTER_REGISTRATION_SECRET = process.env.ROUTER_REGISTRATION_SECRET || '';
 const SERVER_PUBLIC_HOST = process.env.SERVER_PUBLIC_HOST || process.env.SERVER_PUBLIC_IP || 'hotbandowifi.online';
 const SERVER_PUBLIC_IS_IP = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(SERVER_PUBLIC_HOST);
 
@@ -320,7 +320,6 @@ function generateBootstrapScript() {
 
 # Try HTTPS first
 :for i from=1 to=3 do={
-    :if ($dlOk) do={ :break }
     :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
     :do {
         /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=$dlMode
@@ -350,7 +349,6 @@ function generateBootstrapScript() {
             :set dlOk true
             :put "HTTP download successful!"
         }
-        :if ($dlOk) do={ :break }
     }
 }
 
@@ -431,7 +429,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
   :local size 0
   /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE}
   :delay 2
-  :set size [/file get [$tmp] size]
+  :set size [/file get [/file find name=$tmp] size]
   :if ($size > 300) do={
     :put "HotBando: pulling approved configuration (${routerID})"
     :log info ("HotBando pulling approved configuration for " . $hbRouterId)
@@ -444,7 +442,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-header-field="Content-Type: application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -768,7 +766,7 @@ ${serverWalledGardenRules()}
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-content-type="application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-header-field="Content-Type: application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------

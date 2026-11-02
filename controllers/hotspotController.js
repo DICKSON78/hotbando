@@ -457,6 +457,22 @@ const hotspotController = {
                 });
             }
             
+            // Persist the device binding BEFORE talking to the router so RADIUS
+            // MAC authentication and future reconnects can find this customer
+            // even when the RouterOS API is temporarily unreachable.
+            try {
+                await db.execute(
+                    'UPDATE users SET mac_address = ?, last_router_id = ?, last_free_used = ?, updated_at = NOW() WHERE id = ?',
+                    [mac, routerID, now, user.id]
+                );
+                req.session.mac = mac;
+                req.session.routerID = routerID;
+                req.session.hotbando_user.mac_address = mac;
+                req.session.hotbando_user.last_router_id = routerID;
+            } catch (bindError) {
+                console.warn('⚠️ Could not persist device binding:', bindError.message);
+            }
+
             let routerSuccess = false;
             let routerMessage = '';
             
@@ -479,17 +495,6 @@ const hotspotController = {
                 console.error('❌ REAL Router connection error:', routerError.message);
                 routerSuccess = false;
                 routerMessage = 'Imeshindikana kuunganisha kwenye router.';
-            }
-            
-            if (routerSuccess) {
-                await db.execute(
-                    'UPDATE users SET mac_address = ?, last_router_id = ?, last_free_used = ?, updated_at = NOW() WHERE id = ?',
-                    [mac, routerID, now, user.id]
-                );
-                req.session.mac = mac;
-                req.session.routerID = routerID;
-                req.session.hotbando_user.mac_address = mac;
-                req.session.hotbando_user.last_router_id = routerID;
             }
             
             res.json({ 

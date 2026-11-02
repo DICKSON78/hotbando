@@ -270,7 +270,7 @@ class MikrotikService {
                 ];
 
                 await conn.write('/ip/hotspot/user/set', updateArgs);
-                console.log(`Updated hotspot user ${cleanMac} on ${routerID}: uptime=${limitUptime}, bytes=${limitBytes}, profile=${profile}`);
+                console.log(`Updated hotspot user ${cleanMac} on ${routerID}: uptime=${limitUptime}, bytes=${bytesToSet === null ? 'unchanged' : bytesToSet}, profile=${profile}`);
             } else {
                 // Create new MAC-based user. Use whichever hotspot server and
                 // user profile actually exist on this router (legacy routers
@@ -291,7 +291,7 @@ class MikrotikService {
                 if (profile) addArgs.push(`=profile=${profile}`);
 
                 await conn.write('/ip/hotspot/user/add', addArgs);
-                console.log(`Added hotspot user ${cleanMac} to ${routerID} via ${serverName || 'any'}/${profile || 'default'}: uptime=${limitUptime}, bytes=${limitBytes}`);
+                console.log(`Added hotspot user ${cleanMac} to ${routerID} via ${serverName || 'any'}/${profile || 'default'}: uptime=${limitUptime}, bytes=${bytesToSet === null ? 'unchanged' : bytesToSet}`);
             }
 
             // RouterOS does not always apply new limits to an already-active
