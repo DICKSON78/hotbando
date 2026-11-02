@@ -135,7 +135,9 @@ router.post('/heartbeat', authRegister, async (req, res) => {
         const routerID = req.body.router_id || req.body.routerId;
         if (!routerID) return res.status(400).json({ success: false, message: 'router_id required' });
 
-        // Only mark ONLINE once configured — pending stays pending until CONNECT
+        // Auto-mark ONLINE when router is configured (has WG peer + IP).
+        // Routers remain PENDING until owner clicks CONNECT in the admin panel;
+        // after that, heartbeat keeps them online.
         await db.execute(
             `UPDATE mikrotiks SET last_seen = NOW(),
                 status = IF(setup_status = 'configured', 'online', status)
