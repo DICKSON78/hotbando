@@ -504,33 +504,30 @@ class MikrotikService {
     }
 
     async getRouterHealth(routerID) {
+        // Return DB status without making API calls to avoid crashes
         try {
-            const conn = await this.getRouterConnection(routerID);
-            
-            // Get system resources with timeout
-            const [resource] = await Promise.race([
-                conn.write('/system/resource/print'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Resource query timeout')), 5000))
-            ]);
-            const [identity] = await Promise.race([
-                conn.write('/system/identity/print'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Identity query timeout')), 5000))
-            ]);
-            const sessions = await this.getActiveSessions(routerID);
-            
+            const db = require('../config/database');
+            const isNumericId = /^\d+$/.test(String(routerID));
+            const [rows] = await db.execute(
+                isNumericId
+                    ? 'SELECT status, last_seen FROM mikrotiks WHERE id = ?'
+                    : 'SELECT status, last_seen FROM mikrotiks WHERE router_id = ?',
+                [isNumericId ? parseInt(routerID) : routerID]
+            );
+            const router = rows[0];
+            const isOnline = router && router.status === 'online';
             return {
                 routerID: routerID,
-                status: 'online',
-                connectedUsers: sessions.length,
-                cpu: Math.round(resource['cpu-load'] || 0),
-                memory: Math.round(((resource['total-memory'] - resource['free-memory']) / resource['total-memory']) * 100),
-                uptime: resource.uptime,
-                version: resource.version,
-                identity: identity.name,
-                lastSeen: new Date()
+                status: isOnline ? 'online' : 'offline',
+                connectedUsers: 0,
+                cpu: 0,
+                memory: 0,
+                uptime: isOnline ? 'Online' : '0s',
+                version: 'unknown',
+                identity: 'unknown',
+                lastSeen: router ? router.last_seen : new Date()
             };
         } catch (error) {
-            console.error(`❌ Router health check error for ${routerID}:`, error.message);
             return {
                 routerID: routerID,
                 status: 'offline',

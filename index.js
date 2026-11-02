@@ -1,6 +1,6 @@
 // Handle !empty and other transient RouterOS replies globally (before any module loads)
 process.on('uncaughtException', (error) => {
-    if (error && error.message && (error.message.includes('!empty') || error.message.includes('UNKNOWNREPLY') || (error.errno === 'UNKNOWNREPLY'))) {
+    if (error && error.message && (error.message.includes('!empty') || error.message.includes('UNKNOWNREPLY') || error.message.includes('Timed out') || (error.errno === 'UNKNOWNREPLY') || (error.errno === 'SOCKTMOUT'))) {
         console.warn('Ignoring transient RouterOS reply:', error.message || error.errno);
         return;
     }
@@ -8,7 +8,7 @@ process.on('uncaughtException', (error) => {
     process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('UNKNOWNREPLY') || (reason.errno === 'UNKNOWNREPLY'))) {
+    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('UNKNOWNREPLY') || reason.message.includes('Timed out') || (reason.errno === 'UNKNOWNREPLY') || (reason.errno === 'SOCKTMOUT'))) {
         console.warn('Ignoring transient RouterOS rejection:', reason.message || reason.errno);
         return;
     }
