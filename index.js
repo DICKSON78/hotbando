@@ -1,3 +1,20 @@
+// Handle !empty and other transient RouterOS replies globally (before any module loads)
+process.on('uncaughtException', (error) => {
+    if (error && error.message && (error.message.includes('!empty') || error.message.includes('UNKNOWNREPLY') || (error.errno === 'UNKNOWNREPLY'))) {
+        console.warn('Ignoring transient RouterOS reply:', error.message || error.errno);
+        return;
+    }
+    console.error('Uncaught exception:', error);
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('UNKNOWNREPLY') || (reason.errno === 'UNKNOWNREPLY'))) {
+        console.warn('Ignoring transient RouterOS rejection:', reason.message || reason.errno);
+        return;
+    }
+    console.error('Unhandled rejection:', reason);
+});
+
 // index.js
 require('dotenv').config();
 const express = require('express');
