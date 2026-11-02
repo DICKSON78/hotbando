@@ -129,10 +129,10 @@ async function serveScript(req, res) {
 router.get('/provision/:routerID', authRegister, serveScript);
 router.post('/provision/:routerID', authRegister, serveScript);
 
-// ── POST /heartbeat — hourly check-in ──
+// ── POST/GET /heartbeat — check-in ──
 router.post('/heartbeat', authRegister, async (req, res) => {
     try {
-        const routerID = req.body.router_id || req.body.routerId;
+        const routerID = req.body.router_id || req.body.routerId || req.query.router_id || req.query.routerId;
         if (!routerID) return res.status(400).json({ success: false, message: 'router_id required' });
 
         // Auto-mark ONLINE when router is configured (has WG peer + IP).
@@ -145,7 +145,34 @@ router.post('/heartbeat', authRegister, async (req, res) => {
             [routerID]
         );
 
-        // Return current settings so the router can pull a new script on demand
+        const [r] = await db.execute(
+            'SELECT setup_status, ssid, wireguard_ip FROM mikrotiks WHERE router_id = ?', [routerID]
+        );
+        const router = r[0] || null;
+
+        res.json({
+            success: true,
+            ok: true,
+            needsConfig: !!(router && router.setup_status !== 'configured'),
+            configVersion: router ? router.updated_at : null,
+            ssid: router ? router.ssid : null
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+router.get('/heartbeat', authRegister, async (req, res) => {
+    try {
+        const routerID = req.query.router_id || req.query.routerId;
+        if (!routerID) return res.status(400).json({ success: false, message: 'router_id required' });
+
+        await db.execute(
+            `UPDATE mikrotiks SET last_seen = NOW(),
+                status = IF(setup_status = 'configured', 'online', status)
+             WHERE router_id = ?`,
+            [routerID]
+        );
+
         const [r] = await db.execute(
             'SELECT setup_status, ssid, wireguard_ip FROM mikrotiks WHERE router_id = ?', [routerID]
         );

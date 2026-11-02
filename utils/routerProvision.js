@@ -426,23 +426,28 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 /system scheduler remove [find name="hotbando-poll"]
 /system scheduler add name="hotbando-poll" interval=2m start-time=startup on-event={
   :local tmp "hb-latest.rsc"
+  :do { /file remove $tmp } on-error={}
+  :do { /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE} } on-error={
+    :log warning "HotBando poll fetch failed"
+  }
+  :delay 3
   :local size 0
-  /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE}
-  :delay 2
-  :set size [/file get [/file find name=$tmp] size]
+  :do { :set size [/file get [/file find name=$tmp] size] } on-error={}
   :if ($size > 300) do={
     :put "HotBando: pulling approved configuration (${routerID})"
     :log info ("HotBando pulling approved configuration for " . $hbRouterId)
-    /import file-name=$tmp
+    :do { /import file-name=$tmp } on-error={
+      :log warning "HotBando import failed"
+    }
     :delay 2
-    /file remove $tmp
+    :do { /file remove $tmp } on-error={}
   }
 } comment="HotBando poll for approval"
 
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
-/system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-header-field="Content-Type: application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+/system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=no } on-error={}
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -747,7 +752,12 @@ ${serverWalledGardenRules()}
 /ip hotspot ip-binding remove [find]
 
 /system scheduler remove [find name="hotbando-watchdog"]
-/system scheduler add name="hotbando-watchdog" interval=5m on-event={/ip hotspot set [find name=hotbando-server] disabled=no} comment="HotBando watchdog"
+/system scheduler add name="hotbando-watchdog" interval=2m on-event={
+  :do { /ip hotspot set [find name="hotbando-server"] disabled=no } on-error={}
+  :do { /radius enable [find service=hotspot] } on-error={}
+  :do { /interface wireguard set [find name="wg-hotbando"] disabled=no } on-error={}
+  :do { /ip service set api disabled=no address=${wireguardService.networkCidr} } on-error={}
+} comment="HotBando watchdog"
 
 # ----------------------------------------------------------------------------
 # 4. WIFI SSID
@@ -765,8 +775,8 @@ ${serverWalledGardenRules()}
 :global hbPollUrl ""
 
 /system scheduler remove [find name="hotbando-heartbeat"]
-/system scheduler add name="hotbando-heartbeat" interval=1h start-time=00:05:00 on-event={
-  /tool fetch url="${PUBLIC_BASE_URL}/api/zero-touch/heartbeat" mode=${PUBLIC_FETCH_MODE} http-method=post http-header-field="Content-Type: application/json" http-data="{\\\"router_id\\\":\\\"${routerID}\\\",\\\"secret\\\":\\\"${ROUTER_REGISTRATION_SECRET}\\\"}"
+/system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=no } on-error={}
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------

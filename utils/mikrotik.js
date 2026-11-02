@@ -71,15 +71,27 @@ class MikrotikService {
         } catch (error) {
             console.error(`❌ Router connection error for ${routerID}:`, error.message);
 
-            // Update router status to offline
+            // Don't override status to offline for configured routers —
+            // the heartbeat is the source of truth for online/offline.
+            // Only set offline for pending/configuring routers that haven't
+            // been fully provisioned yet.
             const db = require('../config/database');
             const isNumericId = /^\d+$/.test(String(routerID));
-            await db.execute(
+            const [rows] = await db.execute(
                 isNumericId
-                    ? 'UPDATE mikrotiks SET status = "offline" WHERE id = ?'
-                    : 'UPDATE mikrotiks SET status = "offline" WHERE router_id = ?',
+                    ? 'SELECT setup_status FROM mikrotiks WHERE id = ?'
+                    : 'SELECT setup_status FROM mikrotiks WHERE router_id = ?',
                 [isNumericId ? parseInt(routerID) : routerID]
             );
+            const setupStatus = rows[0]?.setup_status;
+            if (setupStatus !== 'configured') {
+                await db.execute(
+                    isNumericId
+                        ? 'UPDATE mikrotiks SET status = "offline" WHERE id = ?'
+                        : 'UPDATE mikrotiks SET status = "offline" WHERE router_id = ?',
+                    [isNumericId ? parseInt(routerID) : routerID]
+                );
+            }
 
             throw error;
         }
