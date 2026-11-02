@@ -5,7 +5,9 @@
 # the HotBando WiFi hotspot platform.
 #
 # Before running, replace the placeholders below:
-#   <HOTBANDO_SERVER_IP>   — your HotBando server IP/domain
+#   <HOTBANDO_SERVER_IP>   — WireGuard tunnel IP of the HotBando server (e.g. 10.7.0.1)
+#                            Do NOT use the server's public IP here — ISPs often
+#                            block UDP 1812/1813. RADIUS must go through WireGuard.
 #   <ROUTER_ID>            — router_id shown in HotBando admin (e.g. HB-AA001122)
 #   <RADIUS_SECRET>        — shared secret (same as RADIUS_SECRET in .env)
 #   <HOTSPOT_INTERFACE>    — interface clients connect to.
