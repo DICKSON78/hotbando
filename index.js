@@ -460,6 +460,9 @@ connectRedis().then(() => {
         // Start background scheduler for expired package disconnection
         const expiryScheduler = require('./utils/expiryScheduler');
         expiryScheduler.start(60000); // Check every 60 seconds
+
+        const routerStatusMonitor = require('./utils/routerStatusMonitor');
+        routerStatusMonitor.startStaleRouterMonitor();
     });
 }).catch(() => {
     httpServer.listen(PORT, () => {
@@ -469,6 +472,9 @@ connectRedis().then(() => {
 
         const expiryScheduler = require('./utils/expiryScheduler');
         expiryScheduler.start(60000);
+
+        const routerStatusMonitor = require('./utils/routerStatusMonitor');
+        routerStatusMonitor.startStaleRouterMonitor();
     });
 });
 
