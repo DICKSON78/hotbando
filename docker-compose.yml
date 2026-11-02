@@ -86,6 +86,8 @@ services:
       - hotbando-net
 
   freeradius:
+    build:
+      context: ./freeradius
     image: hotbando-freeradius:latest
     restart: unless-stopped
     ports:
