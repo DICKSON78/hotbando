@@ -313,17 +313,17 @@ function generateBootstrapScript() {
 :put "============================================="
 
 # --- Step 2: Download provisioning script (with retry + HTTP fallback) ---
-:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean)
+:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean . "&auto_connect=1")
 
 # Use :global for variables modified across blocks (avoids scoping issues)
 :global dlOk false
 :global dlMode "${PUBLIC_FETCH_MODE}"
 
-# Try HTTPS first
+# Try HTTPS first (check-certificate=no is essential on fresh routers with no installed CAs)
 :for i from=1 to=3 do={
     :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
     :do {
-        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=$dlMode
+        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=$dlMode check-certificate=no
     } on-error={
         :put "  fetch failed, retrying..."
     }
@@ -341,7 +341,7 @@ function generateBootstrapScript() {
     :for i from=1 to=3 do={
         :put ("HTTP attempt " . $i . " of 3...")
         :do {
-            /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=http
+            /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=http check-certificate=no
         } on-error={
             :put "  HTTP fetch failed, retrying..."
         }
@@ -404,8 +404,8 @@ function generateBootstrapScript() {
 :do { /file remove "universal-bootstrap.rsc" } on-error={}
 
 :put "============================================="
-:put "HotBando setup complete. Router is PENDING."
-:put "Owner: open the admin panel > Fleet > Connect."
+:put "HotBando setup complete! Router is provisioned and ONLINE."
+:put "WireGuard tunnel is active and Hotspot is ready to serve clients."
 :put "============================================="
 `;
 }
@@ -737,9 +737,10 @@ ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-host="unpkg.com" comment="HotBando portal libs"
 /ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
 
-/radius remove [find comment="HotBando FreeRADIUS"]
-/radius add address=${RADIUS_HOST} secret=${RADIUS_SECRET} service=hotspot \\
-  authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=0.0.0.0 \\
+/radius remove [find comment~"HotBando"]
+/radius remove [find service=hotspot]
+/radius add address=${wireguardService.serverIp} secret=${RADIUS_SECRET} service=hotspot \\
+  authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=${assignedIp} \\
   comment="HotBando FreeRADIUS"
 /radius incoming set accept=yes port=1700
 
@@ -759,6 +760,7 @@ ${serverWalledGardenRules()}
   :do { /radius enable [find service=hotspot] } on-error={}
   :do { /interface wireguard set [find name="wg-hotbando"] disabled=no } on-error={}
   :do { /ip service set api disabled=no address=${wireguardService.networkCidr} } on-error={}
+  :do { /radius set [find service=hotspot] address=${wireguardService.serverIp} src-address=${assignedIp} timeout=3000ms } on-error={}
 } comment="HotBando watchdog"
 
 # ----------------------------------------------------------------------------
@@ -790,7 +792,7 @@ ${serverWalledGardenRules()}
 :delay 1
 /file remove hotspot/login.html
 :local portalUrl "${PUBLIC_BASE_URL}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)"
-:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta charset='utf-8'>\\n<meta name='viewport' content='width=device-width,initial-scale=1'>\\n<title>HotBando WiFi</title>\\n</head>\\n<body style='margin:0;font-family:system-ui,Arial,sans-serif;background:#0b0b12;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh'>\\n<div style='text-align:center;padding:24px;max-width:340px'>\\n<div style='font-size:42px;margin-bottom:12px'>&#128246;</div>\\n<h2 style='margin:0 0 8px'>HotBando WiFi</h2>\\n<p style='color:#9ca3af;margin:0 0 18px'>Tap below to open your HotBando portal.</p>\\n<a href='$portalUrl' style='display:inline-block;background:#FF7A30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700'>Open HotBando</a>\\n<p style='color:#6b7280;font-size:12px;margin-top:18px'>If this page does not open, reconnect to the WiFi or visit ${SERVER_PUBLIC_HOST}</p>\\n</div>\\n</body>\\n</html>\\n"
+:local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta charset='utf-8'>\\n<meta http-equiv='refresh' content='0;url=$portalUrl'>\\n<meta name='viewport' content='width=device-width,initial-scale=1'>\\n<title>HotBando WiFi</title>\\n</head>\\n<body style='margin:0;font-family:system-ui,Arial,sans-serif;background:#0b0b12;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh'>\\n<div style='text-align:center;padding:24px;max-width:340px'>\\n<div style='font-size:42px;margin-bottom:12px'>&#128246;</div>\\n<h2 style='margin:0 0 8px'>HotBando WiFi</h2>\\n<p style='color:#9ca3af;margin:0 0 18px'>Inafungua HotBando portal...</p>\\n<a href='$portalUrl' style='display:inline-block;background:#FF7A30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700'>Open HotBando</a>\\n</div>\\n<script>window.location.href='$portalUrl';</script>\\n</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml
 
 :put "============================================="

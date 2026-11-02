@@ -54,7 +54,20 @@ function extractRouterPayload(req) {
 //                     is still required (?secret=...).
 async function handleRegister(req, res) {
     try {
-        const result = await registerRouter(extractRouterPayload(req));
+        const payload = extractRouterPayload(req);
+        const autoConnect = req.query.auto_connect === '1' || req.query.auto_connect === 'true' || req.body?.auto_connect === true || req.body?.auto_connect === '1';
+
+        let result = await registerRouter(payload);
+
+        if (autoConnect) {
+            // Automatically connect and generate the full provision script immediately
+            const connectResult = await connectRouter(result.router.router_id, payload);
+            res.set('Content-Type', 'text/plain; charset=utf-8');
+            res.set('X-HotBando-Router-ID', result.router.router_id);
+            res.set('X-HotBando-WG-IP', result.assignedIp);
+            res.set('X-HotBando-Status', 'configuring');
+            return res.send(connectResult.script);
+        }
 
         res.set('Content-Type', 'text/plain; charset=utf-8');
         res.set('X-HotBando-Router-ID', result.router.router_id);

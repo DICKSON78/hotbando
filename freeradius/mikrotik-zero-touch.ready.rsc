@@ -31,9 +31,9 @@
 # ---------------------------------------------------------------------------
 # 1. Phone home (GET with query params — robust, no JSON quoting needed)
 # ---------------------------------------------------------------------------
-:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
+:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial . "&auto_connect=1")
 
-/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none
+/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none check-certificate=no
 :delay 2
 
 :if ([:len [/file find name="hotbando-provision.rsc"]] = 0) do={
@@ -49,7 +49,6 @@
 /import file-name="hotbando-provision.rsc"
 
 :put "============================================="
-:put "HotBando setup complete. Router is PENDING."
-:put "Owner: open the admin panel > Fleet > Connect."
-:put "Configurable from anywhere via the server."
+:put "HotBando setup complete! Router is ONLINE."
+:put "WireGuard tunnel is active and Hotspot is ready to serve clients."
 :put "============================================="
