@@ -217,6 +217,7 @@ app.use('/api/setup-wizard', setupWizardRoutes);
 app.use('/api/auto-detect', autoDetectRoutes);
 app.use('/api/admin/mikrotik-setup', mikrotikSetupRoutes);
 app.use('/api/router-fleet', routerFleetRoutes);
+app.use('/api/admin/router-fleet', routerFleetRoutes);
 
 // Zero-touch router provisioning (public, secret-gated)
 const zeroTouchRoutes = require('./routes/zeroTouch');
