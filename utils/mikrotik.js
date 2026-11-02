@@ -2,6 +2,18 @@
 // Extended MikroTik Service with full remote management via WireGuard
 const RouterOSAPI = require('node-routeros').RouterOSAPI;
 
+// Handle !empty replies from RouterOS (no results found) - these are thrown
+// as uncaught exceptions by node-routeros and crash the process
+process.on('uncaughtException', (error) => {
+    if (error && error.message && error.message.includes('!empty')) {
+        console.warn('Ignoring !empty reply from router (no results found)');
+        return;
+    }
+    // Re-throw other errors to maintain normal crash behavior
+    console.error('Uncaught exception:', error);
+    process.exit(1);
+});
+
 class MikrotikService {
     constructor() {
         this.connections = new Map();
@@ -410,8 +422,16 @@ class MikrotikService {
     async getActiveSessions(routerID) {
         try {
             const conn = await this.getRouterConnection(routerID);
-            const sessions = await conn.write('/ip/hotspot/active/print');
-            return sessions;
+            let sessions = [];
+            try {
+                sessions = await conn.write('/ip/hotspot/active/print');
+            } catch (error) {
+                if (error.message && error.message.includes('!empty')) {
+                    return [];
+                }
+                throw error;
+            }
+            return (sessions || []).filter(s => !s['!empty']);
         } catch (error) {
             console.error(`❌ Get active sessions error:`, error.message);
             return [];
