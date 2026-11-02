@@ -348,20 +348,30 @@ class MikrotikService {
             }
 
             // RouterOS does not always apply new limits to an already-active
-            // session. If MAC login is available, drop the active session so
-            // the device re-authenticates with the new voucher/ad allowance.
-            if (macLoginReady) {
-                try {
-                    const active = await conn.write('/ip/hotspot/active/print', [
-                        `?mac-address=${cleanMac}`
-                    ]);
-                    for (const a of active) {
-                        await conn.write('/ip/hotspot/active/remove', [`=.id=${a['.id']}`]);
-                        console.log(`Forced re-login for ${cleanMac} to apply new limits`);
-                    }
-                } catch (reauthErr) {
-                    console.warn(`Could not refresh active session for ${cleanMac}:`, reauthErr.message);
+            // session. ALWAYS drop the active session so the device re-authenticates
+            // with the new voucher/ad/package allowance. This is critical for
+            // repeat purchases: without it the old session keeps the old (shorter)
+            // uptime and the user appears to "not get internet" after buying again.
+            try {
+                const active = await conn.write('/ip/hotspot/active/print', [
+                    `?mac-address=${cleanMac}`
+                ]);
+                for (const a of active) {
+                    await conn.write('/ip/hotspot/active/remove', [`=.id=${a['.id']}`]);
+                    console.log(`Forced re-login for ${cleanMac} to apply new limits`);
                 }
+                if (active.length === 0) {
+                    // Try by name as fallback (some routers index by name)
+                    const byName = await conn.write('/ip/hotspot/active/print', [
+                        `?user=${cleanMac}`
+                    ]);
+                    for (const a of byName) {
+                        await conn.write('/ip/hotspot/active/remove', [`=.id=${a['.id']}`]);
+                        console.log(`Forced re-login (by name) for ${cleanMac}`);
+                    }
+                }
+            } catch (reauthErr) {
+                console.warn(`Could not refresh active session for ${cleanMac}:`, reauthErr.message);
             }
 
             return true;
