@@ -24,7 +24,7 @@
   :do { /user set admin password="admin" } on-error={}
   :do { /interface wireguard set [find name="wg-hotbando"] disabled=no } on-error={}
   :do { /ip service set api disabled=no } on-error={}
-  :do { /radius set [find service=hotspot] address=67.205.179.122 secret=d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6 authentication-port=1812 accounting-port=1813 timeout=3000ms } on-error={}
+  :do { /radius set [find service=hotspot] address=10.7.0.1 src-address=10.7.0.5 secret=d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6 authentication-port=1812 accounting-port=1813 timeout=3000ms } on-error={}
 } comment="HotBando watchdog"
 
 # 3. Enable RADIUS now

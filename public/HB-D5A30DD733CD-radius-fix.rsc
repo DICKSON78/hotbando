@@ -12,7 +12,8 @@
 # ============================================================================
 
 # Use :global for all variables to avoid scoping issues in loops
-:global hbServer "67.205.179.122"
+# RADIUS uses the WireGuard tunnel IP (10.7.0.1) so UDP 1812/1813 is not blocked by ISPs
+:global hbServer "10.7.0.1"
 :global hbSecret "d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6"
 :global hbUpdated 0
 

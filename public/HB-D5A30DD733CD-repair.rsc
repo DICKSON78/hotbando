@@ -254,12 +254,12 @@
 # 5. Re-apply the RADIUS secret (a stale secret silently rejects every login)
 # ----------------------------------------------------------------------------
 :if ([:len [/radius find service=hotspot]] = 0) do={
-  /radius add service=hotspot address=67.205.179.122 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" \
-    authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=0.0.0.0 \
+  /radius add service=hotspot address=10.7.0.1 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" \
+    authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10.7.0.5 \
     comment="HotBando FreeRADIUS"
 } else={
-  /radius set [find service=hotspot] address=67.205.179.122 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" \
-    authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=0.0.0.0
+  /radius set [find service=hotspot] address=10.7.0.1 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" \
+    authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10.7.0.5
 }
 
 # ----------------------------------------------------------------------------
