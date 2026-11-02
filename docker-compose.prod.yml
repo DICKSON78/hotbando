@@ -29,6 +29,9 @@ services:
       - ./logs:/app/logs
       # Expose only aggregate runtime state; never mount host WireGuard keys/config.
       - /etc/wireguard/.wg-status-result:/var/run/hotbando/wg-status-result:ro
+      # Public peer descriptors only. The host watcher validates them and
+      # applies them to wg0; the server private key never enters the container.
+      - /etc/wireguard/hotbando-peers:/host-wireguard-peers:rw
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

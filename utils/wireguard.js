@@ -24,6 +24,15 @@ const WG_KEYS_DIR = path.join(WG_HOST_DIR, 'hotbando-keys');
 const SERVER_PUBLIC_KEY_FILE = path.join(WG_KEYS_DIR, 'server.key.pub');
 const SERVER_PRIVATE_KEY_FILE = path.join(WG_KEYS_DIR, 'server.key');
 const WG_CONF = path.join(WG_HOST_DIR, `${WG_INTERFACE}.conf`);
+// The app never needs the server private key. It only needs the public key
+// (to embed in router scripts) and a directory where it can drop public peer
+// descriptors. The host watcher turns those descriptors into live wg0 peers.
+const WG_SERVER_PUBLIC_KEY = (process.env.WG_SERVER_PUBLIC_KEY || '').trim();
+const WG_PEERS_DIR = process.env.WG_PEERS_DIR || (
+    fs.existsSync('/host-wireguard-peers')
+        ? '/host-wireguard-peers'
+        : path.join(WG_HOST_DIR, 'hotbando-peers')
+);
 const WG_STATUS_FILE = process.env.WG_STATUS_FILE || (
     fs.existsSync('/var/run/hotbando/wg-status-result')
         ? '/var/run/hotbando/wg-status-result'
@@ -59,24 +68,35 @@ class WireGuardService {
     // ── Server key management (persisted on disk) ──
 
     ensureServerKeys() {
-        try {
-            if (!fs.existsSync(WG_KEYS_DIR)) {
-                fs.mkdirSync(WG_KEYS_DIR, { recursive: true, mode: 0o700 });
-            }
+        // Preferred: the public key is injected from the host. Never generate a
+        // new server keypair inside the app container — the host wg0 interface
+        // already owns the private key, and a fresh keypair would silently
+        // produce router scripts that can never handshake.
+        if (WG_SERVER_PUBLIC_KEY) {
+            return { publicKey: WG_SERVER_PUBLIC_KEY, privateKey: null };
+        }
 
+        try {
             if (fs.existsSync(SERVER_PUBLIC_KEY_FILE) && fs.existsSync(SERVER_PRIVATE_KEY_FILE)) {
                 const pub = fs.readFileSync(SERVER_PUBLIC_KEY_FILE, 'utf8').trim();
                 const priv = fs.readFileSync(SERVER_PRIVATE_KEY_FILE, 'utf8').trim();
                 return { publicKey: pub, privateKey: priv };
             }
 
-            const keys = this.generateKeyPair();
-            fs.writeFileSync(SERVER_PRIVATE_KEY_FILE, keys.privateKey, { mode: 0o600 });
-            fs.writeFileSync(SERVER_PUBLIC_KEY_FILE, keys.publicKey, { mode: 0o644 });
-            logger.info('WireGuard server keys generated');
-            return keys;
+            if (fs.existsSync(SERVER_PUBLIC_KEY_FILE)) {
+                return {
+                    publicKey: fs.readFileSync(SERVER_PUBLIC_KEY_FILE, 'utf8').trim(),
+                    privateKey: null
+                };
+            }
+
+            throw new Error(
+                'WG_SERVER_PUBLIC_KEY is not configured and no host server public key is mounted. ' +
+                'Refusing to generate a new server keypair inside the app container.'
+            );
         } catch (error) {
-            logger.error('Failed to generate server keys:', error.message);
+            if (/Refusing to generate/.test(error.message)) throw error;
+            logger.error('Failed to read WireGuard server keys:', error.message);
             throw error;
         }
     }
@@ -92,6 +112,14 @@ class WireGuardService {
             `);
             const usedIps = new Set(rows.map(r => r.wireguard_ip));
 
+            // Also consider peers already published to the host watcher so a
+            // stale/removed DB row can never cause an IP collision on wg0.
+            try {
+                for (const name of fs.readdirSync(WG_PEERS_DIR)) {
+                    if (name.endsWith('.peer')) usedIps.add(name.slice(0, -5));
+                }
+            } catch (e) { /* peers dir may not exist yet */ }
+
             // Scan the full /16 (10.7.0.2 .. 10.7.255.254) for scale
             for (let b = 0; b <= 255; b++) {
                 for (let i = (b === 0 ? 2 : 1); i <= 254; i++) {
@@ -106,103 +134,177 @@ class WireGuardService {
         }
     }
 
-    // ── Server configuration ──
+    // ── Peer descriptors (safe hand-off to the host watcher) ──
+    //
+    // The app container must not hold the server private key or write wg0.conf.
+    // It only publishes one small descriptor per approved router into a shared
+    // directory. The host-side watcher validates and applies them with `wg set`
+    // and persists them into wg0.conf.
 
-    async ensureServerConfig() {
-        const keys = this.ensureServerKeys();
-        const serverKey = keys.privateKey;
+    ensurePeersDir() {
+        try {
+            fs.mkdirSync(WG_PEERS_DIR, { recursive: true, mode: 0o700 });
+            return true;
+        } catch (error) {
+            logger.error('Cannot create WireGuard peers dir ' + WG_PEERS_DIR + ': ' + error.message);
+            return false;
+        }
+    }
 
-        // Get existing peers from DB
+    peerFilePath(ip) {
+        return path.join(WG_PEERS_DIR, `${String(ip).replace(/[^0-9.]/g, '')}.peer`);
+    }
+
+    writePeerFile({ routerId, publicKey, ip, presharedKey }) {
+        if (!this.ensurePeersDir()) return false;
+        if (!publicKey || !ip) return false;
+
+        // Drop any previous descriptor for the same router on a different IP.
+        try {
+            for (const name of fs.readdirSync(WG_PEERS_DIR)) {
+                if (!name.endsWith('.peer')) continue;
+                const full = path.join(WG_PEERS_DIR, name);
+                if (full === this.peerFilePath(ip)) continue;
+                const [existingRouter] = fs.readFileSync(full, 'utf8').split('\t');
+                if (existingRouter === String(routerId)) fs.unlinkSync(full);
+            }
+        } catch (e) { /* best effort */ }
+
+        // Tab-separated: routerId, ip, publicKey, presharedKey
+        const body = [
+            String(routerId || ''),
+            String(ip),
+            String(publicKey),
+            String(presharedKey || '')
+        ].join('\t') + '\n';
+        fs.writeFileSync(this.peerFilePath(ip), body, { mode: 0o600 });
+        return true;
+    }
+
+    // Publish every router the owner has approved (configuring/configured).
+    async syncPeerFilesFromDb() {
+        if (!this.ensurePeersDir()) return false;
+
         let peers = [];
         try {
             const [rows] = await db.execute(`
                 SELECT router_id, router_name, wireguard_ip, wireguard_public_key, wireguard_preshared_key
                 FROM mikrotiks
-                WHERE wireguard_configured = 1 AND wireguard_ip IS NOT NULL AND wireguard_public_key IS NOT NULL
+                WHERE wireguard_configured = 1
+                  AND wireguard_ip IS NOT NULL AND wireguard_ip != ''
+                  AND wireguard_public_key IS NOT NULL AND wireguard_public_key != ''
+                  AND setup_status IN ('configuring', 'configured')
             `);
             peers = rows;
         } catch (e) {
-            // Column may not exist
+            logger.warn('Could not read WireGuard peers from DB: ' + e.message);
+            return false;
         }
 
-        let config = `# HotBando WireGuard Server — Auto-generated
-# Do NOT edit manually; managed by the system
-
-[Interface]
-Address = ${this.serverIp}/${this.networkCidr.split('/')[1]}
-ListenPort = ${this.listenPort}
-PrivateKey = ${serverKey}
-
-# IP forwarding & NAT
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${WG_PUBLIC_IFACE} -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${WG_PUBLIC_IFACE} -j MASQUERADE
-`;
-
+        const approved = new Set(peers.map(p => String(p.router_id)));
         for (const peer of peers) {
-            config += `
-# ${peer.router_name || peer.router_id}
-[Peer]
-PublicKey = ${peer.wireguard_public_key}
-AllowedIPs = ${peer.wireguard_ip}/32
-${peer.wireguard_preshared_key ? `PresharedKey = ${peer.wireguard_preshared_key}` : ''}
-`;
+            this.writePeerFile({
+                routerId: peer.router_id,
+                publicKey: peer.wireguard_public_key,
+                ip: peer.wireguard_ip,
+                // The generated RouterOS script does not configure a
+                // preshared key, so the host peer must not require one.
+                presharedKey: ''
+            });
         }
 
-        fs.writeFileSync(WG_CONF, config, { mode: 0o600 });
-        return config;
+        // Remove descriptors for routers that are no longer approved.
+        try {
+            for (const name of fs.readdirSync(WG_PEERS_DIR)) {
+                if (!name.endsWith('.peer')) continue;
+                const full = path.join(WG_PEERS_DIR, name);
+                const [existingRouter] = fs.readFileSync(full, 'utf8').split('\t');
+                if (!approved.has(existingRouter)) fs.unlinkSync(full);
+            }
+        } catch (e) { /* best effort */ }
+
+        return true;
     }
 
-    // ── Apply server config (writes file + signals host watcher) ──
+    triggerApply() {
+        try {
+            if (!this.ensurePeersDir()) return false;
+            fs.writeFileSync(path.join(WG_PEERS_DIR, '.apply'), Date.now().toString(), { mode: 0o644 });
+            return true;
+        } catch (error) {
+            logger.warn('Could not signal WireGuard watcher: ' + error.message);
+            return false;
+        }
+    }
+
+    // Kept for backwards compatibility: returns a description, never writes
+    // wg0.conf or exposes the server private key.
+    async ensureServerConfig() {
+        await this.syncPeerFilesFromDb();
+        return `peer descriptors in ${WG_PEERS_DIR}`;
+    }
+
+    // ── Apply peer descriptors (host watcher does the privileged work) ──
 
     async applyServerConfig() {
-        await this.ensureServerConfig();
+        await this.syncPeerFilesFromDb();
+        this.triggerApply();
 
         try {
-            // Signal the host-side watcher to apply the config
-            const triggerFile = path.join(WG_HOST_DIR, '.wg-apply');
-            fs.writeFileSync(triggerFile, Date.now().toString(), { mode: 0o644 });
-            logger.info('WireGuard apply triggered (config written to ' + WG_CONF + ')');
-
-            // Wait a few seconds for the watcher to apply
-            await new Promise(resolve => setTimeout(resolve, 4000));
-
-            // Check status
+            // Give the host watcher a moment to apply when it is trigger-driven.
+            await new Promise(resolve => setTimeout(resolve, 2000));
             const status = await this.getServerStatus();
             return {
                 success: true,
                 message: status.running
                     ? 'WireGuard server configured and running'
-                    : 'Config written — watcher will apply shortly',
+                    : 'Peer descriptors published — watcher will apply shortly',
                 status
             };
         } catch (error) {
-            logger.error('Failed to apply WireGuard config:', error.message);
+            logger.error('Failed to apply WireGuard peers:', error.message);
             return { success: false, message: error.message };
         }
     }
 
-    // ── Add a peer to the server (rebuilds config + triggers watcher) ──
+    // ── Add a peer to the server (publishes descriptor + triggers watcher) ──
 
     async addPeerToServer(routerId, routerPublicKey, routerIp) {
         try {
-            // Rebuild config file (includes all peers) and trigger watcher
-            await this.ensureServerConfig();
-            const triggerFile = path.join(WG_HOST_DIR, '.wg-apply');
-            fs.writeFileSync(triggerFile, Date.now().toString(), { mode: 0o644 });
+            const written = this.writePeerFile({
+                routerId,
+                publicKey: routerPublicKey,
+                ip: routerIp,
+                // Keep host and router sides consistent: the provisioned
+                // RouterOS peer does not send a preshared key.
+                presharedKey: ''
+            });
+            if (!written) throw new Error('Could not write WireGuard peer descriptor');
+            this.triggerApply();
             return { success: true };
         } catch (error) {
             return { success: false, message: error.message };
         }
     }
 
-    // ── Remove a peer (rebuilds config + triggers watcher) ──
+    // ── Remove a peer (drops descriptor + triggers watcher) ──
 
     async removePeerFromServer(routerPublicKey) {
         try {
-            await this.ensureServerConfig();
-            const triggerFile = path.join(WG_HOST_DIR, '.wg-apply');
-            fs.writeFileSync(triggerFile, Date.now().toString(), { mode: 0o644 });
-            return { success: true };
+            if (!routerPublicKey) throw new Error('routerPublicKey is required');
+            if (!this.ensurePeersDir()) throw new Error('Peers directory is unavailable');
+            let removed = false;
+            for (const name of fs.readdirSync(WG_PEERS_DIR)) {
+                if (!name.endsWith('.peer')) continue;
+                const full = path.join(WG_PEERS_DIR, name);
+                const parts = fs.readFileSync(full, 'utf8').split('\t');
+                if (parts[2] === routerPublicKey) {
+                    fs.unlinkSync(full);
+                    removed = true;
+                }
+            }
+            this.triggerApply();
+            return { success: true, removed };
         } catch (error) {
             return { success: false, message: error.message };
         }

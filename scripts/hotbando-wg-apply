@@ -1,0 +1,132 @@
+#!/bin/bash
+# HotBando WireGuard host watcher.
+#
+# The app container publishes one public peer descriptor per approved router
+# into /etc/wireguard/hotbando-peers/*.peer (tab separated:
+# routerId, ip, publicKey, presharedKey). This script — running on the host —
+# validates those descriptors, rewrites the managed peer block in wg0.conf and
+# applies it to the live wg0 interface.
+#
+# The app never receives the server private key and never writes wg0.conf.
+
+set -u
+
+CONF=/etc/wireguard/wg0.conf
+PEERS_DIR=/etc/wireguard/hotbando-peers
+STATUS=/etc/wireguard/.wg-status-result
+APPLIED_AT=/etc/wireguard/.wg-applied-at
+LOCK=/run/hotbando-wg-apply.lock
+
+exec 9>"$LOCK" 2>/dev/null || true
+flock -n 9 2>/dev/null || exit 0
+
+mkdir -p "$PEERS_DIR"
+chmod 700 "$PEERS_DIR" 2>/dev/null || true
+
+CHANGED=0
+if [ -f "$CONF" ]; then
+    CHANGED=$(python3 - "$CONF" "$PEERS_DIR" <<'PY'
+import os
+import re
+import sys
+
+conf_path, peers_dir = sys.argv[1], sys.argv[2]
+
+BEGIN = '# BEGIN HOTBANDO MANAGED PEERS'
+END = '# END HOTBANDO MANAGED PEERS'
+BLOCK_RE = re.compile(r'# BEGIN HOTBANDO MANAGED PEERS.*?# END HOTBANDO MANAGED PEERS\n?', re.S)
+
+desired = []
+for name in sorted(os.listdir(peers_dir)):
+    if not name.endswith('.peer'):
+        continue
+    path = os.path.join(peers_dir, name)
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            parts = handle.readline().rstrip('\n').split('\t')
+    except Exception:
+        continue
+    if len(parts) < 3:
+        continue
+    _router_id, ip, public_key = parts[0], parts[1], parts[2]
+    psk = parts[3] if len(parts) > 3 else ''
+    try:
+        octets = [int(part) for part in ip.split('.')]
+        if len(octets) != 4 or any(o < 0 or o > 255 for o in octets):
+            continue
+    except Exception:
+        continue
+    if not public_key or any(ch in public_key for ch in ' \t\r\n'):
+        continue
+    if psk and any(ch in psk for ch in ' \t\r\n'):
+        continue
+    desired.append((public_key, ip, psk))
+
+with open(conf_path, 'r', encoding='utf-8') as handle:
+    content = handle.read()
+
+# Do not duplicate peers that are already declared outside the managed block.
+outside = BLOCK_RE.sub('', content)
+existing = set(re.findall(r'^\s*PublicKey\s*=\s*(\S+)\s*$', outside, re.M))
+
+lines = [BEGIN]
+seen = set()
+for public_key, ip, psk in desired:
+    if public_key in existing or public_key in seen:
+        continue
+    seen.add(public_key)
+    lines.append('[Peer]')
+    lines.append('PublicKey = ' + public_key)
+    lines.append('AllowedIPs = ' + ip + '/32')
+    if psk:
+        lines.append('PresharedKey = ' + psk)
+lines.append(END)
+
+if len(lines) == 2:
+    # No managed peers. Remove a previously managed block entirely so the
+    # host config stays byte-identical to a config that never had one.
+    updated = BLOCK_RE.sub('', content).rstrip('\n') + '\n' if BLOCK_RE.search(content) else content
+else:
+    block = '\n'.join(lines) + '\n'
+    if BLOCK_RE.search(content):
+        updated = BLOCK_RE.sub(block, content, count=1)
+    else:
+        updated = content.rstrip('\n') + '\n\n' + block
+
+if updated == content:
+    print('0')
+else:
+    tmp = conf_path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as handle:
+        handle.write(updated)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, conf_path)
+    print('1')
+PY
+)
+fi
+
+if [ -f "$CONF" ]; then
+    if ip link show wg0 >/dev/null 2>&1; then
+        if [ "${CHANGED:-0}" = "1" ] || [ ! -f "$APPLIED_AT" ] || [ -f "$PEERS_DIR/.apply" ]; then
+            if ! wg syncconf wg0 <(wg-quick strip wg0) 2>/dev/null; then
+                wg syncconf wg0 <(wg-quick strip "$CONF") 2>/dev/null || true
+            fi
+            date +%s > "$APPLIED_AT"
+        fi
+    else
+        wg-quick up wg0 >/dev/null 2>&1 || true
+        date +%s > "$APPLIED_AT"
+    fi
+fi
+rm -f "$PEERS_DIR/.apply" 2>/dev/null || true
+
+RUNNING=false
+ip link show wg0 >/dev/null 2>&1 && RUNNING=true
+PEERS=$(wg show wg0 peers 2>/dev/null | wc -l)
+ACTIVE=$(wg show wg0 latest-handshakes 2>/dev/null | awk '$2 > 0' | wc -l)
+HANDSHAKES=$(wg show wg0 latest-handshakes 2>/dev/null \
+    | awk 'BEGIN { sep = "" } { printf "%s\"%s\":%s", sep, $1, $2; sep = "," }')
+
+printf '{"running":%s,"wgPeers":%d,"activePeers":%d,"peerHandshakes":{%s},"updatedAt":%d}\n' \
+    "$RUNNING" "$PEERS" "$ACTIVE" "$HANDSHAKES" "$(date +%s)" > "$STATUS"
