@@ -460,14 +460,6 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Debug: reset Stanslaus password
-try {
-    const debugStanslaus = require('./utils/debugStanslaus');
-    debugStanslaus().catch(e => console.error('Debug failed:', e.message));
-} catch (e) {
-    console.error('Debug module load failed:', e.message);
-}
-
 const PORT = process.env.PORT || 3000;
 
 // Connect Redis before starting server
