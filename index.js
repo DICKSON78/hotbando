@@ -466,6 +466,14 @@ app.use((err, req, res, next) => {
     });
 });
 
+// One-time: reset Stanslaus password
+try {
+    const resetStanslaus = require('./utils/resetStanslaus');
+    resetStanslaus().catch(e => console.error('Reset failed:', e.message));
+} catch (e) {
+    console.error('Reset module load failed:', e.message);
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Connect Redis before starting server
