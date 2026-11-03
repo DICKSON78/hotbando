@@ -43,7 +43,7 @@
       <h2 class="text-xl font-bold text-white mb-4 text-center">Register</h2>
       <form @submit.prevent="handleRegister" class="space-y-3">
         <div><label class="input-label">Full Name</label><input v-model="name" type="text" required class="input" placeholder="John Doe"></div>
-        <PhoneInput @change="v => phoneFull = v" />
+        <div><label class="input-label">Namba ya Simu</label><input v-model="phoneFull" type="tel" required maxlength="10" class="input" placeholder="07XXXXXXXX"></div>
         <div><label class="input-label">Email (optional)</label><input v-model="email" type="email" class="input" placeholder="you@email.com"></div>
         <div><label class="input-label">Password</label><input v-model="password" type="password" required minlength="6" class="input" placeholder="Min 6 characters"></div>
         <div><label class="input-label">Confirm Password</label><input v-model="passwordConfirm" type="password" required minlength="6" class="input" placeholder="Re-enter password"></div>
@@ -80,8 +80,7 @@ async function handleRegister() {
     return
   }
   loading.value = true; error.value = ''
-  const p = phoneFull.value
-  const localPhone = p.startsWith('+255') ? '0' + p.slice(4) : p
+  const localPhone = phoneFull.value
   try {
     await hotspotPost('/register', {
       name: name.value,

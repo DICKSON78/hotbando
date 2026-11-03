@@ -1,0 +1,1 @@
+import{W as t}from"./index-BvLvS_KM.js";function a(e){return t.get(`/reseller${e}`).then(r=>r.data)}function s(e,r){return t.post(`/reseller${e}`,r).then(l=>l.data)}function u(e,r){return t.put(`/reseller${e}`,r).then(l=>l.data)}function o(e){return t.delete(`/reseller${e}`).then(r=>r.data)}export{s as a,o as b,u as c,a as r};

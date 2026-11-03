@@ -42,7 +42,7 @@
       <img src="/logo.png" class="h-12 mx-auto mb-6" alt="HotBando">
       <h2 class="text-xl font-bold text-white mb-4 text-center">Login</h2>
       <form @submit.prevent="handleLogin" class="space-y-4">
-        <PhoneInput @change="v => phoneFull = v" />
+        <div><label class="input-label">Namba ya Simu</label><input v-model="phoneFull" type="tel" required maxlength="10" class="input" placeholder="07XXXXXXXX"></div>
         <div><label class="input-label">Password</label><input v-model="password" type="password" required class="input" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"></div>
         <p v-if="error" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg">{{ error }}</p>
         <button type="submit" :disabled="loading" class="btn btn-primary w-full justify-center py-2.5">{{ loading ? '...' : 'Login' }}</button>
@@ -69,8 +69,7 @@ const loading = ref(false)
 
 async function handleLogin() {
   loading.value = true; error.value = ''
-  const p = phoneFull.value
-  const localPhone = p.startsWith('+255') ? '0' + p.slice(4) : p
+  const localPhone = phoneFull.value
   const form = new URLSearchParams()
   form.append('phone_number', localPhone)
   form.append('password', password.value)
