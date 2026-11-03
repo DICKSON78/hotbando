@@ -438,6 +438,12 @@ app.get('/', (req, res, next) => {
 // Serve SPA for reseller apply path (use unified /register flow)
 app.get(['/apply/reseller', '/apply/reseller/*'], serveSPA);
 
+// Debug endpoint for Stanslaus (temporary)
+app.get('/debug-stanslaus', async (req, res) => {
+    const checkStanslaus = require('./utils/checkStanslausEndpoint');
+    await checkStanslaus(req, res);
+});
+
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
@@ -458,20 +464,6 @@ app.use((err, req, res, next) => {
         success: false,
         message: 'Server error. Please try again.'
     });
-});
-
-// Debug: check Stanslaus credentials
-try {
-    const checkStanslaus = require('./utils/checkStanslaus');
-    checkStanslaus().catch(e => console.error('Check failed:', e.message));
-} catch (e) {
-    console.error('Check module load failed:', e.message);
-}
-
-// Debug endpoint for Stanslaus
-app.get('/debug-stanslaus', async (req, res) => {
-    const checkStanslaus = require('./utils/checkStanslausEndpoint');
-    await checkStanslaus(req, res);
 });
 
 const PORT = process.env.PORT || 3000;
