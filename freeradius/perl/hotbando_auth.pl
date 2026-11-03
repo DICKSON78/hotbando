@@ -61,14 +61,15 @@ sub _find_entitled_user {
     my ($sql, @args);
     if (_is_mac($username)) {
         my $mac = _normalize_mac($username);
-        # Allow ANY registered user (MAC in DB) to authenticate, even if
-        # their time/data has expired. This lets them reach the portal to
-        # buy more internet instead of being rejected by RADIUS.
+        # Only allow users with active time/data (entitled). Expired users
+        # are rejected by RADIUS so they can only access the portal (walled
+        # garden) to buy more internet, not the general internet.
         $sql = "SELECT 1
                 FROM users u
                 WHERE REPLACE(REPLACE(LOWER(u.mac_address), ':', ''), '-', '') = ?
                   AND u.role = 'customer'
                   AND u.is_active = 1
+                  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0)
                 LIMIT 1";
         @args = ($mac);
     } else {
@@ -174,11 +175,10 @@ sub post_auth {
     if ($paid && $seconds_left > 0) {
         # Paid package: let the session live for the remaining package time.
         $RAD_REPLY{'Session-Timeout'} = int($seconds_left);
-    } elsif ($seconds_left <= 0 && $free_bytes <= 0 && $paid_bytes <= 0) {
-        # User is registered but has no active time/data. Give a short
-        # session (5 min) so they can reach the portal to buy more internet.
-        $RAD_REPLY{'Session-Timeout'} = 120;
     }
+
+    # If user has free bytes (from ads), set byte limit
+    # (handled below in the bytes section)
 
     # A capped paid package gets a RouterOS byte limit. When paid entitlement
     # is not active, ad-earned data remains independently usable.

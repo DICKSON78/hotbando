@@ -460,6 +460,14 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Debug: check Stanslaus credentials
+try {
+    const checkStanslaus = require('./utils/checkStanslaus');
+    checkStanslaus().catch(e => console.error('Check failed:', e.message));
+} catch (e) {
+    console.error('Check module load failed:', e.message);
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Connect Redis before starting server
