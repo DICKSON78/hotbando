@@ -154,6 +154,7 @@ app.use((req, res, next) => {
         '/api/hotspot/login',
         '/api/hotspot/register',
         '/debug-login',
+        '/debug-full-login',
         '/debug-register',
         '/debug-simple-login',
         '/api/login',
