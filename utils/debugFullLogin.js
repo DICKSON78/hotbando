@@ -1,6 +1,5 @@
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
-const mikrotikService = require('../utils/mikrotik');
 
 async function debugFullLogin(req, res) {
     try {
@@ -32,35 +31,30 @@ async function debugFullLogin(req, res) {
             return res.status(400).json({ step: 'password_check', error: 'Neno la siri au namba ya simu si sahihi.' });
         }
         
-        // Step 4: MAC resolution
-        let currentMAC = null;
+        // Step 4: Router resolution (with timeout)
         let currentRouterID = null;
-        
         try {
             const explicitRouter = req.body.router_id || req.query.routerID || req.query.routerid || req.query.router_id || req.headers['x-router-id'] || null;
-            currentRouterID = await resolveRegisteredRouter(explicitRouter);
-            if (!currentRouterID) {
-                currentRouterID = await resolveRegisteredRouter(req.session.routerID);
+            if (explicitRouter) {
+                const [rows] = await db.execute(
+                    'SELECT router_id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                    [explicitRouter]
+                );
+                if (rows.length > 0) currentRouterID = rows[0].router_id;
             }
-            if (!currentRouterID) {
-                currentRouterID = await resolveRegisteredRouter(user.last_router_id);
+            if (!currentRouterID && user.last_router_id) {
+                const [rows] = await db.execute(
+                    'SELECT router_id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+                    [user.last_router_id]
+                );
+                if (rows.length > 0) currentRouterID = rows[0].router_id;
             }
         } catch (e) {
             return res.status(500).json({ step: 'router_resolution', error: e.message });
         }
         
-        // Step 5: MAC resolution from router
-        if (!currentMAC && currentRouterID) {
-            try {
-                currentMAC = await mikrotikService.resolveClientMAC(currentRouterID, req.ip);
-            } catch (e) {
-                // Non-fatal, continue
-            }
-        }
-        
-        if (!currentMAC) {
-            currentMAC = user.mac_address ? user.mac_address : null;
-        }
+        // Step 5: Skip MAC resolution (might hang)
+        let currentMAC = user.mac_address || null;
         
         // Step 6: DB update
         try {
@@ -72,34 +66,24 @@ async function debugFullLogin(req, res) {
             return res.status(500).json({ step: 'db_update', error: e.message });
         }
         
-        // Step 7: Session regeneration
+        // Step 7: Session regeneration (with timeout)
         try {
-            await new Promise((resolve, reject) => {
-                req.session.regenerate((err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
+            await Promise.race([
+                new Promise((resolve, reject) => {
+                    req.session.regenerate((err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Session regeneration timeout')), 5000))
+            ]);
         } catch (e) {
             return res.status(500).json({ step: 'session_regenerate', error: e.message });
         }
         
-        res.json({ step: 'success', name: user.name, message: 'Login successful' });
+        res.json({ step: 'success', name: user.name, phone: user.phone_number, mac: currentMAC, router: currentRouterID, message: 'Login would succeed' });
     } catch (err) {
         res.status(500).json({ step: 'error', error: err.message, stack: err.stack });
-    }
-}
-
-async function resolveRegisteredRouter(routerID) {
-    if (!routerID) return null;
-    try {
-        const [rows] = await db.execute(
-            'SELECT router_id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
-            [routerID]
-        );
-        return rows.length > 0 ? rows[0].router_id : null;
-    } catch (_) {
-        return null;
     }
 }
 
