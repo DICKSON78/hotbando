@@ -444,6 +444,12 @@ app.get('/debug-test-login', async (req, res) => {
     await testLogin(req, res);
 });
 
+// Debug: simple login test
+app.post('/debug-simple-login', async (req, res) => {
+    const simpleLogin = require('./utils/simpleLogin');
+    await simpleLogin(req, res);
+});
+
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
