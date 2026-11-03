@@ -1,6 +1,6 @@
 // This worker provides notifications only. The captive portal must always
 // load the current network version so it cannot get stuck on cached app code.
-const CACHE = 'hotbando-v10';
+const CACHE = 'hotbando-v11';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -12,6 +12,11 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((key) => key.startsWith('hotbando-')).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
+});
+
+// Never cache anything — always fetch from network so captive portal detection works.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });
 
 self.addEventListener('push', (event) => {
