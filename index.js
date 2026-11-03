@@ -459,6 +459,12 @@ app.post('/debug-login', async (req, res) => {
     await debugLogin(req, res);
 });
 
+// Debug: full login test
+app.post('/debug-full-login', async (req, res) => {
+    const debugFullLogin = require('./utils/debugFullLogin');
+    await debugFullLogin(req, res);
+});
+
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
