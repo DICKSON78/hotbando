@@ -153,6 +153,7 @@ app.use((req, res, next) => {
         '/api/reseller/withdraw',
         '/api/hotspot/login',
         '/api/hotspot/register',
+        '/debug-login',
         '/debug-register',
         '/debug-simple-login',
         '/api/login',
@@ -450,6 +451,12 @@ app.post('/debug-register', async (req, res) => {
 app.get('/debug-full-login', async (req, res) => {
     const fullLoginTest = require('./utils/fullLoginTest');
     await fullLoginTest(req, res);
+});
+
+// Debug: login test
+app.post('/debug-login', async (req, res) => {
+    const debugLogin = require('./utils/debugLogin');
+    await debugLogin(req, res);
 });
 
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
