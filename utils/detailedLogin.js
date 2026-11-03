@@ -32,6 +32,18 @@ async function detailedLogin(req, res) {
             return res.json({ step: 'db_update', error: e.message });
         }
         
+        // Test session regeneration
+        try {
+            await new Promise((resolve, reject) => {
+                req.session.regenerate((err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        } catch (e) {
+            return res.json({ step: 'session_regenerate', error: e.message });
+        }
+        
         res.json({
             step: 'success',
             name: user.name,
