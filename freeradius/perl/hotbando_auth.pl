@@ -114,7 +114,6 @@ sub _load_allowance {
                WHERE $where
                  AND u.role = 'customer'
                  AND u.is_active = 1
-                 AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0)
                LIMIT 1";
 
     my $sth = $dbh->prepare($sql);
