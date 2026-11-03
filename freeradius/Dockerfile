@@ -25,7 +25,7 @@ COPY mikrotik.secret /etc/raddb/mikrotik.secret
 COPY dictionary.hotbando /etc/raddb/dictionary.hotbando
 RUN echo '$INCLUDE dictionary.hotbando' >> /etc/raddb/dictionary
 
-# Copy Perl authentication module config (updated v4 - reject expired users)
+# Copy Perl authentication module config
 COPY mods-available/perl /etc/raddb/mods-available/perl
 RUN ln -sf /etc/raddb/mods-available/perl /etc/raddb/mods-enabled/perl
 
