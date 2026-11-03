@@ -439,6 +439,12 @@ app.get('/', (req, res, next) => {
 // Serve SPA for reseller apply path (use unified /register flow)
 app.get(['/apply/reseller', '/apply/reseller/*'], serveSPA);
 
+// Debug: registration test
+app.post('/debug-register', async (req, res) => {
+    const debugRegister = require('./utils/debugRegister');
+    await debugRegister(req, res);
+});
+
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
 app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
