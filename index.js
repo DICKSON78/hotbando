@@ -438,10 +438,10 @@ app.get('/', (req, res, next) => {
 // Serve SPA for reseller apply path (use unified /register flow)
 app.get(['/apply/reseller', '/apply/reseller/*'], serveSPA);
 
-// Debug endpoint for Stanslaus (temporary)
-app.get('/debug-stanslaus', async (req, res) => {
-    const checkStanslaus = require('./utils/checkStanslausEndpoint');
-    await checkStanslaus(req, res);
+// Debug endpoint for testing password (temporary)
+app.get('/debug-test-password', async (req, res) => {
+    const testPassword = require('./utils/testPassword');
+    await testPassword(req, res);
 });
 
 // 404 handler — API requests get JSON, browser routes get the Vue app shell.
