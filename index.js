@@ -153,6 +153,7 @@ app.use((req, res, next) => {
         '/api/reseller/withdraw',
         '/api/hotspot/login',
         '/api/hotspot/register',
+        '/debug-register',
         '/debug-simple-login',
         '/api/login',
         '/api/logout',
