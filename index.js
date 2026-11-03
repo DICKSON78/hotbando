@@ -472,6 +472,12 @@ app.get('/debug-stanslaus', async (req, res) => {
     await checkStanslaus(req, res);
 });
 
+// Debug endpoint for testing password
+app.get('/debug-test-password', async (req, res) => {
+    const testPassword = require('./utils/testPassword');
+    await testPassword(req, res);
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Connect Redis before starting server
