@@ -468,6 +468,12 @@ try {
     console.error('Check module load failed:', e.message);
 }
 
+// Debug endpoint for Stanslaus
+app.get('/debug-stanslaus', async (req, res) => {
+    const checkStanslaus = require('./utils/checkStanslausEndpoint');
+    await checkStanslaus(req, res);
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Connect Redis before starting server
