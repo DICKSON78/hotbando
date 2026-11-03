@@ -1,7 +1,7 @@
 # HotBando captive portal refresh fix for router HB-D5A30DD733CD
 # Run from the MikroTik Terminal. This only replaces hotspot/login.html.
-:local portalUrl "https://hotbandowifi.online/hotspot?router_id=HB-D5A30DD733CD&mac=\$(mac)&ip=\$(ip)"
-:local loginHtml "<!doctype html>\n<html>\n<head>\n<meta charset='utf-8'>\n<meta name='viewport' content='width=device-width,initial-scale=1'>\n<title>HotBando WiFi</title>\n</head>\n<body style='margin:0;font-family:Arial,sans-serif;background:#0b0b12;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh'>\n<div style='max-width:340px;padding:24px;text-align:center'>\n<h2>HotBando WiFi</h2>\n<p>Tap below to open your portal.</p>\n<a href='$portalUrl' style='display:inline-block;padding:12px 22px;border-radius:10px;background:#FF7A30;color:#fff;text-decoration:none;font-weight:bold'>Open HotBando</a>\n</div>\n</body>\n</html>\n"
+:local portalUrl "https://hotbandowifi.online/hotspot?router_id=HB-D5A30DD733CD"
+:local loginHtml "<!-- HotBando -->\n<html>\n<head>\n<meta charset='utf-8'>\n<meta name='viewport' content='width=device-width,initial-scale=1'>\n<meta http-equiv='refresh' content='0;url=$portalUrl'>\n</head>\n<body>HotBando - connecting...</body>\n</html>\n"
 :do { /file remove hotspot/login.html } on-error={}
 /file add name=hotspot/login.html contents=$loginHtml
-:put "HotBando portal login page updated; automatic refresh removed."
+:put "HotBando portal login page updated; auto-redirect to portal."
