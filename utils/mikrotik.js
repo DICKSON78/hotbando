@@ -82,10 +82,7 @@ class MikrotikService {
                         timeout: router.timeout || 10
                     });
 
-                    await Promise.race([
-                        conn.connect(),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('connect-timeout')), 5000))
-                    ]);
+                    await conn.connect();
                     this.connections.set(routerID, conn);
 
                     // If a different password worked, update DB to match
@@ -177,10 +174,7 @@ class MikrotikService {
         if (!routerID || !ip) return null;
         const address = String(ip).replace(/^::ffff:/, '');
         try {
-            const conn = await Promise.race([
-                this.getRouterConnection(routerID),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('router-conn-timeout')), 2000))
-            ]);
+            const conn = await this.getRouterConnection(routerID);
             const lookups = [
                 ['/ip/dhcp-server/lease/print', `?address=${address}`],
                 ['/ip/hotspot/active/print', `?address=${address}`],
@@ -188,10 +182,7 @@ class MikrotikService {
             ];
             for (const [path, query] of lookups) {
                 try {
-                    const rows = await Promise.race([
-                        conn.write(path, [query]),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('query-timeout')), 1000))
-                    ]);
+                    const rows = await conn.write(path, [query]);
                     if (rows.length > 0 && rows[0]['mac-address']) {
                         return String(rows[0]['mac-address']).toUpperCase().replace(/-/g, ':');
                     }
