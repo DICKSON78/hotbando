@@ -265,19 +265,13 @@ exports.confirmPayment = async (req, res) => {
     const tx = rows[0];
     if (tx.processed) {
       try {
-        const activationResult = await processAndActivate(orderReference);
-        const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
-        if (extra.gift && extra.voucher_code) {
-          return res.json({ success: true, status: 'completed', voucher: extra.voucher_code, message: 'Voucher imegeneratiwa!' });
-        }
-        return res.json({ success: true, status: 'completed', ...activationResult, message: 'Malipo yamekamilika!' });
-      } catch (e) {
-        const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
-        if (extra.gift && extra.voucher_code) {
-          return res.json({ success: true, status: 'completed', voucher: extra.voucher_code, message: 'Voucher imegeneratiwa!' });
-        }
-        return res.json({ success: true, status: 'completed', message: 'Malipo yamekamilika!' });
+        await processAndActivate(orderReference);
+      } catch (e) {}
+      const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
+      if (extra.gift && extra.voucher_code) {
+        return res.json({ success: true, status: 'completed', voucher: extra.voucher_code, message: 'Voucher imegeneratiwa!' });
       }
+      return res.json({ success: true, status: 'completed', message: 'Malipo yamekamilika!' });
     }
 
     const result = await clickpesa.queryPaymentStatus(orderReference);
@@ -287,7 +281,7 @@ exports.confirmPayment = async (req, res) => {
     await db.execute('UPDATE clickpesa_transactions SET status = ?, clickpesa_response = ? WHERE order_reference = ?',
       [newStatus, JSON.stringify(result), orderReference]);
 
-    if (newStatus === 'SUCCESS' || newStatus === 'SETTLED' || newStatus === 'COMPLETED') {
+    if (newStatus === 'SUCCESS' || newStatus === 'SETTLED') {
       const activationResult = await processAndActivate(orderReference);
       return res.json({ success: true, status: 'completed', ...activationResult });
     }
@@ -366,14 +360,20 @@ async function processAndActivate(orderReference) {
       currency: 'TZS',
       providerRef: tx.clickpesa_id,
     }, conn);
-    if (result && result.alreadyProcessed) {
+    if (result && result.alreadyProcessed && tx.user_id && tx.purpose === 'package_purchase') {
       try {
         const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
-        if (tx.purpose === 'package_purchase' && tx.user_id && extra.package_id) {
-          await activatePackage(tx.user_id, extra.package_id, tx.amount, extra, conn);
+        if (extra.package_id) {
+          const [users] = await conn.execute('SELECT usage_until FROM users WHERE id = ? FOR UPDATE', [tx.user_id]);
+          const user = users[0];
+          const now = new Date();
+          const hasActive = user && user.usage_until && new Date(user.usage_until) > now;
+          if (!hasActive) {
+            await activatePackage(tx.user_id, extra.package_id, tx.amount, extra, conn);
+          }
         }
       } catch (e) {
-        logger.error('Re-activation after alreadyProcessed failed', { error: e.message, orderReference });
+        logger.error('Recovery activation failed', { error: e.message, orderReference });
       }
     }
     await conn.commit();

@@ -143,51 +143,9 @@ router.get('/dashboard', requireWifi, async (req, res) => {
         const now = new Date();
         let usageUntil = user.usage_until ? new Date(user.usage_until) : null;
         if (usageUntil && isNaN(usageUntil.getTime())) usageUntil = null;
-        let isActive = usageUntil ? now < usageUntil : false;
-        let remainingSeconds = isActive && usageUntil ? Math.max(0, (usageUntil - now) / 1000) : 0;
-        let freeMB = user.free_bytes ? (user.free_bytes / (1024 * 1024)) : 0;
-        // Fallback: if no active package, try to auto-activate any recently completed payment
-        if (!isActive && user?.id) {
-            try {
-                const [pendingTx] = await db.execute(
-                    "SELECT order_reference, extra_data, amount, processed FROM clickpesa_transactions WHERE user_id = ? AND purpose = 'package_purchase' ORDER BY id DESC LIMIT 1",
-                    [user.id]
-                );
-                if (pendingTx.length) {
-                    const { fulfillClickPesaPayment, activatePackage } = require('../services/paymentFulfillment');
-                    try {
-                        const conn = await db.getConnection();
-                        await conn.beginTransaction();
-                        try {
-                            await fulfillClickPesaPayment({ orderReference: pendingTx[0].order_reference, amount: pendingTx[0].amount, currency: 'TZS' }, conn);
-                            if (pendingTx[0].processed) {
-                                const extra = pendingTx[0].extra_data ? (typeof pendingTx[0].extra_data === 'string' ? JSON.parse(pendingTx[0].extra_data) : pendingTx[0].extra_data) : {};
-                                if (extra.package_id) {
-                                    await activatePackage(user.id, extra.package_id, pendingTx[0].amount, extra, conn);
-                                }
-                            }
-                            await conn.commit();
-                        } catch (e) {
-                            await conn.rollback();
-                        }
-                        conn.release();
-                    } catch (e) {}
-                    // Refresh user data
-                    const [freshUsers2] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
-                    if (freshUsers2.length) {
-                        req.session.hotbando_user = { ...publicSessionUser(freshUsers2[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
-                        const user2 = req.session.hotbando_user;
-                        usageUntil = user2.usage_until ? new Date(user2.usage_until) : null;
-                        if (usageUntil && isNaN(usageUntil.getTime())) usageUntil = null;
-                        isActive = usageUntil ? now < usageUntil : false;
-                        remainingSeconds = isActive && usageUntil ? Math.max(0, (usageUntil - now) / 1000) : 0;
-                        freeMB = user2.free_bytes ? (user2.free_bytes / (1024 * 1024)) : 0;
-                    }
-                }
-            } catch (e) {
-                // ignore fallback errors
-            }
-        }
+        const isActive = usageUntil ? now < usageUntil : false;
+        const remainingSeconds = isActive && usageUntil ? Math.max(0, (usageUntil - now) / 1000) : 0;
+        const freeMB = Number(user.free_bytes || 0) / (1024 * 1024);
 
         const [todayViews] = await db.execute(
             'SELECT COUNT(*) as count FROM ad_views WHERE user_id = ? AND DATE(created_at) = CURDATE()',
@@ -202,6 +160,8 @@ router.get('/dashboard', requireWifi, async (req, res) => {
         const adsWatchedToday = todayViews[0].count;
         const adsRemaining = Math.max(0, dailyAdLimit - adsWatchedToday);
 
+        const macAddr = req.session.mac || user.mac_address || req.session.hotbando_user?.mac_address || null;
+        const routerId = req.session.routerID || user.last_router_id || req.session.hotbando_user?.last_router_id || null;
         res.json({
             user: {
                 id: user.id,
@@ -211,12 +171,16 @@ router.get('/dashboard', requireWifi, async (req, res) => {
                 moneyspent: user.moneyspent,
                 free_bytes: user.free_bytes,
                 usage_start: user.usage_start,
-                usage_until: user.usage_until
+                usage_until: user.usage_until,
+                mac_address: macAddr,
+                last_router_id: routerId
             },
             location: req.session.location,
-            routerID: req.session.routerID,
+            routerID: routerId,
             ssidshow: req.session.ssidshow,
-            mac: req.session.mac || user.mac_address || '00:00:00:00:00:00',
+            mac: macAddr || '00:00:00:00:00:00',
+            mac_address: macAddr,
+            last_router_id: routerId,
             clientIP: req.session.clientIP || req.ip,
             isActive,
             remainingSeconds: Math.round(remainingSeconds),
@@ -226,7 +190,7 @@ router.get('/dashboard', requireWifi, async (req, res) => {
             adsRemaining,
             dailyAdLimit,
             canWatchAds: adsRemaining > 0,
-            routerStatus: 'registered',
+            routerStatus: routerId ? 'registered' : 'registered',
             connectedUsers: null,
             routerMessage: 'Umeunganishwa kwenye mtandao wa HotBando.'
         });
@@ -258,7 +222,7 @@ router.get('/usage', requireWifi, async (req, res) => {
         const isActive = usageUntil ? now < usageUntil : false;
         const remainingSeconds = isActive && usageUntil ? Math.max(0, (usageUntil - now) / 1000) : 0;
         res.json({
-            freeMB: fresh.free_bytes ? (fresh.free_bytes / (1024 * 1024)).toFixed(2) : '0.00',
+            freeMB: (Number(fresh.free_bytes || 0) / (1024 * 1024)).toFixed(2),
             free_bytes: fresh.free_bytes || 0,
             isActive,
             remainingSeconds: Math.round(remainingSeconds),
