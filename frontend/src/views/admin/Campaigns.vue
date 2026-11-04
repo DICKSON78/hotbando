@@ -260,7 +260,7 @@
           <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Watched fully</p><p class="text-green-400 font-semibold">{{ fmtNum(viewAd.completed_views) }} ({{ completionRate(viewAd) }}%)</p></div>
           <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Views today</p><p class="text-white font-semibold">{{ fmtNum(viewAd.views_today) }}</p></div>
           <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Data given away</p><p class="text-white font-semibold">{{ fmtBytesMB(viewAd.reward_bytes_given) }}</p></div>
-          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Runs until</p><p class="text-white font-semibold">{{ viewAd.expires_at ? new Date(viewAd.expires_at).toLocaleDateString() : 'No end date' }}</p></div>
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Runs until</p><p class="text-white font-semibold">{{ viewAd.expires_date || 'No end date' }}</p></div>
         </div>
         <p class="text-xs mt-3" style="color: #6b7280">Shown for {{ viewAd.duration }}s &middot; reward {{ fmtMB(viewAd.reward_bytes) }} per full view</p>
       </div>

@@ -363,6 +363,7 @@ router.get('/campaigns', async (req, res) => {
               (SELECT COUNT(DISTINCT av.user_id) FROM ad_views av WHERE av.ad_id = a.id) as unique_viewers,
               (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id AND DATE(av.created_at) = CURDATE()) as views_today,
               (SELECT COALESCE(SUM(av.data_earned), 0) FROM ad_views av WHERE av.ad_id = a.id) as reward_bytes_given,
+              DATE_FORMAT(a.expires_at, '%Y-%m-%d') AS expires_date,
               CASE
                 WHEN a.deleted_at IS NOT NULL THEN 'removed'
                 WHEN a.expires_at IS NOT NULL AND a.expires_at <= NOW() THEN 'expired'
