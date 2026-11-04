@@ -1,3 +1,6 @@
+const fs = require('fs');
+const { DURATION_OPTIONS, MAX_AD_SECONDS } = require('../utils/adPolicy');
+const { ALLOWED_AD_MEDIA, MAX_IMAGE_BYTES } = require('../utils/adUpload');
 /**
  * Campaign Controller
  * Handles bank campaigns, advertiser campaigns, lead management, and form submissions
@@ -57,6 +60,39 @@ const campaignController = {
                 return res.status(400).json({ error: `Invalid campaign type. Use one of: ${validTypes.join(', ')}` });
             }
 
+            const isAdType = ['ad_video', 'ad_image'].includes(campaign_type);
+            const uploadedFile = req.file;
+            const discardUpload = () => { if (uploadedFile) fs.unlink(uploadedFile.path, () => {}); };
+            let uploadedUrl = null;
+            if (uploadedFile) {
+                const mediaKind = ALLOWED_AD_MEDIA[uploadedFile.mimetype];
+                const expectedKind = campaign_type === 'ad_video' ? 'video' : 'image';
+                if (isAdType && mediaKind !== expectedKind) {
+                    discardUpload();
+                    return res.status(400).json({ error: campaign_type === 'ad_video' ? 'Upload a video (MP4 or WebM) for a video ad' : 'Upload a banner or poster (JPG, PNG or WebP) for an image ad' });
+                }
+                if (mediaKind === 'image' && uploadedFile.size > MAX_IMAGE_BYTES) {
+                    discardUpload();
+                    return res.status(400).json({ error: 'Image is too large. Maximum is 10MB' });
+                }
+                uploadedUrl = `/uploads/ads/${uploadedFile.filename}`;
+            }
+            const runDays = DURATION_OPTIONS[req.body.duration_option]?.days;
+            if (isAdType) {
+                const adSeconds = parseInt(req.body.duration_seconds, 10);
+                if (!Number.isFinite(adSeconds) || adSeconds <= 0 || adSeconds > MAX_AD_SECONDS) {
+                    discardUpload();
+                    return res.status(400).json({ error: `Ads can be at most ${MAX_AD_SECONDS} seconds long` });
+                }
+                if (!runDays && !end_date) {
+                    discardUpload();
+                    return res.status(400).json({ error: 'Choose how long the ad runs: 1d, 5d, 1w, 2w or 1m' });
+                }
+            }
+            const resolvedEndDate = end_date || (isAdType && runDays
+                ? new Date(new Date(start_date || Date.now()).getTime() + runDays * 86400000)
+                : null);
+
             // Determine owner type
             let owner_type = 'advertiser';
             if (user.role === 'bank_partner') {
@@ -78,14 +114,14 @@ const campaignController = {
                 rewardBytesValue = Math.round((Number.isFinite(defaultMB) ? defaultMB : 15) * 1024 * 1024);
             }
 
-            const mediaUrl = req.body.media_url || null;
+            const mediaUrl = uploadedUrl || req.body.media_url || null;
             const resolvedVideo = video_url || (campaign_type === 'ad_video' ? mediaUrl : null);
             const resolvedImage = image_url || (campaign_type === 'ad_image' ? mediaUrl : null);
             if (campaign_type === 'ad_video' && !resolvedVideo) {
-                return res.status(400).json({ error: 'A video URL is required for a video ad campaign' });
+                return res.status(400).json({ error: 'Upload a video (MP4 or WebM) for a video ad campaign' });
             }
             if (campaign_type === 'ad_image' && !resolvedImage) {
-                return res.status(400).json({ error: 'An image URL is required for an image ad campaign' });
+                return res.status(400).json({ error: 'Upload a banner or poster for an image ad campaign' });
             }
 
             // For advertisers, check wallet balance
@@ -115,7 +151,7 @@ const campaignController = {
                 description: description || null,
                 instructions: instructions || req.body.target_url || null,
                 start_date: toDateTime(start_date, new Date()),
-                end_date: toDateTime(end_date, null),
+                end_date: toDateTime(resolvedEndDate, null),
                 is_active: 0, // Needs approval
                 requires_approval: 1,
                 target_locations: target_locations ? JSON.stringify(target_locations) : null,

@@ -285,19 +285,20 @@ class Campaign extends BaseModel {
         if (existing.length) {
             await this.db.query(
                 `UPDATE ads SET title = ?, description = ?, image_url = ?, video_url = ?, duration = ?,
-                        reward_bytes = ?, sponsor_id = ?, approved = ?, is_active = ?, updated_at = NOW()
+                        reward_bytes = ?, sponsor_id = ?, approved = ?, is_active = ?,
+                        expires_at = DATE_ADD(DATE(?), INTERVAL 1 DAY), updated_at = NOW()
                  WHERE id = ?`,
                 [campaign.campaign_name, campaign.description || '', campaign.image_url || '', campaign.video_url || '',
-                 duration, Number(campaign.reward_bytes) || 0, campaign.owner_id, approved, isActive, existing[0].id]
+                 duration, Number(campaign.reward_bytes) || 0, campaign.owner_id, approved, isActive, campaign.end_date || null, existing[0].id]
             );
             return existing[0].id;
         }
 
         const [result] = await this.db.query(
-            `INSERT INTO ads (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, campaign_id, approved, is_active, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            `INSERT INTO ads (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, campaign_id, approved, is_active, expires_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(DATE(?), INTERVAL 1 DAY), NOW())`,
             [campaign.campaign_name, campaign.description || '', campaign.image_url || '', campaign.video_url || '',
-             duration, Number(campaign.reward_bytes) || 0, campaign.owner_id, campaignId, approved, isActive]
+             duration, Number(campaign.reward_bytes) || 0, campaign.owner_id, campaignId, approved, isActive, campaign.end_date || null]
         );
         return result.insertId;
     }

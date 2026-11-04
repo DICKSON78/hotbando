@@ -1,3 +1,4 @@
+const { adUpload } = require('../utils/adUpload');
 /**
  * Campaign Routes
  * API endpoints for campaign management (bank & advertiser campaigns)
@@ -15,7 +16,7 @@ router.get('/active', campaignController.getActiveCampaigns);
 router.post('/:campaign_id/complete', customerAuth, campaignController.completeCampaign);
 
 // Partner routes (sponsors & bank partners)
-router.post('/create', sponsorAuth, campaignController.createCampaign);
+router.post('/create', sponsorAuth, adUpload.single('media'), campaignController.createCampaign);
 router.get('/my-campaigns', sponsorAuth, campaignController.getMyCampaigns);
 router.get('/my-leads', sponsorAuth, async (req, res) => {
   try {

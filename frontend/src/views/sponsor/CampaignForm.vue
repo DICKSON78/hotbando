@@ -20,8 +20,19 @@
         </select>
       </div>
       <div v-if="isAd">
-        <label class="input-label">{{ form.campaign_type === 'ad_video' ? 'Video URL (direct .mp4 link)' : 'Image URL' }}</label>
-        <input v-model="form.media_url" required class="input" placeholder="https://">
+        <label class="input-label">{{ form.campaign_type === 'ad_video' ? 'Upload video (MP4 or WebM, max 100MB)' : 'Upload banner or poster (JPG, PNG or WebP, max 10MB)' }}</label>
+        <input type="file" required :accept="form.campaign_type === 'ad_video' ? 'video/mp4,video/webm' : 'image/jpeg,image/png,image/webp'" @change="onMediaFile($event)" class="input">
+      </div>
+      <div v-if="isAd">
+        <label class="input-label">How long the ad runs</label>
+        <select v-model="form.duration_option" required class="input">
+          <option value="" disabled>Choose</option>
+          <option value="1d">1 day</option>
+          <option value="5d">5 days</option>
+          <option value="1w">1 week</option>
+          <option value="2w">2 weeks</option>
+          <option value="1m">1 month</option>
+        </select>
       </div>
       <div>
         <label class="input-label">Target URL (optional)</label>
@@ -34,12 +45,12 @@
           <input v-model.number="form.reward_mb" type="number" min="1" class="input" placeholder="15">
         </div>
         <div v-if="form.campaign_type === 'ad_video'">
-          <label class="input-label">Video length (seconds)</label>
-          <input v-model.number="form.duration_seconds" type="number" min="5" class="input" placeholder="30">
+          <label class="input-label">Video length (seconds, max 45)</label>
+          <input v-model.number="form.duration_seconds" type="number" min="1" max="45" class="input" placeholder="30">
         </div>
         <div v-else>
-          <label class="input-label">Display time (seconds)</label>
-          <input v-model.number="form.duration_seconds" type="number" min="5" class="input" placeholder="10">
+          <label class="input-label">Display time (seconds, max 45)</label>
+          <input v-model.number="form.duration_seconds" type="number" min="1" max="45" class="input" placeholder="10">
         </div>
       </div>
 
@@ -91,24 +102,34 @@
 <script setup>
 import { reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiPost } from '../../api/client'
+import api from '../../api/client'
 
 const router = useRouter()
 const today = new Date().toISOString().slice(0, 10)
 const form = reactive({
   campaign_name: '', description: '', campaign_type: 'ad_video', media_url: '', target_url: '',
   reward_mb: 15, duration_seconds: 30, total_budget: 0, cost_per_action: 0,
-  start_date: today, end_date: '', daily_limit: 0, total_limit: 0
+  start_date: today, end_date: '', daily_limit: 0, total_limit: 0, duration_option: '', media: null
 })
 const error = ref('')
 const success = ref('')
 const submitting = ref(false)
 const isAd = computed(() => form.campaign_type === 'ad_video' || form.campaign_type === 'ad_image')
 
+function onMediaFile(event) {
+  form.media = event.target.files?.[0] || null
+}
+
 async function submit() {
   submitting.value = true; error.value = ''; success.value = ''
   try {
-    await apiPost('/campaigns/create', form)
+    const body = new FormData()
+    for (const [key, value] of Object.entries(form)) {
+      if (key === 'media' || value === null || value === undefined) continue
+      body.append(key, String(value))
+    }
+    if (form.media) body.append('media', form.media)
+    await api.post('/campaigns/create', body, { headers: { 'Content-Type': 'multipart/form-data' } })
     success.value = 'Campaign submitted. It goes live once HotBando approves it.'
     setTimeout(() => router.push('/sponsor/campaigns'), 1200)
   } catch (e) {
