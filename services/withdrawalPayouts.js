@@ -28,7 +28,12 @@ async function refund(withdrawal) {
 }
 
 async function markFailed(withdrawal, message) {
-  await db.execute("UPDATE reseller_withdrawals SET status = 'failed', last_error = ? WHERE id = ? AND status = 'sending'", [message, withdrawal.id]);
+  // Refund only once: the status change must succeed before the balance moves.
+  const [result] = await db.execute(
+    "UPDATE reseller_withdrawals SET status = 'failed', last_error = ? WHERE id = ? AND status IN ('sending', 'sent')",
+    [message, withdrawal.id]
+  );
+  if (result.affectedRows === 0) return;
   await refund(withdrawal);
   logger.warn('Withdrawal payout failed, balance refunded', { withdrawal: withdrawal.id, message });
 }
