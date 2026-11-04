@@ -149,10 +149,10 @@ router.get('/dashboard', requireWifi, async (req, res) => {
                 const hasActiveCheck = usageUntilCheck ? now < usageUntilCheck : false;
                 if (!hasActiveCheck && Number(user.free_bytes || 0) <= 0) {
                     const [txs] = await db.execute(
-                        "SELECT order_reference, amount, extra_data FROM clickpesa_transactions WHERE user_id = ? AND purpose = 'package_purchase' AND status IN ('SUCCESS','SETTLED','COMPLETED') ORDER BY id DESC LIMIT 1",
+                        "SELECT order_reference, amount, extra_data, processed FROM clickpesa_transactions WHERE user_id = ? AND purpose = 'package_purchase' AND status IN ('SUCCESS','SETTLED','COMPLETED') ORDER BY id DESC LIMIT 1",
                         [user.id]
                     );
-                    if (txs.length) {
+                    if (txs.length && !txs[0].processed) {
                         try {
                             const { activatePackage } = require('../services/paymentFulfillment');
                             const extra = txs[0].extra_data ? (typeof txs[0].extra_data === 'string' ? JSON.parse(txs[0].extra_data) : txs[0].extra_data) : {};
