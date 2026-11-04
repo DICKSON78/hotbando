@@ -28,5 +28,6 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "badge": "/icons/badge-72.png"
 }

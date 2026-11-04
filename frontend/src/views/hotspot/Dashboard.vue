@@ -197,8 +197,28 @@ function checkAlert() {
 }
 
 function sendNotification(title, body) {
-  // Keep hotspot alerts in the in-app banner and notification inbox; native
-  // browser popups can stack over the captive portal and interrupt browsing.
+  // Update in-app alert banner
+  alertMsg.value = body
+  alertType.value = title.includes('Bundle yako') ? 'warn' : title.includes('Umeunganishwa') ? 'info' : 'info'
+
+  // Add to notification inbox
+  notifications.value.unshift({ id: Date.now(), title, message: body, is_read: 0 })
+
+  // Send browser notification if permission granted (avoid stacking over captive portal)
+  if (Notification.permission === 'granted') {
+    const notification = new Notification(title, {
+      body: body,
+      icon: '/logo.png',
+      badge: '/logo.png',
+      tag: 'hotbando-' + Date.now()
+    })
+    notification.onclick = () => {
+      notification.close()
+      window.focus()
+      // Auto-mark as read when clicked
+      notification.value = notifications.value.map(item => ({ ...item, is_read: 1 }))
+    }
+  }
 }
 
 async function loadData() {
