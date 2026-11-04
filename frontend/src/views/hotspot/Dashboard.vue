@@ -1,5 +1,16 @@
 <template>
   <div class="pb-4">
+    <!-- Loading state -->
+    <div v-if="loading" class="mx-4 mt-8 text-center">
+      <i class="fas fa-spinner fa-spin text-2xl text-[#FF7A30]"></i>
+      <p class="text-sm text-white/50 mt-2">Inapakia taarifa...</p>
+    </div>
+    <!-- Error state -->
+    <div v-else-if="loadError" class="mx-4 mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+      <p class="text-sm text-red-400">{{ loadError }}</p>
+      <button class="ig-btn ig-btn-outline text-xs mt-2" @click="loadData()">Jaribu tena</button>
+    </div>
+    <template v-else>
     <!-- Greeting -->
     <div class="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
       <div class="min-w-0">
@@ -112,6 +123,7 @@
     </div>
 
     <InstallApp />
+  </template>
   </div>
 </template>
 
@@ -125,6 +137,8 @@ import InstallApp from '../../components/InstallApp.vue'
 const router = useRouter()
 const store = useHotspotStore()
 const user = ref(null)
+const loading = ref(false)
+const loadError = ref(null)
 const remainingTime = ref('—')
 const remainingSeconds = ref(0)
 const freeMB = ref(0)
@@ -188,6 +202,8 @@ function sendNotification(title, body) {
 }
 
 async function loadData() {
+  loading.value = true
+  loadError.value = null
   try {
     const r = await hotspotGet('/dashboard', { params: { t: Date.now() } })
     if (r.redirect) { router.push('/hotspot/login'); return }
@@ -205,11 +221,24 @@ async function loadData() {
     const apiMac = normalizeMac(r.mac_address || r.user?.mac_address)
     const apiRouter = r.last_router_id || r.user?.last_router_id
     routerReady.value = !!currentMac && (!apiMac || currentMac === apiMac) && (!apiRouter || String(store.routerID) === String(apiRouter))
-    connected.value = (!!r.isActive || Number(r.user?.free_bytes || r.free_bytes || 0) > 0) && routerReady.value
+    const hasEntitlement = !!r.isActive || Number(r.user?.free_bytes || r.free_bytes || 0) > 0
+    connected.value = hasEntitlement && (routerReady.value || !!store.onWifi || !!store.routerID)
     checkAlert()
     loadNotifications()
   } catch (e) {
-    if (e.response?.status === 401) router.push('/hotspot/login')
+    if (e.response?.status === 401) {
+      router.push('/hotspot/login')
+    } else if (e.response?.status === 403) {
+      loadError.value = 'Tafadhali unganisha kwenye WiFi ya HotBando.'
+    } else if (e.response?.status === 500) {
+      loadError.value = 'Tatizo la seva. Tafadhali jaribu tena.'
+      console.error('Dashboard server error:', e.response?.data)
+    } else {
+      loadError.value = 'Imeshindikana kupata taarifa. Tafadhali jaribu tena.'
+      console.error('Dashboard load error:', e.message || e)
+    }
+  } finally {
+    loading.value = false
   }
 }
 
