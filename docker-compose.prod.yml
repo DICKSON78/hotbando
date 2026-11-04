@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - TZ=Africa/Dar_es_Salaam
       - DB_HOST=db
       - DB_NAME=hotbando
       - REDIS_ENABLED=true
