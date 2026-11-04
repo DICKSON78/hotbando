@@ -60,8 +60,14 @@ async function reconcilePayments() {
         logger.info('Payment activated by reconciler', { orderReference, status });
       }
     } catch (err) {
+      if (/429/.test(err.message)) {
+        // Provider rate limit: this attempt does not count, and checks stop until the daily budget resets.
+        checksByOrder.set(orderReference, checks);
+        budgetUsed = DAILY_STATUS_BUDGET;
+        logger.warn('Payment checks paused by provider rate limit');
+        break;
+      }
       logger.warn('Payment check failed', { orderReference, error: err.message });
-      if (/429/.test(err.message)) break;
     }
   }
   return activated;
