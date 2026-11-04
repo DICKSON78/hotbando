@@ -238,7 +238,10 @@ const hotspotController = {
             // not carry it. Never persist a fabricated MAC.
             if (!currentMAC && currentRouterID) {
                 try {
-                    currentMAC = await mikrotikService.resolveClientMAC(currentRouterID, req.ip);
+                    currentMAC = await Promise.race([
+                        mikrotikService.resolveClientMAC(currentRouterID, req.ip),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('mac-timeout')), 2000))
+                    ]);
                 } catch (e) {
                     currentMAC = null;
                 }
