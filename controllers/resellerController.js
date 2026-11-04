@@ -1,6 +1,9 @@
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 
+const MIN_RESELLER_SALE_PRICE = 500;
+const WITHDRAWAL_FEE_RATE = 0.10;
+
 const PACKAGE_VALUES = {
   'MASAA 6': { id: 1, price: 500 },
   'MASAA 24': { id: 2, price: 1000 },
@@ -299,7 +302,7 @@ class ResellerController {
   async generateVouchers(req, res) {
     try {
       const resellerUserId = req.session.reseller_user.id;
-      const { package_type, quantity, packages } = req.body;
+      const { package_type, quantity, packages, sale_prices } = req.body;
 
       let items = [];
       if (packages && typeof packages === 'object') {
@@ -323,6 +326,9 @@ class ResellerController {
       }
       const reseller = resellerRows[0];
 
+      // The reseller sets the selling price (minimum TSh 500). The full price
+      // goes to the reseller's account when a customer redeems the voucher.
+      const minSalePrice = MIN_RESELLER_SALE_PRICE;
       let totalCost = 0;
       for (const item of items) {
         const qty = item.quantity;
@@ -332,14 +338,12 @@ class ResellerController {
         if (qty > 10000) {
           return res.status(400).json({ success: false, message: 'Idadi ya vouchers haizidi 10,000 kwa mara moja' });
         }
-        totalCost += PACKAGE_VALUES[item.package_type].price * qty;
-      }
-
-      if (parseFloat(reseller.balance) < totalCost) {
-        return res.status(400).json({
-          success: false,
-          message: `Salio haikutosi. Unahitaji TZS ${totalCost.toLocaleString()}, una TZS ${parseFloat(reseller.balance).toLocaleString()}`
-        });
+        const requested = Number(sale_prices?.[item.package_type]);
+        item.salePrice = Number.isFinite(requested) && requested > 0 ? requested : PACKAGE_VALUES[item.package_type].price;
+        if (item.salePrice < minSalePrice) {
+          return res.status(400).json({ success: false, message: `Bei ya chini ya voucher ni TZS ${minSalePrice.toLocaleString()}` });
+        }
+        totalCost += item.salePrice * qty;
       }
 
       const [batches] = await db.execute('SELECT MAX(id) as maxId FROM voucher_batches');
@@ -359,14 +363,14 @@ class ResellerController {
         for (let i = 0; i < item.quantity; i++) {
           const code = await this.generateUniqueVoucher();
           const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-          allVouchers.push([code, packageInfo.id, packageInfo.price, 0, null, null, batchId, expiresAt]);
+          allVouchers.push([code, packageInfo.id, item.salePrice, 0, null, null, batchId, expiresAt, 1]);
         }
       }
 
-      const placeholders = allVouchers.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',');
+      const placeholders = allVouchers.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
       const values = allVouchers.flat();
       await db.execute(
-        `INSERT INTO vouchers (voucher_code, package_id, price, is_used, used_at, used_by, batch_id, expires_at) VALUES ${placeholders}`,
+        `INSERT INTO vouchers (voucher_code, package_id, price, is_used, used_at, used_by, batch_id, expires_at, reseller_profit) VALUES ${placeholders}`,
         values
       );
 
@@ -375,20 +379,15 @@ class ResellerController {
         [totalQty, totalCost, batchId]
       );
 
-      await db.execute(
-        'UPDATE resellers SET balance = balance - ? WHERE user_id = ?',
-        [totalCost, resellerUserId]
-      );
-
       return res.json({
         success: true,
-        message: `Vouchers ${totalQty} zimeundwa kikamilifu!`,
+        message: `Vouchers ${totalQty} zimeundwa kikamilifu! Zitakapouzwa, TZS ${totalCost.toLocaleString()} zitaingia kwenye akaunti yako.`,
         data: {
           batch_id: batchId,
           batch_name: batchName,
           count: totalQty,
-          cost: totalCost,
-          balance_after: parseFloat(reseller.balance) - totalCost
+          sale_value: totalCost,
+          balance_after: parseFloat(reseller.balance)
         }
       });
     } catch (error) {
@@ -516,11 +515,14 @@ class ResellerController {
         [withdrawAmount, resellerUserId]
       );
 
+      const fee = Math.round(withdrawAmount * WITHDRAWAL_FEE_RATE);
+      const payout = withdrawAmount - fee;
+
       // Record transaction for audit trail
       await connection.execute(
         `INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at)
          VALUES (?, 'withdrawal', ?, ?, ?, NOW())`,
-        [resellerUserId, withdrawAmount, `WDR-${withdrawalId}`, `Withdrawal via ${payment_method || 'mobile_money'}`]
+        [resellerUserId, withdrawAmount, `WDR-${withdrawalId}`, `Withdrawal via ${payment_method || 'mobile_money'}; platform fee 10% TZS ${fee}; payout TZS ${payout}`]
       );
 
       await connection.commit();
@@ -529,10 +531,12 @@ class ResellerController {
 
       return res.json({
         success: true,
-        message: `Uondoaji wa TZS ${withdrawAmount.toLocaleString()} umekamilika. Fedha zimetumwa kwenye namba ${payment_phone}.`,
+        message: `Uondoaji wa TZS ${withdrawAmount.toLocaleString()} umekamilika. Ada ya 10% ni TZS ${fee.toLocaleString()}; utapokea TZS ${payout.toLocaleString()} kwenye namba ${payment_phone}.`,
         data: {
           id: withdrawalId,
           amount: withdrawAmount,
+          fee,
+          payout,
           balance_after: parseFloat(updatedReseller[0].balance),
           status: 'processed',
           payment_phone: payment_phone,

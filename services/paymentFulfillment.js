@@ -209,7 +209,7 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
       }
     }
     await executor.execute(
-      `INSERT INTO payments (business_id, partner_id, customer_id, order_reference, clickpesa_transaction_id, type, amount, currency, status, provider, provider_ref, description, metadata)
+      `INSERT INTO payment_ledger (business_id, partner_id, customer_id, order_reference, clickpesa_transaction_id, type, amount, currency, status, provider, provider_ref, description, metadata)
        VALUES (?, ?, ?, ?, ?, 'payment', ?, ?, 'completed', 'clickpesa', ?, ?, ?)`,
       [businessId, partnerId, userId, orderReference, tx.id, tx.amount, orderCurrency, providerRef || null, purpose, JSON.stringify({ extra })]
     );

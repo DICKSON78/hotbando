@@ -69,12 +69,22 @@
               <p class="font-medium text-white">{{ pkg.name }}</p>
               <p class="text-sm" style="color: #6b7280">TSH {{ parseFloat(pkg.price).toLocaleString() }}</p>
             </div>
-            <input type="number" min="0" max="10000" v-model.number="quantities[pkg.name]"
-              class="w-24 px-3 py-2 border border-[#1e1e2a] bg-[#0a0a0f] rounded-lg text-center text-white focus:border-[#FF7A30] focus:outline-none" placeholder="0">
+            <div class="flex items-center gap-2">
+              <div class="text-right">
+                <p class="text-xs" style="color: #6b7280">Sell at (TSh, min 500)</p>
+                <input type="number" min="500" v-model.number="salePrices[pkg.name]"
+                  class="w-24 px-3 py-2 border border-[#1e1e2a] bg-[#0a0a0f] rounded-lg text-center text-white focus:border-[#FF7A30] focus:outline-none">
+              </div>
+              <div class="text-right">
+                <p class="text-xs" style="color: #6b7280">Quantity</p>
+                <input type="number" min="0" max="10000" v-model.number="quantities[pkg.name]"
+                  class="w-24 px-3 py-2 border border-[#1e1e2a] bg-[#0a0a0f] rounded-lg text-center text-white focus:border-[#FF7A30] focus:outline-none" placeholder="0">
+              </div>
+            </div>
           </div>
         </div>
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3" style="border-top: 1px solid #1e1e2a">
-          <p class="text-sm" style="color: #6b7280">Platform fee: <strong class="text-white">20%</strong> · Cost deducted from wallet balance</p>
+          <p class="text-sm" style="color: #6b7280">You keep the full selling price when a customer redeems. Withdrawals carry a <strong class="text-white">10%</strong> platform fee.</p>
           <button @click="generate" :disabled="generating" class="btn btn-primary">
             <i v-if="generating" class="fas fa-spinner fa-spin mr-2"></i>
             <i v-else class="fas fa-bolt mr-2"></i>
@@ -207,6 +217,7 @@ const vouchers = ref([])
 const batches = ref([])
 const packages = ref([])
 const quantities = ref({})
+const salePrices = ref({})
 const generating = ref(false)
 const genError = ref('')
 const genSuccess = ref('')
@@ -247,7 +258,7 @@ async function loadPackages() {
       { id: 4, name: 'MWEZI 1', price: '40000.00' }
     ]
   }
-  packages.value.forEach(p => { quantities.value[p.name] = 0 })
+  packages.value.forEach(p => { quantities.value[p.name] = 0; salePrices.value[p.name] = Math.max(500, parseFloat(p.price) || 500) })
 }
 
 async function loadVouchers() {
@@ -279,7 +290,9 @@ async function generate() {
   if (!hasAny) { genError.value = 'Select at least one package'; return }
   generating.value = true
   try {
-    const r = await resellerPost('/vouchers/generate', { packages: pkgs })
+    const prices = {}
+    for (const name of Object.keys(pkgs)) prices[name] = Number(salePrices.value[name]) || 0
+    const r = await resellerPost('/vouchers/generate', { packages: pkgs, sale_prices: prices })
     genSuccess.value = r.message; quantities.value = {}; packages.value.forEach(p => { quantities.value[p.name] = 0 })
     await loadVouchers()
     showToast(genSuccess.value)
