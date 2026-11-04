@@ -107,15 +107,18 @@ class ExpiryScheduler {
         try {
             // Find users who have a paid package (not free tier) that has expired
             // and are still marked with a future usage_until OR have an active MikroTik session
-            const [expiredUsers] = await db.execute(`
+            // Purchases store usage_until from the app clock (local time), so the
+            // exact expiry check is done in JavaScript. SQL only narrows candidates.
+            const [candidates] = await db.execute(`
                 SELECT id, name, phone_number, mac_address, last_router_id, usage_until, package
                 FROM users
                 WHERE role = 'customer'
                   AND is_active = 1
                   AND package != 'KARIBU HOT BANDO'
                   AND usage_until IS NOT NULL
-                  AND usage_until < NOW()
+                  AND usage_until < DATE_ADD(NOW(), INTERVAL 1 DAY)
             `);
+            const expiredUsers = candidates.filter(u => new Date(u.usage_until) < new Date());
 
             if (expiredUsers.length === 0) return;
 
