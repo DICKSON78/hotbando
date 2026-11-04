@@ -25,6 +25,18 @@ class MikrotikService {
      */
     async getRouterConnection(routerID) {
         try {
+            // Quick check: if router is known offline, don't try to connect
+            const db = require('../config/database');
+            const isNumericId = /^\d+$/.test(String(routerID));
+            const [routers] = await db.execute(
+                isNumericId
+                    ? 'SELECT status FROM mikrotiks WHERE id = ?'
+                    : 'SELECT status FROM mikrotiks WHERE router_id = ?',
+                [isNumericId ? parseInt(routerID) : routerID]
+            );
+            if (routers.length > 0 && routers[0].status === 'offline') {
+                throw new Error('Router is offline');
+            }
             // Check if we have an existing connection
             if (this.connections.has(routerID)) {
                 const existingConn = this.connections.get(routerID);
@@ -42,21 +54,21 @@ class MikrotikService {
                 }
             }
 
-            // Get router details from database
-            const db = require('../config/database');
-            const isNumericId = /^\d+$/.test(String(routerID));
-            const [routers] = await db.execute(
+            // Get router details from database (reuse variables from offline check above)
+            const [routerDetails] = await db.execute(
                 isNumericId
                     ? 'SELECT * FROM mikrotiks WHERE id = ?'
                     : 'SELECT * FROM mikrotiks WHERE router_id = ?',
                 [isNumericId ? parseInt(routerID) : routerID]
             );
 
-            if (routers.length === 0) {
+            const routerRows = routerDetails;
+
+            if (routerRows.length === 0) {
                 throw new Error(`Router ${routerID} not found in database`);
             }
 
-            const router = routers[0];
+            const router = routerRows[0];
             const { decrypt, isEncrypted } = require('./encryption');
             const routerPassword = isEncrypted(router.password) ? decrypt(router.password) : router.password;
             const dbWhere = isNumericId ? 'id = ?' : 'router_id = ?';
@@ -82,7 +94,10 @@ class MikrotikService {
                         timeout: router.timeout || 10
                     });
 
-                    await conn.connect();
+                    await Promise.race([
+                        conn.connect(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('connect-timeout')), 5000))
+                    ]);
                     this.connections.set(routerID, conn);
 
                     // If a different password worked, update DB to match
