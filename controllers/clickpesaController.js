@@ -355,16 +355,27 @@ exports.getBalance = async (req, res) => {
 async function processAndActivate(orderReference) {
   const conn = await db.getConnection();
   try {
-    const { fulfillClickPesaPayment } = require('../services/paymentFulfillment');
+    const { fulfillClickPesaPayment, activatePackage } = require('../services/paymentFulfillment');
     await conn.beginTransaction();
-    const [rows] = await conn.execute('SELECT amount, clickpesa_id FROM clickpesa_transactions WHERE order_reference = ? FOR UPDATE', [orderReference]);
+    const [rows] = await conn.execute('SELECT * FROM clickpesa_transactions WHERE order_reference = ? FOR UPDATE', [orderReference]);
     if (!rows.length) throw new Error(`ClickPesa order not found: ${orderReference}`);
+    const tx = rows[0];
     const result = await fulfillClickPesaPayment({
       orderReference,
-      amount: rows[0].amount,
+      amount: tx.amount,
       currency: 'TZS',
-      providerRef: rows[0].clickpesa_id,
+      providerRef: tx.clickpesa_id,
     }, conn);
+    if (result && result.alreadyProcessed) {
+      try {
+        const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
+        if (tx.purpose === 'package_purchase' && tx.user_id && extra.package_id) {
+          await activatePackage(tx.user_id, extra.package_id, tx.amount, extra, conn);
+        }
+      } catch (e) {
+        logger.error('Re-activation after alreadyProcessed failed', { error: e.message, orderReference });
+      }
+    }
     await conn.commit();
     return result;
   } catch (error) {
