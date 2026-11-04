@@ -55,8 +55,12 @@
       <p class="text-3xl font-bold mt-1">{{ remainingTime }}</p>
       <div class="flex items-center justify-between mt-4 pt-4 border-t border-white/20 text-sm">
         <div>
-          <p class="text-white/70 text-xs">Free Data</p>
+          <p class="text-white/70 text-xs">Free Data (Ads)</p>
           <p class="font-bold">{{ freeMB }} MB</p>
+        </div>
+        <div class="text-center">
+          <p class="text-white/70 text-xs">Paid Data</p>
+          <p class="font-bold">{{ paidMB }} MB</p>
         </div>
         <div class="text-right">
           <p class="text-white/70 text-xs">Ads Left</p>
@@ -124,6 +128,7 @@ const user = ref(null)
 const remainingTime = ref('—')
 const remainingSeconds = ref(0)
 const freeMB = ref(0)
+const paidMB = ref('0.00')
 const adsRemaining = ref(0)
 const adsWatchedToday = ref(0)
 const connected = ref(false)
@@ -193,6 +198,7 @@ async function loadData() {
     remainingSeconds.value = Number(r.remainingSeconds) || 0
     remainingTime.value = r.remainingTime || '—'
     freeMB.value = r.freeMB ?? 0
+    paidMB.value = r.paidMB ?? '0.00'
     adsRemaining.value = r.adsRemaining || 0
     adsWatchedToday.value = r.adsWatchedToday || 0
     const currentMac = normalizeMac(store.mac || r.mac || r.mac_address)
@@ -225,6 +231,7 @@ async function loadUsage() {
   try {
     const r = await hotspotGet('/usage')
     freeMB.value = r.freeMB ?? freeMB.value
+    paidMB.value = r.paidMB ?? paidMB.value
     remainingTime.value = r.remainingTime || remainingTime.value
     remainingSeconds.value = r.remainingSeconds || 0
     checkAlert()

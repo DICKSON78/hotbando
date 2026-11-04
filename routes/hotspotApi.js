@@ -198,6 +198,9 @@ router.get('/dashboard', requireWifi, async (req, res) => {
 
         const macAddr = req.session.mac || user.mac_address || req.session.hotbando_user?.mac_address || null;
         const routerId = req.session.routerID || user.last_router_id || req.session.hotbando_user?.last_router_id || null;
+        const paidBytesRemaining = Number(user.paid_bytes_remaining || 0);
+        const paidDataLimitBytes = Number(user.paid_data_limit_bytes || 0);
+        const paidMB = paidBytesRemaining > 0 ? (paidBytesRemaining / (1024 * 1024)).toFixed(2) : (paidDataLimitBytes > 0 ? (paidDataLimitBytes / (1024 * 1024)).toFixed(2) : 'Unlimited');
         res.json({
             user: {
                 id: user.id,
@@ -206,6 +209,8 @@ router.get('/dashboard', requireWifi, async (req, res) => {
                 package: user.package,
                 moneyspent: user.moneyspent,
                 free_bytes: user.free_bytes,
+                paid_bytes_remaining: paidBytesRemaining,
+                paid_data_limit_bytes: paidDataLimitBytes,
                 usage_start: user.usage_start,
                 usage_until: user.usage_until,
                 mac_address: macAddr,
@@ -222,6 +227,9 @@ router.get('/dashboard', requireWifi, async (req, res) => {
             remainingSeconds: Math.round(remainingSeconds),
             remainingTime: formatRemainingTime(remainingSeconds),
             freeMB: freeMB.toFixed(2),
+            paidMB: paidMB,
+            paidBytesRemaining: paidBytesRemaining,
+            paidDataLimitBytes: paidDataLimitBytes,
             adsWatchedToday,
             adsRemaining,
             dailyAdLimit,
@@ -244,7 +252,7 @@ router.get('/usage', requireWifi, async (req, res) => {
     }
     try {
         const [users] = await db.execute(
-            'SELECT free_bytes, usage_until, moneyspent, package FROM users WHERE id = ?',
+            'SELECT free_bytes, paid_bytes_remaining, paid_data_limit_bytes, usage_until, moneyspent, package FROM users WHERE id = ?',
             [user.id]
         );
         if (users.length === 0) {
@@ -257,9 +265,14 @@ router.get('/usage', requireWifi, async (req, res) => {
         if (usageUntil && isNaN(usageUntil.getTime())) usageUntil = null;
         const isActive = usageUntil ? now < usageUntil : false;
         const remainingSeconds = isActive && usageUntil ? Math.max(0, (usageUntil - now) / 1000) : 0;
+        const paidBytesRemaining = Number(fresh.paid_bytes_remaining || 0);
+        const paidDataLimitBytes = Number(fresh.paid_data_limit_bytes || 0);
         res.json({
             freeMB: (Number(fresh.free_bytes || 0) / (1024 * 1024)).toFixed(2),
             free_bytes: fresh.free_bytes || 0,
+            paidMB: paidBytesRemaining > 0 ? (paidBytesRemaining / (1024 * 1024)).toFixed(2) : (paidDataLimitBytes > 0 ? (paidDataLimitBytes / (1024 * 1024)).toFixed(2) : 'Unlimited'),
+            paidBytesRemaining: paidBytesRemaining,
+            paidDataLimitBytes: paidDataLimitBytes,
             isActive,
             remainingSeconds: Math.round(remainingSeconds),
             remainingTime: formatRemainingTime(remainingSeconds),
