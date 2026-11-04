@@ -174,7 +174,10 @@ class MikrotikService {
         if (!routerID || !ip) return null;
         const address = String(ip).replace(/^::ffff:/, '');
         try {
-            const conn = await this.getRouterConnection(routerID);
+            const conn = await Promise.race([
+                this.getRouterConnection(routerID),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('router-conn-timeout')), 2000))
+            ]);
             const lookups = [
                 ['/ip/dhcp-server/lease/print', `?address=${address}`],
                 ['/ip/hotspot/active/print', `?address=${address}`],
@@ -182,7 +185,10 @@ class MikrotikService {
             ];
             for (const [path, query] of lookups) {
                 try {
-                    const rows = await conn.write(path, [query]);
+                    const rows = await Promise.race([
+                        conn.write(path, [query]),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('query-timeout')), 1000))
+                    ]);
                     if (rows.length > 0 && rows[0]['mac-address']) {
                         return String(rows[0]['mac-address']).toUpperCase().replace(/-/g, ':');
                     }
