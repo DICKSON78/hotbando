@@ -1220,8 +1220,12 @@ async getAdViewsForAnalytics(req, res) {
                COALESCE(l.city, m.location_city) as city,
                COALESCE(l.region, m.location_region) as region,
                b.name as branch_name,
-               (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id AND u.role = 'customer') as customer_count,
-               (SELECT COUNT(*) FROM users u WHERE u.last_router_id = m.router_id AND u.role = 'customer' AND u.usage_until > NOW()) as active_bundle_users
+               (SELECT COUNT(DISTINCT u.id) FROM users u 
+                  LEFT JOIN hotspot_sessions hs ON hs.user_id = u.id AND hs.router_id = m.router_id
+                  WHERE u.role = 'customer' AND (u.last_router_id = m.router_id OR hs.router_id = m.router_id)) as customer_count,
+               (SELECT COUNT(DISTINCT u.id) FROM users u 
+                  LEFT JOIN hotspot_sessions hs ON hs.user_id = u.id AND hs.router_id = m.router_id
+                  WHERE u.role = 'customer' AND (u.last_router_id = m.router_id OR hs.router_id = m.router_id) AND u.usage_until IS NOT NULL AND u.usage_until > NOW()) as active_bundle_users
         FROM mikrotiks m
         LEFT JOIN locations l ON m.location_id = l.id
         LEFT JOIN branches b ON b.id = l.branch_id
@@ -1577,7 +1581,7 @@ async getAdViewsForAnalytics(req, res) {
                l.latitude, l.longitude, l.location_type,
                b.name as branch_name,
                fo.name as owner_name, fo.phone_number as owner_phone, fo.email as owner_email,
-               (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND usage_until > NOW() AND role = 'customer') as active_users_count,
+               (SELECT COUNT(DISTINCT u.id) FROM users u LEFT JOIN hotspot_sessions hs ON hs.user_id = u.id AND hs.router_id = m.router_id WHERE u.role = 'customer' AND (u.last_router_id = m.router_id OR hs.router_id = m.router_id) AND u.usage_until IS NOT NULL AND u.usage_until > NOW()) as active_users_count,
                (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_users_count,
                (SELECT COALESCE(SUM(moneyspent), 0) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_revenue
         FROM mikrotiks m
