@@ -15,6 +15,13 @@ const pool = mysql.createPool({
     keepAliveInitialDelay: 0,
 });
 
+// The app writes dates in its own clock (TZ=Africa/Dar_es_Salaam). Keep each
+// connection's session clock on the same offset so NOW() in SQL matches them.
+const DB_SESSION_TIMEZONE = process.env.DB_SESSION_TIMEZONE || '+03:00';
+pool.on('connection', (connection) => {
+    connection.query(`SET time_zone = '${DB_SESSION_TIMEZONE}'`);
+});
+
 const promisePool = pool.promise();
 
 promisePool.getConnection()

@@ -142,7 +142,7 @@ const packages = [
     popular: false
   },
   {
-    name: 'MWEEZI 1',
+    name: 'MWEZI 1',
     tagline: 'Best value for a full month.',
     price: '40,000',
     features: ['30 days of usage', 'Speed: 15 Mbps', 'Very few ads', 'Priority 24/7 support'],
@@ -151,12 +151,12 @@ const packages = [
 ]
 
 const comparison = [
-  { label: 'Price (TSh)', values: { 'MASAA 6': '500', 'MASAA 24': '1,000', 'WIKI 1': '6,000', 'MWEEZI 1': '40,000' } },
-  { label: 'Usage Duration', values: { 'MASAA 6': '6 Hours', 'MASAA 24': '24 Hours', 'WIKI 1': '7 Days', 'MWEEZI 1': '30 Days' } },
-  { label: 'Internet Speed', values: { 'MASAA 6': '5 Mbps', 'MASAA 24': '10 Mbps', 'WIKI 1': '10 Mbps', 'MWEEZI 1': '15 Mbps' } },
-  { label: 'Ads', values: { 'MASAA 6': 'Standard', 'MASAA 24': 'Fewer', 'WIKI 1': 'Very few', 'MWEEZI 1': 'Very few' } },
-  { label: 'Free Data via Ads', values: { 'MASAA 6': 'Yes', 'MASAA 24': 'Yes', 'WIKI 1': 'Yes', 'MWEEZI 1': 'Yes' } },
-  { label: 'Support', values: { 'MASAA 6': 'Standard', 'MASAA 24': 'Priority', 'WIKI 1': '24/7', 'MWEEZI 1': 'Priority 24/7' } }
+  { label: 'Price (TSh)', values: { 'MASAA 6': '500', 'MASAA 24': '1,000', 'WIKI 1': '6,000', 'MWEZI 1': '40,000' } },
+  { label: 'Usage Duration', values: { 'MASAA 6': '6 Hours', 'MASAA 24': '24 Hours', 'WIKI 1': '7 Days', 'MWEZI 1': '30 Days' } },
+  { label: 'Internet Speed', values: { 'MASAA 6': '5 Mbps', 'MASAA 24': '10 Mbps', 'WIKI 1': '10 Mbps', 'MWEZI 1': '15 Mbps' } },
+  { label: 'Ads', values: { 'MASAA 6': 'Standard', 'MASAA 24': 'Fewer', 'WIKI 1': 'Very few', 'MWEZI 1': 'Very few' } },
+  { label: 'Free Data via Ads', values: { 'MASAA 6': 'Yes', 'MASAA 24': 'Yes', 'WIKI 1': 'Yes', 'MWEZI 1': 'Yes' } },
+  { label: 'Support', values: { 'MASAA 6': 'Standard', 'MASAA 24': 'Priority', 'WIKI 1': '24/7', 'MWEZI 1': 'Priority 24/7' } }
 ]
 
 const methods = [

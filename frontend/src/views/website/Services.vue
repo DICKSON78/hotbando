@@ -174,7 +174,7 @@ const faqs = [
   },
   {
     q: 'What is the internet speed?',
-    a: 'Speed depends on your plan: MASAA 6 offers 5 Mbps, MASAA 24 and WIKI 1 offer 10 Mbps, and MWEEZI 1 offers 15 Mbps. Businesses can get up to 100 Mbps.'
+    a: 'Speed depends on your plan: MASAA 6 offers 5 Mbps, MASAA 24 and WIKI 1 offer 10 Mbps, and MWEZI 1 offers 15 Mbps. Businesses can get up to 100 Mbps.'
   },
   {
     q: 'How can I get support?',
