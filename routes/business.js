@@ -1,8 +1,36 @@
 // routes/business.js — Production Business Module APIs
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const { adminAuth } = require('../middleware/authMiddleware');
 const db = require('../config/database');
+const { DURATION_OPTIONS, MAX_AD_SECONDS, UPLOAD_ROOT } = require('../utils/adPolicy');
+
+const ALLOWED_AD_MEDIA = {
+  'video/mp4': 'video',
+  'video/webm': 'video',
+  'image/jpeg': 'image',
+  'image/png': 'image',
+  'image/webp': 'image',
+};
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const adUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+      cb(null, UPLOAD_ROOT);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `ad_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, !!ALLOWED_AD_MEDIA[file.mimetype]),
+});
 
 router.use(adminAuth);
 
@@ -331,7 +359,16 @@ router.get('/campaigns', async (req, res) => {
     const [ads] = await db.execute(
       `SELECT a.*, u.name AS sponsor_name, u.company_name,
               (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id) as view_count,
-              (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id AND av.watched_duration >= a.duration) as completed_views
+              (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id AND av.watched_duration >= a.duration) as completed_views,
+              (SELECT COUNT(DISTINCT av.user_id) FROM ad_views av WHERE av.ad_id = a.id) as unique_viewers,
+              (SELECT COUNT(*) FROM ad_views av WHERE av.ad_id = a.id AND DATE(av.created_at) = CURDATE()) as views_today,
+              (SELECT COALESCE(SUM(av.data_earned), 0) FROM ad_views av WHERE av.ad_id = a.id) as reward_bytes_given,
+              CASE
+                WHEN a.deleted_at IS NOT NULL THEN 'removed'
+                WHEN a.expires_at IS NOT NULL AND a.expires_at <= NOW() THEN 'expired'
+                WHEN a.approved = 1 AND a.is_active = 1 THEN 'live'
+                ELSE 'inactive'
+              END AS ad_status
        FROM ads a
        LEFT JOIN users u ON a.sponsor_id = u.id
        ORDER BY a.created_at DESC LIMIT 50`
@@ -450,38 +487,81 @@ router.post('/campaigns/:id/lifecycle', async (req, res) => {
 
 // POST /ads — Create an ad (admin). Ads created here are approved and active
 // immediately because an admin is the approver.
-router.post('/ads', async (req, res) => {
+router.post('/ads', adUpload.single('media'), async (req, res) => {
+  const file = req.file;
+  const discardUpload = () => { if (file) fs.unlink(file.path, () => {}); };
   try {
     const {
-      title, description, video_url, image_url,
-      reward_mb, reward_bytes: rewardBytesInput,
-      duration, duration_seconds, sponsor_id, is_active
+      title, description, duration_option, duration, duration_seconds,
+      reward_mb, reward_bytes: rewardBytesInput, sponsor_id, category_id, is_active
     } = req.body;
 
-    if (!title) return res.status(400).json({ success: false, message: 'Title is required' });
-    if (!video_url && !image_url) {
-      return res.status(400).json({ success: false, message: 'Video URL or Image URL is required' });
+    if (!title) { discardUpload(); return res.status(400).json({ success: false, message: 'Title is required' }); }
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'Upload a video (MP4/WebM), banner or poster (JPG/PNG/WebP)' });
+    }
+    const mediaType = ALLOWED_AD_MEDIA[file.mimetype];
+    if (mediaType === 'image' && file.size > MAX_IMAGE_BYTES) {
+      discardUpload();
+      return res.status(400).json({ success: false, message: 'Image is too large. Maximum is 10MB' });
+    }
+
+    const policy = DURATION_OPTIONS[duration_option];
+    if (!policy) {
+      discardUpload();
+      return res.status(400).json({ success: false, message: 'Choose how long the ad runs: 1d, 5d, 1w, 2w or 1m' });
     }
 
     const parsedDuration = parseInt(duration ?? duration_seconds, 10);
-    const durationSeconds = Number.isFinite(parsedDuration) && parsedDuration > 0 ? parsedDuration : 30;
+    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
+      discardUpload();
+      return res.status(400).json({ success: false, message: `Set how long the ad is shown (1 to ${MAX_AD_SECONDS} seconds)` });
+    }
+    if (parsedDuration > MAX_AD_SECONDS) {
+      discardUpload();
+      return res.status(400).json({ success: false, message: `Ads can be at most ${MAX_AD_SECONDS} seconds long` });
+    }
 
     const rewardBytes = rewardBytesInput != null
       ? Math.max(0, parseInt(rewardBytesInput, 10) || 0)
-      : Math.max(0, Math.round((Number(reward_mb) || 0) * 1024 * 1024));
+      : Math.max(0, Math.round((Number(reward_mb) || 15) * 1024 * 1024));
 
     const active = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
+    const url = `/uploads/ads/${file.filename}`;
+    const videoUrl = mediaType === 'video' ? url : '';
+    const imageUrl = mediaType === 'image' ? url : '';
 
     const [result] = await db.execute(
       `INSERT INTO ads
-        (title, description, image_url, video_url, duration, reward_bytes, sponsor_id, approved, is_active, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())`,
-      [title, description || '', image_url || '', video_url || '', durationSeconds, rewardBytes,
-       sponsor_id || null, active]
+        (title, description, image_url, video_url, duration, duration_options, reward_bytes, category_id,
+         sponsor_id, approved, is_active, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, DATE_ADD(NOW(), INTERVAL ? DAY), NOW())`,
+      [title, description || '', imageUrl, videoUrl, parsedDuration, duration_option, rewardBytes,
+       category_id || null, sponsor_id || null, active, policy.days]
     );
-    res.json({ success: true, id: result.insertId, message: 'Ad created and published' });
+    res.json({ success: true, id: result.insertId, message: 'Ad uploaded and published' });
   } catch (error) {
+    discardUpload();
     console.error('Ad create error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.delete('/ads/:id', async (req, res) => {
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 5) {
+    return res.status(400).json({ success: false, message: 'Give a reason for removing this ad (at least 5 characters)' });
+  }
+  try {
+    const [result] = await db.execute(
+      `UPDATE ads SET deleted_at = NOW(), deleted_by = ?, delete_reason = ?, is_active = 0, updated_at = NOW()
+       WHERE id = ? AND deleted_at IS NULL`,
+      [req.session?.admin_user?.id || null, reason.slice(0, 500), req.params.id]
+    );
+    if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Ad not found or already removed' });
+    res.json({ success: true, message: 'Ad removed from customers. It is deleted from the database after 24 hours.' });
+  } catch (error) {
+    console.error('Ad delete error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -501,6 +581,9 @@ router.put('/ads/:id', async (req, res) => {
     if (body.sponsor_id !== undefined) { updates.push('sponsor_id = ?'); values.push(body.sponsor_id || null); }
     if (body.duration !== undefined || body.duration_seconds !== undefined) {
       const parsed = parseInt(body.duration ?? body.duration_seconds, 10);
+      if (parsed > MAX_AD_SECONDS) {
+        return res.status(400).json({ success: false, message: `Ads can be at most ${MAX_AD_SECONDS} seconds long` });
+      }
       if (Number.isFinite(parsed) && parsed > 0) { updates.push('duration = ?'); values.push(parsed); }
     }
     if (body.reward_mb !== undefined || body.reward_bytes !== undefined) {

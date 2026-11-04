@@ -103,13 +103,15 @@
                     </div>
                   </td>
                   <td class="py-3 px-4 text-center">
-                    <span class="text-xs px-2 py-0.5 rounded-full" :class="ad.is_active ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-500'">
-                      {{ ad.is_active ? 'ACTIVE' : 'INACTIVE' }}
+                    <span class="text-xs px-2 py-0.5 rounded-full" :class="adStatusClass(ad.ad_status)">
+                      {{ adStatusLabel(ad.ad_status) }}
                     </span>
                   </td>
                   <td class="py-3 px-4 text-right space-x-1">
-                    <button v-if="!ad.is_active" @click="approveAd(ad)" class="p-1.5 rounded-lg transition-colors text-green-400 hover:bg-green-500/10" title="Approve"><i class="fas fa-check text-xs"></i></button>
-                    <button v-if="ad.is_active" @click="declineAd(ad)" class="p-1.5 rounded-lg transition-colors text-red-400 hover:bg-red-500/10" title="Deactivate"><i class="fas fa-ban text-xs"></i></button>
+                    <button @click="openAdView(ad)" class="p-1.5 rounded-lg transition-colors text-blue-400 hover:bg-blue-500/10" title="View and engagement"><i class="fas fa-eye text-xs"></i></button>
+                    <button v-if="ad.ad_status !== 'removed' && !ad.is_active" @click="approveAd(ad)" class="p-1.5 rounded-lg transition-colors text-green-400 hover:bg-green-500/10" title="Activate"><i class="fas fa-check text-xs"></i></button>
+                    <button v-if="ad.ad_status !== 'removed' && ad.is_active" @click="declineAd(ad)" class="p-1.5 rounded-lg transition-colors text-yellow-400 hover:bg-yellow-500/10" title="Pause"><i class="fas fa-pause text-xs"></i></button>
+                    <button v-if="ad.ad_status !== 'removed'" @click="openAdRemove(ad)" class="p-1.5 rounded-lg transition-colors text-red-400 hover:bg-red-500/10" title="Remove ad (reason required)"><i class="fas fa-trash text-xs"></i></button>
                   </td>
                 </tr>
                 <tr v-if="!ads.length"><td colspan="8" class="text-center py-12" style="color: #6b7280"><p>No ads yet</p></td></tr>
@@ -240,6 +242,42 @@
       </div>
     </template>
 
+    <!-- VIEW AD MODAL -->
+    <div v-if="viewAd" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px)">
+      <div class="relative w-full max-w-lg rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style="background: #111118; border: 1px solid #1e1e2a">
+        <button @click="viewAd = null" class="absolute top-4 right-4" style="color: #6b7280"><i class="fas fa-times text-lg hover:text-white"></i></button>
+        <h3 class="text-lg font-bold text-white mb-1">{{ viewAd.title }}</h3>
+        <p class="text-xs mb-4" :class="adStatusClass(viewAd.ad_status).split(' ').find(c => c.startsWith('text-'))">{{ adStatusLabel(viewAd.ad_status) }}<span v-if="viewAd.ad_status === 'removed'"> &middot; {{ viewAd.delete_reason }}</span></p>
+        <div class="rounded-xl overflow-hidden bg-black flex items-center justify-center" style="min-height: 180px">
+          <video v-if="viewAd.video_url" :src="viewAd.video_url" controls class="w-full max-h-72"></video>
+          <img v-else-if="viewAd.image_url" :src="viewAd.image_url" class="w-full max-h-72 object-contain">
+          <p v-else class="text-sm" style="color: #6b7280">No media</p>
+        </div>
+        <p class="text-sm text-white/70 mt-3">{{ viewAd.description || 'No description' }}</p>
+        <div class="grid grid-cols-2 gap-3 mt-4 text-sm">
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Total views</p><p class="text-white font-semibold">{{ fmtNum(viewAd.view_count) }}</p></div>
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Unique people</p><p class="text-white font-semibold">{{ fmtNum(viewAd.unique_viewers) }}</p></div>
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Watched fully</p><p class="text-green-400 font-semibold">{{ fmtNum(viewAd.completed_views) }} ({{ completionRate(viewAd) }}%)</p></div>
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Views today</p><p class="text-white font-semibold">{{ fmtNum(viewAd.views_today) }}</p></div>
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Data given away</p><p class="text-white font-semibold">{{ fmtBytesMB(viewAd.reward_bytes_given) }}</p></div>
+          <div class="rounded-lg p-3" style="background: #0a0a0f"><p class="text-xs" style="color: #6b7280">Runs until</p><p class="text-white font-semibold">{{ viewAd.expires_at ? new Date(viewAd.expires_at).toLocaleDateString() : 'No end date' }}</p></div>
+        </div>
+        <p class="text-xs mt-3" style="color: #6b7280">Shown for {{ viewAd.duration }}s &middot; reward {{ fmtMB(viewAd.reward_bytes) }} per full view</p>
+      </div>
+    </div>
+
+    <!-- REMOVE AD MODAL -->
+    <div v-if="removeAd" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px)">
+      <div class="relative w-full max-w-md rounded-2xl p-6" style="background: #111118; border: 1px solid #1e1e2a">
+        <button @click="removeAd = null" class="absolute top-4 right-4" style="color: #6b7280"><i class="fas fa-times text-lg hover:text-white"></i></button>
+        <h3 class="text-lg font-bold text-white mb-2">Remove ad</h3>
+        <p class="text-sm mb-3" style="color: #9ca3af">"{{ removeAd.title }}" will stop showing to customers immediately and be deleted from the database after 24 hours.</p>
+        <label class="input-label">Reason (required)</label>
+        <textarea v-model="removeReason" class="form-input" rows="3" placeholder="e.g. Offensive content, misleading claims"></textarea>
+        <button @click="confirmRemoveAd()" class="btn w-full mt-4 bg-red-600 text-white" :disabled="removeReason.trim().length < 5 || removing"><i v-if="removing" class="fas fa-spinner fa-spin mr-1"></i> Remove ad</button>
+      </div>
+    </div>
+
     <!-- CREATE AD MODAL -->
     <div v-if="showCreateAd" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px)">
       <div class="relative w-full max-w-md rounded-2xl p-6" style="background: #111118; border: 1px solid #1e1e2a">
@@ -248,14 +286,27 @@
         <div class="space-y-3">
           <div><label class="input-label">Title *</label><input v-model="adForm.title" class="form-input" placeholder="Ad title"></div>
           <div><label class="input-label">Description</label><textarea v-model="adForm.description" class="form-input" rows="2" placeholder="Ad description"></textarea></div>
-          <div><label class="input-label">Video URL</label><input v-model="adForm.video_url" class="form-input" placeholder="https://.../ad.mp4"></div>
-          <div><label class="input-label">Image URL</label><input v-model="adForm.image_url" class="form-input" placeholder="https://.../ad.jpg (required if no video)"></div>
-          <div class="grid grid-cols-2 gap-3">
-            <div><label class="input-label">Reward (MB)</label><input v-model.number="adForm.reward_mb" type="number" min="1" class="form-input" placeholder="15"></div>
-            <div><label class="input-label">Duration (sec)</label><input v-model.number="adForm.duration_seconds" type="number" min="5" class="form-input" placeholder="30"></div>
+          <div><label class="input-label">Video, banner or poster *</label>
+            <input type="file" accept="video/mp4,video/webm,image/jpeg,image/png,image/webp" @change="onAdFile($event)" class="form-input text-xs">
+            <p v-if="adForm.file" class="text-xs mt-1" style="color: #6b7280">{{ adForm.file.name }} ({{ (adForm.file.size / 1048576).toFixed(1) }} MB)</p>
           </div>
-          <p class="text-xs" style="color: #6b7280">The ad is published immediately. Use the toggle in the table to pause it.</p>
-          <button @click="createAd()" class="btn btn-primary w-full" :disabled="!adForm.title || (!adForm.video_url && !adForm.image_url) || creating"><i v-if="creating" class="fas fa-spinner fa-spin mr-1"></i> Create Ad</button>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="input-label">Runs for *</label>
+              <select v-model="adForm.duration_option" class="form-input">
+                <option value="" disabled>Choose</option>
+                <option value="1d">1 day</option>
+                <option value="5d">5 days</option>
+                <option value="1w">1 week</option>
+                <option value="2w">2 weeks</option>
+                <option value="1m">1 month</option>
+              </select>
+            </div>
+            <div><label class="input-label">Shown for (sec, max 45) *</label><input v-model.number="adForm.duration_seconds" type="number" min="1" max="45" class="form-input" placeholder="30"></div>
+          </div>
+          <div><label class="input-label">Reward (MB)</label><input v-model.number="adForm.reward_mb" type="number" min="1" class="form-input" placeholder="15"></div>
+          <p class="text-xs" style="color: #6b7280">The ad goes live immediately and is removed from customers when it expires.</p>
+          <p v-if="createError" class="text-xs text-red-400">{{ createError }}</p>
+          <button @click="createAd()" class="btn btn-primary w-full" :disabled="!adForm.title || !adForm.file || !adForm.duration_option || !adForm.duration_seconds || creating"><i v-if="creating" class="fas fa-spinner fa-spin mr-1"></i> Upload and publish</button>
         </div>
       </div>
     </div>
@@ -307,7 +358,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { adminGet, adminPost, adminPut, apiPost } from '../../api/client'
+import api, { adminGet, adminPost, adminPut, apiPost } from '../../api/client'
 
 const activeTab = ref('ads')
 const creating = ref(false)
@@ -317,7 +368,13 @@ const campaignStats = ref({})
 const showCreateAd = ref(false)
 const showCreateCampaign = ref(false)
 
-const adForm = ref({ title: '', description: '', video_url: '', image_url: '', reward_mb: 15, duration_seconds: 30 })
+const emptyAdForm = () => ({ title: '', description: '', file: null, duration_option: '', duration_seconds: 30, reward_mb: 15 })
+const adForm = ref(emptyAdForm())
+const viewAd = ref(null)
+const removeAd = ref(null)
+const removeReason = ref('')
+const removing = ref(false)
+const createError = ref('')
 const partnerCampaigns = ref([])
 const pendingCount = computed(() => partnerCampaigns.value.filter(c => !c.approved_by).length)
 const emptyCampForm = () => ({ name: '', description: '', campaign_type: 'social_media', budget: 0, start_date: new Date().toISOString().slice(0, 10), end_date: '', target_audience: 'all' })
@@ -344,15 +401,61 @@ async function loadAll() {
   } catch (e) { console.error(e) }
 }
 
+function fmtBytesMB(bytes) { return ((Number(bytes) || 0) / 1048576).toFixed(1) + ' MB' }
+
+function adStatusLabel(s) {
+  return { live: 'LIVE', expired: 'EXPIRED', removed: 'REMOVED', inactive: 'PAUSED' }[s] || 'PAUSED'
+}
+function adStatusClass(s) {
+  return {
+    live: 'bg-green-500/10 text-green-400',
+    expired: 'bg-gray-500/10 text-gray-400',
+    removed: 'bg-red-500/10 text-red-400',
+    inactive: 'bg-yellow-500/10 text-yellow-400',
+  }[s] || 'bg-yellow-500/10 text-yellow-400'
+}
+
+function openAdView(ad) { viewAd.value = ad }
+function openAdRemove(ad) { removeAd.value = ad; removeReason.value = '' }
+
+async function confirmRemoveAd() {
+  if (!removeAd.value) return
+  removing.value = true
+  try {
+    await api.delete(`/admin/business/ads/${removeAd.value.id}`, { data: { reason: removeReason.value.trim() } })
+    showToast('Ad removed from customers')
+    removeAd.value = null
+    loadAll()
+  } catch (e) {
+    showToast('Failed: ' + (e.response?.data?.message || e.message), 'error')
+  }
+  removing.value = false
+}
+
+function onAdFile(event) {
+  adForm.value.file = event.target.files?.[0] || null
+}
+
 async function createAd() {
   creating.value = true
+  createError.value = ''
   try {
-    await adminPost('/business/ads', adForm.value)
-    showToast('Ad created and published')
+    const body = new FormData()
+    body.append('title', adForm.value.title)
+    body.append('description', adForm.value.description || '')
+    body.append('duration_option', adForm.value.duration_option)
+    body.append('duration_seconds', String(adForm.value.duration_seconds))
+    body.append('reward_mb', String(adForm.value.reward_mb || 15))
+    body.append('media', adForm.value.file)
+    await api.post('/admin/business/ads', body, { headers: { 'Content-Type': 'multipart/form-data' } })
+    showToast('Ad uploaded and published')
     showCreateAd.value = false
-    adForm.value = { title: '', description: '', video_url: '', image_url: '', reward_mb: 15, duration_seconds: 30 }
+    adForm.value = emptyAdForm()
     loadAll()
-  } catch (e) { showToast('Failed: ' + (e.response?.data?.message || e.message), 'error') }
+  } catch (e) {
+    createError.value = e.response?.data?.message || e.message
+    showToast('Failed: ' + createError.value, 'error')
+  }
   creating.value = false
 }
 

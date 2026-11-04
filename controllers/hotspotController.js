@@ -4,6 +4,7 @@ const mikrotikService = require('../utils/mikrotik');
 const bcrypt = require('bcryptjs');
 const { extendUserPackage } = require('../utils/packageEntitlement');
 const Campaign = require('../models/Campaign');
+const { LIVE_AD_SQL, MAX_DAILY_AD_REWARD_BYTES } = require('../utils/adPolicy');
 
 // Utility functions
 function normalizePhoneNumber(raw) {
@@ -614,7 +615,7 @@ const hotspotController = {
             const requestedAdId = parseInt(req.query.ad_id || req.body?.ad_id, 10);
             if (requestedAdId) {
                 const [requestedAds] = await db.execute(
-                    'SELECT * FROM ads WHERE id = ? AND approved = 1 AND is_active = 1 LIMIT 1',
+                    `SELECT * FROM ads WHERE id = ? AND ${LIVE_AD_SQL} LIMIT 1`,
                     [requestedAdId]
                 );
                 ads = requestedAds;
@@ -629,7 +630,7 @@ const hotspotController = {
             } else {
                 // PREFER VIDEO ADS FIRST
                 const [videoAds] = await db.execute(
-                    'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 AND video_url IS NOT NULL AND video_url != "" ORDER BY RAND() LIMIT 1'
+                    `SELECT * FROM ads WHERE ${LIVE_AD_SQL} AND video_url IS NOT NULL AND video_url != "" ORDER BY RAND() LIMIT 1`
                 );
 
                 ads = videoAds;
@@ -637,7 +638,7 @@ const hotspotController = {
                 // If no video ads, get any ad
                 if (ads.length === 0) {
                     const [allAds] = await db.execute(
-                        'SELECT * FROM ads WHERE approved = 1 AND is_active = 1 ORDER BY RAND() LIMIT 1'
+                        `SELECT * FROM ads WHERE ${LIVE_AD_SQL} ORDER BY RAND() LIMIT 1`
                     );
                     ads = allAds;
                 }
@@ -719,7 +720,7 @@ const hotspotController = {
 
             // LEFT JOIN: platform-owned ads (sponsor_id NULL) must be visible too.
             const [ads] = await db.execute(
-                'SELECT a.*, u.name AS sponsor_name, u.company_name FROM ads a LEFT JOIN users u ON a.sponsor_id = u.id WHERE a.approved = 1 AND a.is_active = 1 ORDER BY a.created_at DESC, a.id DESC'
+                `SELECT a.*, u.name AS sponsor_name, u.company_name FROM ads a LEFT JOIN users u ON a.sponsor_id = u.id WHERE a.approved = 1 AND a.is_active = 1 AND a.deleted_at IS NULL AND (a.expires_at IS NULL OR a.expires_at > NOW()) ORDER BY a.created_at DESC, a.id DESC`
             );
 
             res.json({
@@ -785,7 +786,7 @@ const hotspotController = {
             }
             
             const [ads] = await db.execute(
-                'SELECT * FROM ads WHERE id = ? AND approved = 1 AND is_active = 1',
+                `SELECT * FROM ads WHERE id = ? AND ${LIVE_AD_SQL}`,
                 [ad_id]
             );
             
@@ -798,6 +799,17 @@ const hotspotController = {
             
             const ad = ads[0];
             const rewardBytes = await resolveAdRewardBytes(ad);
+
+            const [earnedToday] = await db.execute(
+                'SELECT COALESCE(SUM(data_earned), 0) AS total FROM ad_views WHERE user_id = ? AND DATE(created_at) = CURDATE()',
+                [user.id]
+            );
+            if (Number(earnedToday[0].total) + rewardBytes > MAX_DAILY_AD_REWARD_BYTES) {
+                return res.json({
+                    success: false,
+                    message: 'Umefikia kikomo cha 500MB za matangazo kwa leo. Jaribu kesho tena.'
+                });
+            }
 
             // Validate watched_duration: must watch at least 80% of ad duration
             const [minPctSetting] = await db.execute(

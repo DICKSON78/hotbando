@@ -203,6 +203,7 @@ function sendNotification(title, body) {
 
   // Add to notification inbox
   notifications.value.unshift({ id: Date.now(), title, message: body, is_read: 0 })
+  syncAppBadge()
 
   // Send browser notification if permission granted (avoid stacking over captive portal)
   if (Notification.permission === 'granted') {
@@ -215,8 +216,7 @@ function sendNotification(title, body) {
     notification.onclick = () => {
       notification.close()
       window.focus()
-      // Auto-mark as read when clicked
-      notification.value = notifications.value.map(item => ({ ...item, is_read: 1 }))
+      markNotificationsRead()
     }
   }
 }
@@ -262,10 +262,18 @@ async function loadData() {
   }
 }
 
+function syncAppBadge() {
+  if (!('setAppBadge' in navigator)) return
+  const count = unreadCount.value
+  const action = count ? navigator.setAppBadge(count) : navigator.clearAppBadge()
+  action.catch(() => {})
+}
+
 async function loadNotifications() {
   try {
     const r = await hotspotGet('/notifications')
     notifications.value = Array.isArray(r.notifications) ? r.notifications : []
+    syncAppBadge()
   } catch (e) { /* account dashboard remains usable if messages are unavailable */ }
 }
 
@@ -273,6 +281,7 @@ async function markNotificationsRead() {
   try {
     await hotspotPost('/notifications/read')
     notifications.value = notifications.value.map(item => ({ ...item, is_read: 1 }))
+    syncAppBadge()
   } catch (e) { /* keep the inbox visible if marking read fails */ }
 }
 

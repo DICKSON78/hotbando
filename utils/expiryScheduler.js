@@ -5,6 +5,7 @@
 
 const db = require('../config/database');
 const mikrotikService = require('./mikrotik');
+const { purgeExpiredAds } = require('./adPolicy');
 
 class ExpiryScheduler {
     constructor() {
@@ -34,6 +35,11 @@ class ExpiryScheduler {
             await this.consumeFreeBytes();
         } catch (err) {
             console.error('⚠️ Expiry scheduler error:', err.message);
+        }
+        try {
+            await purgeExpiredAds();
+        } catch (err) {
+            console.error('⚠️ Ad purge error:', err.message);
         } finally {
             this.running = false;
         }
