@@ -139,8 +139,44 @@ router.get('/dashboard', requireWifi, async (req, res) => {
             return res.status(401).json({ error: 'Akaunti haipatikani.' });
         }
         req.session.hotbando_user = { ...publicSessionUser(freshUsers[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
-        const user = req.session.hotbando_user;
+        let user = req.session.hotbando_user;
         const now = new Date();
+        // Fallback: try to activate recent successful payment if no active package
+        if (user?.id) {
+            try {
+                let usageUntilCheck = user.usage_until ? new Date(user.usage_until) : null;
+                if (usageUntilCheck && isNaN(usageUntilCheck.getTime())) usageUntilCheck = null;
+                const hasActiveCheck = usageUntilCheck ? now < usageUntilCheck : false;
+                if (!hasActiveCheck && Number(user.free_bytes || 0) <= 0) {
+                    const [txs] = await db.execute(
+                        "SELECT order_reference, amount, extra_data FROM clickpesa_transactions WHERE user_id = ? AND purpose = 'package_purchase' AND status IN ('SUCCESS','SETTLED','COMPLETED') ORDER BY id DESC LIMIT 1",
+                        [user.id]
+                    );
+                    if (txs.length) {
+                        try {
+                            const { activatePackage } = require('../services/paymentFulfillment');
+                            const extra = txs[0].extra_data ? (typeof txs[0].extra_data === 'string' ? JSON.parse(txs[0].extra_data) : txs[0].extra_data) : {};
+                            if (extra.package_id) {
+                                const conn = await db.getConnection();
+                                await conn.beginTransaction();
+                                try {
+                                    await activatePackage(user.id, extra.package_id, txs[0].amount, extra, conn);
+                                    await conn.commit();
+                                } catch (e) {
+                                    await conn.rollback();
+                                }
+                                conn.release();
+                                const [freshUsers2] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
+                                if (freshUsers2.length) {
+                                    req.session.hotbando_user = { ...publicSessionUser(freshUsers2[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
+                                    user = req.session.hotbando_user;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+        }
         let usageUntil = user.usage_until ? new Date(user.usage_until) : null;
         if (usageUntil && isNaN(usageUntil.getTime())) usageUntil = null;
         const isActive = usageUntil ? now < usageUntil : false;
