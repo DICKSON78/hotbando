@@ -138,7 +138,7 @@ router.get('/dashboard', requireWifi, async (req, res) => {
         if (freshUsers.length === 0) {
             return res.status(401).json({ error: 'Akaunti haipatikani.' });
         }
-        req.session.hotbando_user = { ...publicSessionUser(freshUsers[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
+        req.session.hotbando_user = { ...publicSessionUser(freshUsers[0]), mac_address: req.session.hotbando_user.mac_address || freshUsers[0].mac_address, last_router_id: req.session.hotbando_user.last_router_id || freshUsers[0].last_router_id };
         let user = req.session.hotbando_user;
         const now = new Date();
         // Fallback: try to activate recent successful payment if no active package
