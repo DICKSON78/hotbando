@@ -324,7 +324,7 @@ const services = [
   {
     title: 'For Communities',
     desc: 'Connect family, friends, and neighbors with fast, reliable internet that everyone can use.',
-    price: 'TZS 500 — TZS 20,000',
+    price: 'TZS 500 — TZS 40,000',
     img: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&q=80',
     cta: 'View Plans',
     to: '/pricing'

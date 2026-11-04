@@ -5,7 +5,7 @@ const PACKAGE_VALUES = {
   'MASAA 6': { id: 1, price: 500 },
   'MASAA 24': { id: 2, price: 1000 },
   'WIKI 1': { id: 3, price: 6000 },
-  'MWEZI 1': { id: 4, price: 20000 },
+  'MWEZI 1': { id: 4, price: 40000 },
 };
 
 class ResellerController {

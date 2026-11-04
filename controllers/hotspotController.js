@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const { extendUserPackage } = require('../utils/packageEntitlement');
 const Campaign = require('../models/Campaign');
 const { LIVE_AD_SQL, MAX_DAILY_AD_REWARD_BYTES } = require('../utils/adPolicy');
+const { claimPendingGrants } = require('../utils/pendingGrants');
 
 // Utility functions
 function normalizePhoneNumber(raw) {
@@ -267,6 +268,11 @@ const hotspotController = {
                  WHERE id = ?`,
                 [bindMAC, bindRouter, currentLocation, currentIP, user.id]
             );
+
+            if (bindRouter && await claimPendingGrants(db, user.id)) {
+                const [fresh] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
+                if (fresh.length > 0) Object.assign(user, fresh[0]);
+            }
             
             await new Promise((resolve, reject) => {
                 req.session.regenerate((err) => {
@@ -483,6 +489,9 @@ const hotspotController = {
                     message: 'Kifaa hiki hakionekani kwenye Mtandao wa HotBando. Tafadhali unganishe kwenye WiFi ya HotBando kisha ujaribu tena.'
                 });
             }
+
+            // First connection starts the countdown for packages gifted by a friend.
+            await claimPendingGrants(db, user.id);
 
             // Refresh from DB so ad rewards / vouchers credited after login
             // are reflected even if the session copy is stale.

@@ -2,6 +2,7 @@ const clickpesa = require('../utils/clickpesa');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const { findCustomerByPhone } = require('../utils/pendingGrants');
 
 function generateOrderRef(prefix = 'HB') {
   return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -111,6 +112,14 @@ exports.initiatePayment = async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'Namba ya simu si sahihi.' });
     const recipientPhone = gift ? normalizeTanzanianPhone(recipient_phone) : null;
     if (gift && !recipientPhone) return res.status(400).json({ error: 'Weka namba sahihi ya mpokeaji wa voucher.' });
+    let recipientUserId = null;
+    if (gift) {
+      const recipient = await findCustomerByPhone(db, recipientPhone);
+      if (!recipient) {
+        return res.status(400).json({ error: 'Mpokeaji hajajisajili HotBando. Mwambie ajisajili kwenye customer portal kwanza.' });
+      }
+      recipientUserId = recipient.id;
+    }
     const orderReference = generateOrderRef();
 
     // Server-side amount validation: amount must match the package price from DB
@@ -145,6 +154,7 @@ exports.initiatePayment = async (req, res) => {
       package_duration_hours: null,
       gift: !!gift,
       recipient_phone: recipientPhone,
+      recipient_user_id: recipientUserId,
       mac_address: user?.mac_address || req.session?.mac || null,
       router_id: user?.last_router_id || req.session?.routerID || null,
       provider_fee: feeQuote?.fee ?? null,

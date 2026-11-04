@@ -244,7 +244,7 @@ async function loadPackages() {
       { id: 1, name: 'MASAA 6', price: '500.00' },
       { id: 2, name: 'MASAA 24', price: '1000.00' },
       { id: 3, name: 'WIKI 1', price: '6000.00' },
-      { id: 4, name: 'MWEZI 1', price: '20000.00' }
+      { id: 4, name: 'MWEZI 1', price: '40000.00' }
     ]
   }
   packages.value.forEach(p => { quantities.value[p.name] = 0 })

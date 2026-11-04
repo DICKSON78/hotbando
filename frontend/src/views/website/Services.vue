@@ -134,7 +134,7 @@ const services = [
     title: 'Internet for Communities',
     desc: 'Connect your family, friends, and neighbors with one trusted network. Flexible plans let you pay for what you use — by the hour, day, week, or full month.',
     points: ['Connectivity for families and neighbors', 'Plans by hour, day, week, and month', 'Easy sign-up with your phone number', 'Nearby support through our agents'],
-    price: 'TZS 500 — TZS 20,000',
+    price: 'TZS 500 — TZS 40,000',
     img: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&q=80',
     cta: 'View Our Plans',
     to: '/pricing'

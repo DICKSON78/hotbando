@@ -3,6 +3,15 @@ const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { extendUserPackage } = require('../utils/packageEntitlement');
 const { recordRouterSplit } = require('./routerSplit');
+const { createGiftGrant } = require('../utils/pendingGrants');
+
+async function notifyGiftRecipient(executor, recipientUserId, amount) {
+  await executor.execute(
+    `INSERT INTO notifications (user_id, notification_type, title, message, action_url, action_text, created_at)
+     VALUES (?, 'success', 'Umepewa kifurushi', ?, '/hotspot/dashboard', 'Fungua dashboard', NOW())`,
+    [recipientUserId, `Umepewa kifurushi chenye thamani ya TSh ${Number(amount).toLocaleString()}. Kitaanza kuhesabu ukiunganishwa WiFi ya HotBando.`]
+  );
+}
 
 function generateVoucherCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -106,7 +115,11 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
   } else if (purpose === 'package_purchase' && userId) {
     const packageId = extra.package_id;
     const isGift = extra.gift;
-    if (isGift) {
+    if (isGift && extra.recipient_user_id) {
+      await createGiftGrant(executor, extra.recipient_user_id, packageId, orderReference, tx.phone || null);
+      await notifyGiftRecipient(executor, extra.recipient_user_id, tx.amount);
+      result = { gifted: true, message: 'Kifurushi kimetumwa kwa mpokeaji. Kitaanza kuhesabu mara atakapounganishwa WiFi ya HotBando.' };
+    } else if (isGift) {
       const voucherCode = generateVoucherCode();
       const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
       await executor.execute(
@@ -123,6 +136,10 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
       await activatePackage(userId, packageId, tx.amount, extra, executor);
       result = { activated: true, message: 'Kifurushi chako kimewashwa. Unganisha tena au refresh Wi-Fi ili kuanza kutumia.' };
     }
+  } else if (purpose === 'package_purchase' && extra.gift && !userId && extra.recipient_user_id && extra.package_id) {
+    await createGiftGrant(executor, extra.recipient_user_id, extra.package_id, orderReference, tx.phone || null);
+    await notifyGiftRecipient(executor, extra.recipient_user_id, tx.amount);
+    result = { gifted: true, message: 'Kifurushi kimetumwa kwa mpokeaji. Kitaanza kuhesabu mara atakapounganishwa WiFi ya HotBando.' };
   } else if (purpose === 'package_purchase' && extra.gift && !userId) {
     const packageId = extra.package_id;
     if (!packageId) throw new Error('Voucher purchase has no package');
@@ -152,8 +169,10 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
 
   if (userId) {
     const isGift = purpose === 'package_purchase' && !!extra.gift;
-    const title = isGift ? 'Vocha yako iko tayari' : 'Malipo yamefanikiwa';
-    const details = result.voucher
+    const title = result.gifted ? 'Zawadi imetumwa' : isGift ? 'Vocha yako iko tayari' : 'Malipo yamefanikiwa';
+    const details = result.gifted
+      ? `Malipo ya TSh ${orderAmount.toLocaleString()} yamepokelewa. ${result.message}`
+      : result.voucher
       ? `Malipo ya TSh ${orderAmount.toLocaleString()} yamepokelewa. Vocha yako: ${result.voucher}`
       : purpose === 'package_purchase'
         ? `Malipo ya TSh ${orderAmount.toLocaleString()} yamepokelewa na kifurushi kimewashwa.`
