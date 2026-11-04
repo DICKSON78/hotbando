@@ -1,6 +1,20 @@
 async function extendUserPackage(executor, userId, pkg) {
+  // Check if paid_bytes columns exist (production DB may not have them)
+  let hasPaidBytesCols = false;
+  try {
+    const [cols] = await executor.execute(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'users' AND COLUMN_NAME IN ('paid_bytes_remaining', 'paid_data_limit_bytes')"
+    );
+    hasPaidBytesCols = cols.length >= 2;
+  } catch (e) {
+    hasPaidBytesCols = false;
+  }
+
+  const selectCols = hasPaidBytesCols
+    ? 'usage_start, usage_until, paid_bytes_remaining, paid_data_limit_bytes'
+    : 'usage_start, usage_until';
   const [rows] = await executor.execute(
-    'SELECT usage_start, usage_until, paid_bytes_remaining, paid_data_limit_bytes FROM users WHERE id = ? FOR UPDATE',
+    `SELECT ${selectCols} FROM users WHERE id = ? FOR UPDATE`,
     [userId]
   );
   if (!rows.length) throw new Error(`Customer ${userId} was not found for package activation`);
@@ -15,17 +29,25 @@ async function extendUserPackage(executor, userId, pkg) {
 
   let paidDataLimit = packageLimit;
   let paidBytesRemaining = packageLimit;
-  if (packageLimit > 0 && currentlyPaid && Number(user.paid_data_limit_bytes || 0) > 0) {
+  if (hasPaidBytesCols && packageLimit > 0 && currentlyPaid && Number(user.paid_data_limit_bytes || 0) > 0) {
     paidDataLimit += Number(user.paid_data_limit_bytes || 0);
     paidBytesRemaining += Number(user.paid_bytes_remaining || 0);
   }
 
-  await executor.execute(
-    `UPDATE users SET package = ?, usage_start = ?, usage_until = ?,
-       paid_data_limit_bytes = ?, paid_bytes_remaining = ?, updated_at = NOW()
-     WHERE id = ?`,
-    [pkg.name, usageStart, usageUntil, paidDataLimit, paidBytesRemaining, userId]
-  );
+  if (hasPaidBytesCols) {
+    await executor.execute(
+      `UPDATE users SET package = ?, usage_start = ?, usage_until = ?,
+         paid_data_limit_bytes = ?, paid_bytes_remaining = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [pkg.name, usageStart, usageUntil, paidDataLimit, paidBytesRemaining, userId]
+    );
+  } else {
+    await executor.execute(
+      `UPDATE users SET package = ?, usage_start = ?, usage_until = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [pkg.name, usageStart, usageUntil, userId]
+    );
+  }
   return { usageStart, usageUntil, paidDataLimit, paidBytesRemaining };
 }
 
