@@ -6,6 +6,27 @@ const { extendUserPackage } = require('../utils/packageEntitlement');
 const Campaign = require('../models/Campaign');
 
 // Utility functions
+function normalizePhoneNumber(raw) {
+    if (!raw) return null;
+    let phone = String(raw).trim().replace(/[\s\-\(\)]/g, '');
+    if (phone.startsWith('+')) {
+        phone = phone.substring(1);
+    }
+    // Tanzania: 255XXXXXXXXX -> 0XXXXXXXXX
+    if (phone.startsWith('255') && phone.length === 12) {
+        phone = '0' + phone.substring(3);
+    }
+    // 7XXXXXXXX (9 digits) -> 07XXXXXXXX
+    if (/^7[0-9]{8}$/.test(phone)) {
+        phone = '0' + phone;
+    }
+    // 6XXXXXXXX (9 digits) -> 06XXXXXXXX (some networks)
+    if (/^6[0-9]{8}$/.test(phone)) {
+        phone = '0' + phone;
+    }
+    return phone;
+}
+
 function formatRemainingTime(seconds) {
     if (seconds <= 0) return 'Hakuna muda uliobaki';
     
@@ -145,14 +166,16 @@ const hotspotController = {
         try {
             const { phone_number, password } = req.body;
             const errors = {};
+            const normalizedPhone = normalizePhoneNumber(phone_number);
             
             console.log('🔐 REAL Login attempt:', { 
                 phone_number, 
+                normalizedPhone,
                 mac: req.session.mac,
                 router: req.session.routerID
             });
             
-            if (!phone_number || !/^[0-9]{9,15}$/.test(phone_number)) {
+            if (!normalizedPhone || !/^0[0-9]{9}$/.test(normalizedPhone)) {
                 errors.phone_number = 'Namba ya simu sio sahihi.';
             }
             
@@ -164,20 +187,35 @@ const hotspotController = {
                 return res.status(400).json({ error: Object.values(errors)[0] });
             }
             
-            const [users] = await db.execute(
+            let [users] = await db.execute(
                 'SELECT * FROM users WHERE phone_number = ? AND role = "customer" AND is_active = 1',
-                [phone_number]
+                [normalizedPhone]
             );
+            if (users.length === 0 && phone_number) {
+                // Try original as well for backward compatibility
+                [users] = await db.execute(
+                    'SELECT * FROM users WHERE phone_number = ? AND role = "customer" AND is_active = 1',
+                    [phone_number]
+                );
+            }
             
             if (users.length === 0) {
                 // Dummy bcrypt to prevent timing side-channel
-                await bcrypt.compare('dummy-notreal', '$2a$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+                try {
+                    await bcrypt.compare('dummy-notreal', '$2a$12$HHmZsTRUdzYLIi3.d4hcG.1zFdGs0xpq8e6kSf/GEo80N5nUULjyC');
+                } catch (_) {}
                 return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
             }
             
             const user = users[0];
             
-            const isPasswordValid = await bcrypt.compare(password, user.password);
+            let isPasswordValid = false;
+            try {
+                isPasswordValid = await bcrypt.compare(password, user.password);
+            } catch (e) {
+                console.error('❌ bcrypt.compare error:', e.message);
+                return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
+            }
             if (!isPasswordValid) {
                 return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
             }
@@ -277,10 +315,12 @@ const hotspotController = {
             const { name, phone_number, password } = req.body;
             const password_confirm = req.body.password_confirm || req.body.passwordConfirm || req.body.password_confirmation;
             const errors = {};
+            const normalizedPhone = normalizePhoneNumber(phone_number);
             
             console.log('👤 REAL Registration attempt:', { 
                 name, 
-                phone_number, 
+                phone_number,
+                normalizedPhone,
                 mac: req.session.mac
             });
             
@@ -288,7 +328,7 @@ const hotspotController = {
                 errors.name = 'Jina linapaswa kuwa na herufi kati ya 3 hadi 255.';
             }
             
-            if (!phone_number || !/^0[0-9]{9}$/.test(phone_number)) {
+            if (!normalizedPhone || !/^0[0-9]{9}$/.test(normalizedPhone)) {
                 errors.phone_number = 'Namba ya simu inapaswa kuwa na tarakimu 10 na kuanza na 0.';
             }
             
@@ -304,13 +344,19 @@ const hotspotController = {
                 return res.status(400).json({ error: Object.values(errors)[0] });
             }
             
-            const [existingUsers] = await db.execute(
-                'SELECT id FROM users WHERE phone_number = ? AND role = "customer"',
-                [phone_number]
+            let [existingUsers] = await db.execute(
+                'SELECT id, is_active FROM users WHERE phone_number = ? AND role = "customer"',
+                [normalizedPhone]
             );
+            if (existingUsers.length === 0 && phone_number) {
+                [existingUsers] = await db.execute(
+                    'SELECT id, is_active FROM users WHERE phone_number = ? AND role = "customer"',
+                    [phone_number]
+                );
+            }
             
             if (existingUsers.length > 0) {
-                return res.status(400).json({ error: 'Neno la siri au namba ya simu si sahihi.' });
+                return res.status(400).json({ error: 'Namba hii ya simu imesajiliwa tayari. Tafadhali ingia au tumia namba tofauti.' });
             }
             
             const hashedPassword = await bcrypt.hash(password, 12);
@@ -339,7 +385,7 @@ const hotspotController = {
                 `INSERT INTO users 
                 (name, phone_number, password, role, package, mac_address, location, last_router_id, ip_address, moneyspent, usage_start, usage_until, free_bytes, last_free_used, is_active, created_at, updated_at) 
                 VALUES (?, ?, ?, "customer", "KARIBU HOT BANDO", ?, ?, ?, ?, 0, ?, ?, ?, NULL, 1, ?, ?)`,
-                [name, phone_number, hashedPassword, clientMAC, location, routerID, clientIP, now, now, freeBytes, now, now]
+                [name, normalizedPhone, hashedPassword, clientMAC, location, routerID, clientIP, now, now, freeBytes, now, now]
             );
             
             const [newUsers] = await db.execute(
@@ -364,7 +410,7 @@ const hotspotController = {
             
             console.log(`✅ REAL New user registered:`, {
                 name,
-                phone: phone_number,
+                phone: normalizedPhone,
                 mac: clientMAC,
                 router: routerID,
                 freeBytes: freeBytes
@@ -394,6 +440,9 @@ const hotspotController = {
             
         } catch (error) {
             console.error('❌ REAL Registration error:', error);
+            if (error && (error.code === 'ER_DUP_ENTRY' || error.errno === 1062)) {
+                return res.status(400).json({ error: 'Namba hii ya simu imesajiliwa tayari. Tafadhali ingia au tumia namba tofauti.' });
+            }
             return res.status(500).json({ error: 'Tatizo limetokea wakati wa usajili. Tafadhali jaribu tena.' });
         }
     },

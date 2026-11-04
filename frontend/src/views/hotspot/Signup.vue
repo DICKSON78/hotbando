@@ -74,13 +74,23 @@ const referralCode = ref('')
 const error = ref('')
 const loading = ref(false)
 
+function normalizePhone(p) {
+  if (!p) return p
+  let phone = String(p).trim().replace(/[\s\-\(\)]/g, '')
+  if (phone.startsWith('+')) phone = phone.substring(1)
+  if (phone.startsWith('255') && phone.length === 12) phone = '0' + phone.substring(3)
+  if (/^7[0-9]{8}$/.test(phone)) phone = '0' + phone
+  if (/^6[0-9]{8}$/.test(phone)) phone = '0' + phone
+  return phone
+}
+
 async function handleRegister() {
   if (password.value !== passwordConfirm.value) {
     error.value = 'Passwords do not match'
     return
   }
   loading.value = true; error.value = ''
-  const localPhone = phoneFull.value
+  const localPhone = normalizePhone(phoneFull.value)
   try {
     await hotspotPost('/register', {
       name: name.value,
