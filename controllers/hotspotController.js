@@ -1447,7 +1447,12 @@ const hotspotController = {
                 return res.status(400).json({ success: 'error', message: 'Voucher imekwisha kutumika na mtu mwingine.' });
             }
 
-            const { usageUntil: newUsageUntil } = await extendUserPackage(db, user.id, vouch);
+            // A voucher is only spent when the package is actually activated.
+            const { usageUntil: newUsageUntil } = await extendUserPackage(db, user.id, { ...vouch, name: vouch.package_name })
+                .catch(async (activationError) => {
+                    await db.execute('UPDATE vouchers SET is_used = 0, used_at = NULL, used_by = NULL WHERE id = ?', [vouch.id]);
+                    throw activationError;
+                });
 
             await db.execute(
                 'UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
