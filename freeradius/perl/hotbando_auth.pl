@@ -73,11 +73,14 @@ sub _find_entitled_user {
                 LIMIT 1";
         @args = ($mac);
     } else {
+        # Phone auth: only allow if the user has active time/data or free bytes.
+        # Otherwise they can only reach the captive portal to purchase more.
         $sql = "SELECT u.password
                 FROM users u
                 WHERE u.phone_number = ?
                   AND u.role = 'customer'
                   AND u.is_active = 1
+                  AND ((u.usage_until > NOW() AND (u.paid_data_limit_bytes = 0 OR u.paid_bytes_remaining > 0)) OR u.free_bytes > 0)
                 LIMIT 1";
         @args = ($username);
     }
