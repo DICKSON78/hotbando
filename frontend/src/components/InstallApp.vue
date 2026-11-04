@@ -1,21 +1,49 @@
 <template>
-  <div v-if="!isStandalone" class="mx-4 mt-3 bg-[#111118] border border-[#1e1e2a] rounded-2xl p-4">
-    <div class="flex items-center gap-3">
-      <div class="tile-icon" style="background:rgba(255,122,48,0.1);color:#FF7A30"><i class="fa-solid fa-mobile-screen"></i></div>
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-semibold text-white">Install HotBando App</p>
-        <p class="text-xs text-white/50">Fungua kama app kila unapo-join WiFi</p>
+  <div>
+    <!-- Inline banner (always show for non-standalone) -->
+    <div v-if="!isStandalone" class="mx-4 mt-3 bg-[#111118] border border-[#1e1e2a] rounded-2xl p-4">
+      <div class="flex items-center gap-3">
+        <div class="tile-icon" style="background:rgba(255,122,48,0.1);color:#FF7A30"><i class="fa-solid fa-mobile-screen"></i></div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-white">Install HotBando App</p>
+          <p class="text-xs text-white/50">Fungua kama app kila unapo-join WiFi</p>
+        </div>
+      </div>
+      <button v-if="canInstall" @click="install" :disabled="installing" class="ig-btn ig-btn-primary w-full mt-3 disabled:opacity-60">
+        <i class="fa-solid fa-download mr-2"></i>{{ installing ? 'Inasakinisha...' : 'Install App' }}
+      </button>
+      <div v-else class="text-xs text-white/50 mt-3 leading-relaxed">
+        <button v-if="isAndroid" @click="openInChrome" class="ig-btn ig-btn-outline w-full mb-2">
+          <i class="fa-brands fa-chrome mr-2"></i>Fungua kwa Chrome u-Install
+        </button>
+        <p v-if="isIos">iPhone: gusa kitufe cha <b class="text-white">Share</b> (<i class="fa-solid fa-arrow-up-from-bracket"></i>) kisha chagua <b class="text-white">Add to Home Screen</b>.</p>
+        <p v-else>Browser menu <b class="text-white">⋮</b> → <b class="text-white">Add to Home screen</b> / <b class="text-white">Install app</b>.</p>
       </div>
     </div>
-    <button v-if="canInstall" @click="install" :disabled="installing" class="ig-btn ig-btn-primary w-full mt-3 disabled:opacity-60">
-      <i class="fa-solid fa-download mr-2"></i>{{ installing ? 'Inasakinisha...' : 'Install App' }}
-    </button>
-    <div v-else class="text-xs text-white/50 mt-3 leading-relaxed">
-      <button v-if="isAndroid" @click="openInChrome" class="ig-btn ig-btn-outline w-full mb-2">
-        <i class="fa-brands fa-chrome mr-2"></i>Fungua kwa Chrome u-Install
-      </button>
-      <p v-if="isIos">iPhone: gusa kitufe cha <b class="text-white">Share</b> (<i class="fa-solid fa-arrow-up-from-bracket"></i>) kisha chagua <b class="text-white">Add to Home Screen</b>.</p>
-      <p v-else>Browser menu <b class="text-white">⋮</b> → <b class="text-white">Add to Home screen</b> / <b class="text-white">Install app</b>.</p>
+
+    <!-- Persistent popup for non-standalone users -->
+    <div v-if="!isStandalone && showPopup" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80" @click.self="closePopup">
+      <div class="bg-[#111118] border border-[#1e1e2a] rounded-2xl w-full max-w-sm p-5 relative">
+        <button class="absolute top-3 right-3 text-white/50 hover:text-white" @click="closePopup"><i class="fa-solid fa-xmark"></i></button>
+        <div class="flex items-center gap-3 mb-4">
+          <img src="/logo.png" class="h-12 w-12 rounded-xl" alt="HotBando">
+          <div>
+            <p class="text-base font-bold text-white">Install HotBando App</p>
+            <p class="text-xs text-white/50">Kwa matumizi haraka na rahisi</p>
+          </div>
+        </div>
+        <p class="text-sm text-white/70 mb-4">Sakinisha app ya HotBando ili ufungue haraka bila browser na upate uzoefu bora.</p>
+        <button v-if="canInstall" @click="installFromPopup" :disabled="installing" class="ig-btn ig-btn-primary w-full mb-2 disabled:opacity-60">
+          <i class="fa-solid fa-download mr-2"></i>{{ installing ? 'Inasakinisha...' : 'Install Now' }}
+        </button>
+        <button v-if="isAndroid && !canInstall" @click="openInChrome" class="ig-btn ig-btn-outline w-full mb-2">
+          <i class="fa-brands fa-chrome mr-2"></i>Fungua kwa Chrome kisha Sakinisha
+        </button>
+        <button v-if="isIos && !canInstall" class="ig-btn ig-btn-outline w-full mb-2" disabled>
+          <i class="fa-brands fa-apple mr-2"></i>Gusa Share → Add to Home Screen
+        </button>
+        <button class="ig-btn ig-btn-ghost w-full text-white/60" @click="closePopup">Baadaye</button>
+      </div>
     </div>
   </div>
 </template>
@@ -27,12 +55,17 @@ const installing = ref(false)
 const isStandalone = ref(false)
 const isIos = ref(false)
 const isAndroid = ref(false)
+const showPopup = ref(false)
 let deferredPrompt = null
 
 function usePrompt(prompt) {
   if (!prompt || typeof prompt.prompt !== 'function') return false
   deferredPrompt = prompt
   canInstall.value = true
+  // Show popup every time for non-standalone users
+  if (!isStandalone.value) {
+    showPopup.value = true
+  }
   return true
 }
 
@@ -62,6 +95,7 @@ async function install() {
     ])
     if (choice && choice.outcome === 'accepted') {
       canInstall.value = false
+      showPopup.value = false
     }
   } catch {
     canInstall.value = false
@@ -73,9 +107,18 @@ async function install() {
   }
 }
 
+async function installFromPopup() {
+  await install()
+}
+
+function closePopup() {
+  showPopup.value = false
+}
+
 function onInstalled() {
   isStandalone.value = true
   canInstall.value = false
+  showPopup.value = false
   deferredPrompt = null
   window.deferredPrompt = null
 }
@@ -93,7 +136,16 @@ onMounted(() => {
   isAndroid.value = /android/i.test(window.navigator.userAgent)
 
   // Prompt may have been captured in index.html before Vue mounted.
-  if (window.isSecureContext) usePrompt(window.deferredPrompt)
+  if (window.isSecureContext) {
+    usePrompt(window.deferredPrompt)
+  }
+
+  // Show popup every time for non-standalone users (including those who deleted from home screen)
+  if (!isStandalone.value) {
+    setTimeout(() => {
+      showPopup.value = true
+    }, 1500)
+  }
 
   window.addEventListener('beforeinstallprompt', onPrompt)
   window.addEventListener('appinstallavailable', onPrompt)
