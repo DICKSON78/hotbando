@@ -173,6 +173,28 @@ async function getBalance() {
   return data;
 }
 
+async function previewMobilePayout({ amount, phoneNumber, orderReference }) {
+  const token = await getToken();
+  const payload = { amount: Number(amount), currency: 'TZS', orderReference, phoneNumber };
+  if (CHECKSUM_KEY) payload.checksum = createChecksum(payload);
+  const { data } = await axios.post(`${BASE_URL}/payouts/preview-mobile-money-payout`, payload, {
+    headers: { Authorization: token, 'Content-Type': 'application/json' },
+    timeout: 30000,
+  });
+  return data;
+}
+
+async function createMobilePayout({ amount, phoneNumber, orderReference }) {
+  const token = await getToken();
+  const payload = { amount: Number(amount), currency: 'TZS', orderReference, phoneNumber };
+  if (CHECKSUM_KEY) payload.checksum = createChecksum(payload);
+  const { data } = await axios.post(`${BASE_URL}/payouts/create-mobile-money-payout`, payload, {
+    headers: { Authorization: token, 'Content-Type': 'application/json' },
+    timeout: 30000,
+  });
+  return data;
+}
+
 async function queryAllPayments({ channel, status, startDate, limit } = {}) {
   const token = await getToken();
   const params = {};
@@ -198,6 +220,8 @@ module.exports = {
   initiateUSSDPush,
   queryPaymentStatus,
   queryPayoutStatus,
+  previewMobilePayout,
+  createMobilePayout,
   getBalance,
   queryAllPayments,
 };

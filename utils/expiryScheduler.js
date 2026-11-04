@@ -6,6 +6,7 @@
 const db = require('../config/database');
 const mikrotikService = require('./mikrotik');
 const { purgeExpiredAds } = require('./adPolicy');
+const { processWithdrawalPayouts } = require('../services/withdrawalPayouts');
 
 class ExpiryScheduler {
     constructor() {
@@ -40,6 +41,11 @@ class ExpiryScheduler {
             await purgeExpiredAds();
         } catch (err) {
             console.error('⚠️ Ad purge error:', err.message);
+        }
+        try {
+            await processWithdrawalPayouts();
+        } catch (err) {
+            console.error('⚠️ Withdrawal payout error:', err.message);
         } finally {
             this.running = false;
         }

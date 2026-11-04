@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 
 const MIN_RESELLER_SALE_PRICE = 500;
 const WITHDRAWAL_FEE_RATE = 0.10;
+const { normalizePhone } = require('../services/withdrawalPayouts');
 
 const PACKAGE_VALUES = {
   'MASAA 6': { id: 1, price: 500 },
@@ -481,6 +482,10 @@ class ResellerController {
         await connection.rollback();
         return res.status(400).json({ success: false, message: 'Kiasi kidogo cha uondoaji ni TZS 5,000' });
       }
+      if (!normalizePhone(payment_phone)) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Weka namba sahihi ya simu ya mobile money (mfano 0712345678)' });
+      }
 
       // Lock the reseller row for update to prevent race conditions
       const [resellerRows] = await connection.execute(
@@ -501,28 +506,29 @@ class ResellerController {
         });
       }
 
-      // Create withdrawal record with 'processed' status (auto-approved)
+      const fee = Math.round(withdrawAmount * WITHDRAWAL_FEE_RATE);
+      const payout = withdrawAmount - fee;
+      const normalizedPhone = normalizePhone(payment_phone);
+
+      // Hold the full amount and queue the mobile money payout. The payout
+      // worker sends it and refunds the balance if the payout fails.
       const [withdrawalResult] = await connection.execute(
-        `INSERT INTO reseller_withdrawals (reseller_id, user_id, amount, payment_method, payment_phone, status, processed_at, processed_by)
-         VALUES (?, ?, ?, ?, ?, 'processed', NOW(), ?)`,
-        [reseller.id, resellerUserId, withdrawAmount, payment_method || null, payment_phone || null, resellerUserId]
+        `INSERT INTO reseller_withdrawals (reseller_id, user_id, amount, fee, payout_amount, payment_method, payment_phone, status, attempts, requested_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, NOW())`,
+        [reseller.id, resellerUserId, withdrawAmount, fee, payout, payment_method || 'mobile_money', normalizedPhone]
       );
       const withdrawalId = withdrawalResult.insertId;
+      await connection.execute('UPDATE reseller_withdrawals SET order_reference = ? WHERE id = ?', [`WDR${withdrawalId}`, withdrawalId]);
 
-      // Deduct from reseller balance
       await connection.execute(
         'UPDATE resellers SET balance = balance - ? WHERE user_id = ?',
         [withdrawAmount, resellerUserId]
       );
 
-      const fee = Math.round(withdrawAmount * WITHDRAWAL_FEE_RATE);
-      const payout = withdrawAmount - fee;
-
-      // Record transaction for audit trail
       await connection.execute(
         `INSERT INTO transactions (user_id, transaction_type, amount, payment_reference, description, created_at)
          VALUES (?, 'withdrawal', ?, ?, ?, NOW())`,
-        [resellerUserId, withdrawAmount, `WDR-${withdrawalId}`, `Withdrawal via ${payment_method || 'mobile_money'}; platform fee 10% TZS ${fee}; payout TZS ${payout}`]
+        [resellerUserId, withdrawAmount, `WDR-${withdrawalId}`, `Withdrawal via mobile money; platform fee 10% TZS ${fee}; payout TZS ${payout}`]
       );
 
       await connection.commit();
@@ -531,16 +537,15 @@ class ResellerController {
 
       return res.json({
         success: true,
-        message: `Uondoaji wa TZS ${withdrawAmount.toLocaleString()} umekamilika. Ada ya 10% ni TZS ${fee.toLocaleString()}; utapokea TZS ${payout.toLocaleString()} kwenye namba ${payment_phone}.`,
+        message: `Uondoaji wa TZS ${withdrawAmount.toLocaleString()} umepokelewa. Ada ya 10% ni TZS ${fee.toLocaleString()}; TZS ${payout.toLocaleString()} zitatumwa kwenye namba ${normalizedPhone} ndani ya dakika chache.`,
         data: {
           id: withdrawalId,
           amount: withdrawAmount,
           fee,
           payout,
           balance_after: parseFloat(updatedReseller[0].balance),
-          status: 'processed',
-          payment_phone: payment_phone,
-          processed_at: new Date().toISOString()
+          status: 'pending',
+          payment_phone: normalizedPhone
         }
       });
     } catch (error) {
