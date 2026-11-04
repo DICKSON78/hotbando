@@ -61,10 +61,9 @@ async function reconcilePayments() {
       }
     } catch (err) {
       if (/429/.test(err.message)) {
-        // Provider rate limit: this attempt does not count, and checks stop until the daily budget resets.
+        // Provider rate limit: this attempt does not count; the next run retries.
         checksByOrder.set(orderReference, checks);
-        budgetUsed = DAILY_STATUS_BUDGET;
-        logger.warn('Payment checks paused by provider rate limit');
+        logger.warn('Payment checks paused by provider rate limit, retrying on the next run');
         break;
       }
       logger.warn('Payment check failed', { orderReference, error: err.message });
