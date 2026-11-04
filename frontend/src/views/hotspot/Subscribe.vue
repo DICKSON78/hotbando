@@ -271,17 +271,22 @@ async function copyReturnVoucher() {
 async function reconnectAfterPayment() {
   if (reconnecting.value) return
   reconnecting.value = true
-  reconnectMsg.value = ''
+  reconnectMsg.value = 'Inasanidi muunganisho...'
+  reconnectOk.value = false
   try {
     await store.refreshUser()
+    reconnectMsg.value = 'Inaunganisha kifaa chako kwenye mtandao...'
     const r = await hotspotPost('/connect')
     if (r?.success) {
       reconnectOk.value = true
-      reconnectMsg.value = 'Umeunganishwa! Fungua dashboard kuanza kutumia internet.'
+      reconnectMsg.value = 'Imefanikiwa! Umeunganishwa kwenye mtandao. Fungua Dashboard kuona muda na data uliobaki.'
       await store.refreshUser()
+      setTimeout(() => {
+        router.push('/hotspot/dashboard')
+      }, 1500)
     } else {
       reconnectOk.value = false
-      reconnectMsg.value = 'Malipo yamekamilika. Zima na washa WiFi ya simu (au fungua ukurasa huu upya) ili kifaa chako kiingie mtandaoni.'
+      reconnectMsg.value = r?.message || 'Malipo yamekamilika. Zima na washa WiFi ya simu (au fungua ukurasa huu upya) ili kifaa chako kiingie mtandaoni.'
     }
   } catch (e) {
     reconnectOk.value = false

@@ -261,6 +261,7 @@ async function ensureRouterAccess() {
 
 onMounted(async () => {
   await loadData()
+  await loadUsage()
   // Do this in the background: render the account and bundle immediately,
   // then bind the current station to a newly joined registered router.
   ensureRouterAccess()
@@ -272,7 +273,12 @@ onMounted(async () => {
     remainingTime.value = remainingSeconds.value <= 0 ? 'Hakuna muda uliobaki' : days ? `${days} siku ${hours} masaa` : hours ? `${hours} masaa ${minutes} dakika` : minutes ? `${minutes} dakika` : 'Chini ya dakika moja'
     checkAlert()
   }, 1000)
-  pollTimer = setInterval(loadUsage, 30000)
+  pollTimer = setInterval(() => { loadData(); loadUsage(); }, 15000)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      loadData(); loadUsage();
+    }
+  })
 })
 
 onUnmounted(() => {
