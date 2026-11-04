@@ -45,18 +45,6 @@
       <p v-else class="text-xs text-white/50">Hakuna notifications mpya.</p>
     </div>
 
-    <!-- Alert banner -->
-    <div v-if="alertMsg" class="mx-4 mt-3 rounded-2xl p-4 flex items-start gap-3" :style="alertType === 'warn' ? 'background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3)' : alertType === 'danger' ? 'background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3)' : 'background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3)'">
-      <i class="fas mt-0.5" :class="alertType === 'warn' ? 'fa-exclamation-triangle text-yellow-400' : alertType === 'danger' ? 'fa-times-circle text-red-400' : 'fa-info-circle text-blue-400'"></i>
-      <div class="flex-1">
-        <p class="text-sm font-semibold text-white">{{ alertMsg }}</p>
-        <div class="flex gap-2 mt-2">
-          <router-link to="/hotspot/subscribe" class="ig-btn ig-btn-primary text-xs py-1.5 px-3">Buy Voucher</router-link>
-          <router-link to="/hotspot/ads" class="ig-btn ig-btn-outline text-xs py-1.5 px-3">Watch Ads</router-link>
-        </div>
-      </div>
-    </div>
-
     <!-- Balance card -->
     <div class="mx-4 balance-card rounded-2xl p-5 text-white">
       <div class="flex items-center justify-between">
