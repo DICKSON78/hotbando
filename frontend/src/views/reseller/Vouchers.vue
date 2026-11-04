@@ -249,7 +249,7 @@ async function loadAll() {
 async function loadPackages() {
   try {
     const resp = await import('../../api/client').then(m => m.default.get('/packages'))
-    packages.value = resp.data || []
+    packages.value = resp.data?.packages || []
   } catch {
     packages.value = [
       { id: 1, name: 'MASAA 6', price: '500.00' },
