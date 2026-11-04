@@ -133,7 +133,7 @@
                   <td style="color: #d1d5db">{{ w.payment_method || '—' }}</td>
                   <td style="color: #d1d5db">{{ w.payment_phone || '—' }}</td>
                   <td>
-                    <span class="badge" :class="w.status === 'processed' ? 'badge-green' : w.status === 'pending' ? 'badge-yellow' : 'badge-red'">
+                    <span class="badge" :class="w.status === 'processed' ? 'badge-green' : ['pending', 'sending', 'sent'].includes(w.status) ? 'badge-yellow' : 'badge-red'">
                       {{ w.status === 'processed' ? 'Processed' : w.status === 'pending' ? 'Pending' : w.status }}
                     </span>
                   </td>
