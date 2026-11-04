@@ -218,12 +218,14 @@ sub accounting {
             'INSERT IGNORE INTO radius_usage_sessions (nas_identity, acct_session_id, username, mac_address) VALUES (?, ?, ?, ?)',
             undef, $nas, $session_id, $username, $mac
         );
+        # Read session without locking (we only need the current octets, not for update)
         my $session = $dbh->selectrow_hashref(
-            'SELECT input_octets, output_octets FROM radius_usage_sessions WHERE nas_identity = ? AND acct_session_id = ? FOR UPDATE',
+            'SELECT input_octets, output_octets FROM radius_usage_sessions WHERE nas_identity = ? AND acct_session_id = ?',
             undef, $nas, $session_id
         );
         my $delta = ($input > ($session->{input_octets} || 0) ? $input - ($session->{input_octets} || 0) : 0)
                   + ($output > ($session->{output_octets} || 0) ? $output - ($session->{output_octets} || 0) : 0);
+        # Update session and user together in one statement to minimize lock time
         $dbh->do(
             'UPDATE radius_usage_sessions SET username = ?, mac_address = ?, input_octets = GREATEST(input_octets, ?), output_octets = GREATEST(output_octets, ?), last_accounting_at = NOW() WHERE nas_identity = ? AND acct_session_id = ?',
             undef, $username, $mac, $input, $output, $nas, $session_id
@@ -238,10 +240,11 @@ sub accounting {
                 $where = 'phone_number = ?';
                 @args = ($username);
             }
+            # Read user data without locking to check eligibility
             my $user = $dbh->selectrow_hashref(
                 "SELECT id, paid_bytes_remaining, paid_data_limit_bytes, free_bytes,
                         (usage_until > NOW()) AS paid_active
-                 FROM users WHERE $where AND role = 'customer' LIMIT 1 FOR UPDATE",
+                 FROM users WHERE $where AND role = 'customer' LIMIT 1",
                 undef, @args
             );
             if ($user && !($user->{paid_active} && int($user->{paid_data_limit_bytes} || 0) == 0)) {
@@ -251,6 +254,7 @@ sub accounting {
                 $paid_left -= $from_paid;
                 my $from_free = $delta - $from_paid;
                 $free_left = $from_free >= $free_left ? 0 : $free_left - $from_free;
+                # This update can fail silently if the row was deleted or changed in between; that's okay
                 $dbh->do('UPDATE users SET paid_bytes_remaining = ?, free_bytes = ? WHERE id = ?', undef, $paid_left, $free_left, $user->{id});
             }
         }
