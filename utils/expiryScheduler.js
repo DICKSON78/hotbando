@@ -7,6 +7,7 @@ const db = require('../config/database');
 const mikrotikService = require('./mikrotik');
 const { purgeExpiredAds } = require('./adPolicy');
 const { processWithdrawalPayouts } = require('../services/withdrawalPayouts');
+const { reconcilePayments } = require('../services/paymentReconciler');
 
 class ExpiryScheduler {
     constructor() {
@@ -41,6 +42,11 @@ class ExpiryScheduler {
             await purgeExpiredAds();
         } catch (err) {
             console.error('⚠️ Ad purge error:', err.message);
+        }
+        try {
+            await reconcilePayments();
+        } catch (err) {
+            console.error('⚠️ Payment reconciliation error:', err.message);
         }
         try {
             await processWithdrawalPayouts();

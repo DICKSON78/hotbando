@@ -433,3 +433,5 @@ async function _activatePackage(userId, packageId, amount, extraData = {}) {
     logger.error('Activate package error', { error: error.message });
   }
 }
+
+exports.processAndActivate = processAndActivate;
