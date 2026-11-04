@@ -44,7 +44,9 @@ export const useHotspotStore = defineStore('hotspot', {
     async refreshUser() {
       try {
         const r = await hotspotGet('/dashboard')
-        if (r.user) this.user = r.user
+        if (r.user) {
+          this.user = { ...this.user, ...r.user, mac_address: r.mac_address || r.user.mac_address || this.user?.mac_address, last_router_id: r.last_router_id || r.user.last_router_id || this.user?.last_router_id }
+        }
         return r
       } catch (e) {
         if (e.response?.status === 401) this.user = null

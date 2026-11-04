@@ -187,14 +187,19 @@ async function loadData() {
     const r = await hotspotGet('/dashboard', { params: { t: Date.now() } })
     if (r.redirect) { router.push('/hotspot/login'); return }
     user.value = r.user || null
+    if (r.user) {
+      store.user = { ...store.user, ...r.user, mac_address: r.mac_address || r.user.mac_address || store.user?.mac_address, last_router_id: r.last_router_id || r.user.last_router_id || store.user?.last_router_id }
+    }
     remainingSeconds.value = Number(r.remainingSeconds) || 0
     remainingTime.value = r.remainingTime || '—'
     freeMB.value = r.freeMB ?? 0
     adsRemaining.value = r.adsRemaining || 0
     adsWatchedToday.value = r.adsWatchedToday || 0
-    const currentMac = normalizeMac(store.mac)
-    routerReady.value = !!currentMac && currentMac === normalizeMac(store.user?.mac_address) && String(store.routerID) === String(store.user?.last_router_id || '')
-    connected.value = (!!r.isActive || Number(r.user?.free_bytes) > 0) && routerReady.value
+    const currentMac = normalizeMac(store.mac || r.mac || r.mac_address)
+    const apiMac = normalizeMac(r.mac_address || r.user?.mac_address)
+    const apiRouter = r.last_router_id || r.user?.last_router_id
+    routerReady.value = !!currentMac && (!apiMac || currentMac === apiMac) && (!apiRouter || String(store.routerID) === String(apiRouter))
+    connected.value = (!!r.isActive || Number(r.user?.free_bytes || r.free_bytes || 0) > 0) && routerReady.value
     checkAlert()
     loadNotifications()
   } catch (e) {
