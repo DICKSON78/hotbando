@@ -82,7 +82,10 @@ class MikrotikService {
                         timeout: router.timeout || 10
                     });
 
-                    await conn.connect();
+                    await Promise.race([
+                        conn.connect(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('connect-timeout')), 5000))
+                    ]);
                     this.connections.set(routerID, conn);
 
                     // If a different password worked, update DB to match
