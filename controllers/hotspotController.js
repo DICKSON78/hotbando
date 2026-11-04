@@ -240,7 +240,7 @@ const hotspotController = {
                 try {
                     currentMAC = await Promise.race([
                         mikrotikService.resolveClientMAC(currentRouterID, req.ip),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('mac-timeout')), 2000))
+                        new Promise((resolve) => setTimeout(() => resolve(null), 1000))
                     ]);
                 } catch (e) {
                     currentMAC = null;
