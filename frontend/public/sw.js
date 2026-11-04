@@ -1,6 +1,6 @@
 // This worker provides notifications only. The captive portal must always
 // load the current network version so it cannot get stuck on cached app code.
-const CACHE = 'hotbando-v11';
+const CACHE = 'hotbando-v12';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
