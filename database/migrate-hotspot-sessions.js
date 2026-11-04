@@ -7,7 +7,7 @@ async function migrate() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS hotspot_sessions (
       id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      user_id INT UNSIGNED NOT NULL,
+      user_id INT NOT NULL,
       router_id VARCHAR(50) NOT NULL,
       mac_address VARCHAR(17) NOT NULL,
       session_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
