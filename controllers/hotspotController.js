@@ -235,16 +235,18 @@ const hotspotController = {
             }
 
             // Resolve the real device MAC from the router when the redirect did
-            // not carry it. Never persist a fabricated MAC.
-            if (!currentMAC && currentRouterID) {
+            // not carry it. Never persist a fabricated MAC. Skip if causing hangs.
+            if (!currentMAC && currentRouterID && process.env.SKIP_MAC_RESOLVE !== 'true') {
                 try {
                     currentMAC = await Promise.race([
                         mikrotikService.resolveClientMAC(currentRouterID, req.ip),
-                        new Promise((resolve) => setTimeout(() => resolve(null), 1000))
+                        new Promise((resolve) => setTimeout(() => resolve(null), 500))
                     ]);
                 } catch (e) {
                     currentMAC = null;
                 }
+            } else if (!currentMAC && currentRouterID) {
+                currentMAC = null;
             }
 
             const currentLocation = req.session.location || await getRealLocation(currentRouterID);
