@@ -15,9 +15,11 @@ async function activatePackage(userId, packageId, amount, extraData = {}, conn =
   const [packages] = await executor.execute('SELECT * FROM packages WHERE id = ?', [packageId]);
   if (!packages.length) return;
   const pkg = packages[0];
-  const [users] = await executor.execute('SELECT id FROM users WHERE id = ?', [userId]);
+  const [users] = await executor.execute('SELECT * FROM users WHERE id = ?', [userId]);
   if (!users.length) return;
-  await extendUserPackage(executor, userId, pkg);
+  const user = users[0];
+  const now = new Date();
+  const { usageUntil: newUsageUntil } = await extendUserPackage(executor, userId, pkg);
 
   await executor.execute(
     'UPDATE users SET moneyspent = moneyspent + ?, updated_at = NOW() WHERE id = ?',
@@ -28,12 +30,19 @@ async function activatePackage(userId, packageId, amount, extraData = {}, conn =
     [userId, packageId, amount]
   );
 
-  // Device provisioning is intentionally NOT awaited here. This function runs
-  // inside the payment transaction, and the router API can take 10+ seconds to
-  // time out when the router is unreachable, which would hold database locks
-  // and delay payment confirmation. The portal calls /api/hotspot/connect
-  // after the payment is confirmed, and RADIUS MAC authentication also picks
-  // up the new entitlement on the next Wi-Fi reconnect.
+  // Auto-connect to MikroTik router after activation (best-effort, non-blocking)
+  try {
+    const mac = extraData.mac_address || user.mac_address;
+    const routerID = extraData.router_id || user.last_router_id;
+    if (mac && routerID) {
+      const mikrotikService = require('../utils/mikrotik');
+      const uptime = Math.max(0, (newUsageUntil.getTime() - now.getTime()) / 1000);
+      await mikrotikService.addUserToRouter(mac, routerID, uptime, 0);
+      logger.info(`Auto-connected to router after payment fulfillment: mac=${mac}, router=${routerID}, uptime=${uptime}s`);
+    }
+  } catch (routerErr) {
+    logger.error('Auto-connect after payment fulfillment failed (non-critical)', { error: routerErr.message });
+  }
 }
 
 async function creditWallet(userId, amount, orderReference, description, executor) {
