@@ -14,7 +14,7 @@ async function migrate() {
       last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY unique_session (user_id, router_id, mac_address),
       KEY idx_router_time (router_id, last_activity_at),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      KEY idx_user_id (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   console.log('✓ hotspot_sessions table created');
