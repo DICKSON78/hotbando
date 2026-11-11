@@ -551,13 +551,14 @@ class MikrotikService {
                 `=dst-path=${fileName}`,
                 '=check-certificate=no'
             ], 75000);
-            const status = fetchReply && fetchReply[0] && fetchReply[0].status;
-            step(`fetch status=${status || 'none'}`);
-            if (status && String(status).toLowerCase() !== 'finished') {
-                throw new Error(`Router fetch status: ${status}`);
-            }
+            // RouterOS streams progress rows (status=connecting, downloading,
+            // finished...) — only the FILE itself is a reliable success check
+            // across RouterOS versions, so log the status and verify the file.
+            const fetchRows = Array.isArray(fetchReply) ? fetchReply : [];
+            const lastRow = fetchRows[fetchRows.length - 1] || {};
+            step(`fetch rows=${fetchRows.length} status=${lastRow.status || 'none'} downloaded=${lastRow.downloaded || '?'}`);
             const files = await conn.write('/file/print', [`?name=${fileName}`]);
-            if (!files.length) throw new Error('Script was not stored on the router');
+            if (!files.length) throw new Error(`Script was not stored on the router (fetch status: ${lastRow.status || 'unknown'})`);
             const size = Number(files[0].size || 0);
             step(`file size=${size}`);
             if (size < 300) throw new Error(`Downloaded script too small (${size} bytes)`);
