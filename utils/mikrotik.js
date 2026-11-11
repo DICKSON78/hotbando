@@ -445,10 +445,52 @@ class MikrotikService {
     }
 
     /**
+     * Download a script from a URL onto the router and import it.
+     * This avoids the RouterOS API word-size limit (4 KB per word on RouterOS
+     * 6.x) that breaks large =source= payloads, and mirrors the proven
+     * zero-touch poll pattern (/tool fetch + /import).
+     */
+    async fetchAndImportScript(routerID, scriptUrl, fileName = 'hotbando-repair.rsc') {
+        if (!routerID || !scriptUrl) return false;
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            // Remove a previous copy first (fetch refuses to overwrite on
+            // some RouterOS versions).
+            try {
+                const existing = await conn.write('/file/print', [`?name=${fileName}`]);
+                for (const f of existing) {
+                    await conn.write('/file/remove', [`=.id=${f['.id']}`]);
+                }
+            } catch (e) { /* ignore */ }
+            const fetchReply = await conn.write('/tool/fetch', [
+                `=url=${scriptUrl}`,
+                `=dst-path=${fileName}`,
+                '=check-certificate=no'
+            ]);
+            const status = fetchReply && fetchReply[0] && fetchReply[0].status;
+            if (status && String(status).toLowerCase() !== 'finished') {
+                throw new Error(`Router fetch status: ${status}`);
+            }
+            const files = await conn.write('/file/print', [`?name=${fileName}`]);
+            if (!files.length) throw new Error('Script was not stored on the router');
+            const size = Number(files[0].size || 0);
+            if (size < 300) throw new Error(`Downloaded script too small (${size} bytes)`);
+            await conn.write('/import', [`=file-name=${fileName}`]);
+            console.log(`Router script imported on ${routerID} (${size} bytes)`);
+            return true;
+        } catch (error) {
+            console.error(`Fetch+import script error (${routerID}):`, error.message);
+            return false;
+        }
+    }
+
+    /**
      * Upload a RouterOS script to a router and run it once. Used for remote
      * repairs pushed from the server (captive-portal repair delivered via the
      * zero-touch heartbeat). The script is stored under /system script, so it
      * stays on the router for auditing and can be re-run manually.
+     * NOTE: the RouterOS API word limit (4 KB on RouterOS 6.x) makes this
+     * unusable for large scripts there — prefer fetchAndImportScript.
      */
     async applyRouterScript(routerID, scriptSource, scriptName = 'hotbando-repair') {
         if (!routerID || !scriptSource) return false;

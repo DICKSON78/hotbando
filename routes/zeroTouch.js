@@ -19,10 +19,15 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { registerRouter, provisionRouter, generateBootstrapScript: genBootScript, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const mikrotikService = require('../utils/mikrotik');
+
+// Base URL the routers themselves use to reach this server (proven by the
+// heartbeat they already send every 2 minutes).
+const REPAIR_SCRIPT_BASE_URL = (process.env.PUBLIC_BASE_URL || process.env.APP_URL || 'https://hotbandowifi.online').replace(/\/+$/, '');
 
 // ── Remote repair delivery ─────────────────────────────────────────────────
 // A file data/router-repairs/<ROUTER_ID>.rsc is applied to that router via the
@@ -59,6 +64,33 @@ function restorePendingRepair(safeId, reason) {
     }
 }
 
+// One-time, short-lived tokens so a router can download its repair script.
+// The router fetches the URL itself (/tool fetch), exactly like it does for
+// the heartbeat and provision scripts.
+const repairScriptTokens = new Map();
+
+function issueRepairToken(safeId) {
+    const token = crypto.randomBytes(24).toString('hex');
+    repairScriptTokens.set(token, { safeId, expires: Date.now() + 15 * 60 * 1000 });
+    // Opportunistic cleanup
+    for (const [t, e] of repairScriptTokens) {
+        if (e.expires < Date.now()) repairScriptTokens.delete(t);
+    }
+    return token;
+}
+
+// Fetch+import can legitimately take a while; never let it hang the state.
+const REPAIR_APPLY_TIMEOUT_MS = 180000;
+
+function withRepairTimeout(promise) {
+    let timer;
+    const timeout = new Promise((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), REPAIR_APPLY_TIMEOUT_MS);
+        if (timer.unref) timer.unref();
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // Fire-and-forget so the heartbeat response never waits on a router repair.
 function maybeApplyRouterRepair(routerID) {
     if (!routerID || repairInFlight.has(routerID)) return;
@@ -74,20 +106,25 @@ function maybeApplyRouterRepair(routerID) {
             logger.warn('Recovered stale router-repair lock', { router: safeId });
         }
     } catch (e) { /* no lock file, nothing to recover */ }
-    let source = null;
-    try { source = fs.readFileSync(repairFilePath(safeId, 'rsc'), 'utf8'); } catch (e) { return; }
+    let pendingExists = false;
+    try { fs.statSync(repairFilePath(safeId, 'rsc')); pendingExists = true; } catch (e) { /* none pending */ }
+    if (!pendingExists) return;
     try { fs.renameSync(repairFilePath(safeId, 'rsc'), repairFilePath(safeId, 'applying')); } catch (e) { return; }
     repairInFlight.add(routerID);
     logger.info('Applying pending router repair', { router: safeId });
     setImmediate(async () => {
         try {
-            const ok = await mikrotikService.applyRouterScript(routerID, source, `hotbando-repair-${safeId}`);
-            if (ok) {
+            // The router downloads the script itself and imports it — avoids
+            // the RouterOS API word-size limit on large =source= payloads.
+            const token = issueRepairToken(safeId);
+            const scriptUrl = `${REPAIR_SCRIPT_BASE_URL}/api/zero-touch/repair-script/${token}`;
+            const outcome = await withRepairTimeout(mikrotikService.fetchAndImportScript(routerID, scriptUrl));
+            if (outcome === true) {
                 try { fs.unlinkSync(repairFilePath(safeId, 'attempts')); } catch (e) {}
                 try { fs.renameSync(repairFilePath(safeId, 'applying'), repairFilePath(safeId, 'applied')); } catch (e) {}
                 logger.info('Router repair applied successfully', { router: safeId });
             } else {
-                restorePendingRepair(safeId, 'apply returned false');
+                restorePendingRepair(safeId, outcome === 'timeout' ? 'repair timed out' : 'apply returned false');
             }
         } catch (err) {
             restorePendingRepair(safeId, err.message);
@@ -234,6 +271,22 @@ async function serveScript(req, res) {
 }
 router.get('/provision/:routerID', authRegister, serveScript);
 router.post('/provision/:routerID', authRegister, serveScript);
+
+// ── GET /repair-script/:token — one-time repair script download ──
+// Served only to a router holding a freshly issued token; the token dies on
+// first use and after 15 minutes.
+router.get('/repair-script/:token', (req, res) => {
+    const token = String(req.params.token || '');
+    const entry = repairScriptTokens.get(token);
+    if (!entry || entry.expires < Date.now()) return res.status(404).send('not found');
+    repairScriptTokens.delete(token);
+    let source = null;
+    try { source = fs.readFileSync(repairFilePath(entry.safeId, 'applying'), 'utf8'); } catch (e) {}
+    if (!source) return res.status(404).send('not found');
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    res.send(source);
+});
 
 // ── GET /repair-status/:routerID — delivery state of a pushed repair ──
 // (state only; no script contents, no credentials)
