@@ -64,6 +64,16 @@ function maybeApplyRouterRepair(routerID) {
     if (!routerID || repairInFlight.has(routerID)) return;
     const safeId = String(routerID).replace(/[^A-Za-z0-9._-]/g, '');
     if (!safeId || safeId.includes('..')) return;
+    // Recover a stale lock: if a process died mid-apply the file stays at
+    // .applying forever; anything older than 5 minutes goes back to pending.
+    try {
+        const lockPath = repairFilePath(safeId, 'applying');
+        const st = fs.statSync(lockPath);
+        if (Date.now() - st.mtimeMs > 5 * 60 * 1000) {
+            fs.renameSync(lockPath, repairFilePath(safeId, 'rsc'));
+            logger.warn('Recovered stale router-repair lock', { router: safeId });
+        }
+    } catch (e) { /* no lock file, nothing to recover */ }
     let source = null;
     try { source = fs.readFileSync(repairFilePath(safeId, 'rsc'), 'utf8'); } catch (e) { return; }
     try { fs.renameSync(repairFilePath(safeId, 'rsc'), repairFilePath(safeId, 'applying')); } catch (e) { return; }
@@ -85,6 +95,22 @@ function maybeApplyRouterRepair(routerID) {
             repairInFlight.delete(routerID);
         }
     });
+}
+
+// Repair state only — no script contents, no credentials. Lets the operator
+// (and monitoring) confirm that a pushed repair reached the router.
+function routerRepairState(routerID) {
+    const safeId = String(routerID || '').replace(/[^A-Za-z0-9._-]/g, '');
+    if (!safeId || safeId.includes('..')) return { state: 'unknown' };
+    let attempts = 0;
+    try { attempts = parseInt(String(fs.readFileSync(repairFilePath(safeId, 'attempts'), 'utf8')).trim() || '0', 10) || 0; } catch (e) {}
+    for (const state of ['applied', 'failed', 'applying', 'rsc']) {
+        try {
+            fs.statSync(repairFilePath(safeId, state));
+            return { router: safeId, state, attempts: attempts || undefined };
+        } catch (e) { /* try next */ }
+    }
+    return { router: safeId, state: 'none' };
 }
 
 
@@ -208,6 +234,12 @@ async function serveScript(req, res) {
 }
 router.get('/provision/:routerID', authRegister, serveScript);
 router.post('/provision/:routerID', authRegister, serveScript);
+
+// ── GET /repair-status/:routerID — delivery state of a pushed repair ──
+// (state only; no script contents, no credentials)
+router.get('/repair-status/:routerID', (req, res) => {
+    res.json({ success: true, ...routerRepairState(req.params.routerID) });
+});
 
 // ── POST/GET /heartbeat — check-in ──
 router.post('/heartbeat', authRegister, async (req, res) => {
