@@ -97,7 +97,10 @@
       :set prof "hotbando-profile"
     } else={
       :do {
-        /ip hotspot profile add name="hotbando-profile" login-by=http-pap,http-chap,mac html-directory=hotspot use-radius=yes radius-accounting=yes radius-interim-update=30s radius-mac-format=XX:XX:XX:XX:XX:XX hotspot-address=$hsIp dns-name="hotspot.hotbando.local" comment="HotBando hotspot profile"
+        # Keep this command to properties every RouterOS 6/7 build accepts.
+        # "comment" is NOT a hotspot-profile property on RouterOS 6 and made
+        # the whole import fail with "expected end of command".
+        /ip hotspot profile add name="hotbando-profile" login-by=http-pap,http-chap,mac html-directory=hotspot use-radius=yes radius-accounting=yes radius-interim-update=30s radius-mac-format=XX:XX:XX:XX:XX:XX hotspot-address=$hsIp dns-name="hotspot.hotbando.local"
         :set prof "hotbando-profile"
       } on-error={}
     }
@@ -131,12 +134,7 @@
 # ----------------------------------------------------------------------------
 :foreach r in=[/ip hotspot walled-garden find] do={
   :local dh [/ip hotspot walled-garden get $r dst-host]
-  :if ($dh = "connectivitycheck.gstatic.com" || $dh = "connectivitycheck.android.com" || \
-       $dh = "captive.apple.com" || $dh = "msftconnecttest.com" || \
-       $dh = "www.msftconnecttest.com" || $dh = "msftncsi.com" || \
-       $dh = "www.msftncsi.com" || $dh = "www.google.com" || \
-       $dh = "generate_204" || $dh = "detectportal.firefox.com" || \
-       $dh = "nmcheck.gnome.org") do={
+  :if ($dh = "connectivitycheck.gstatic.com" || $dh = "connectivitycheck.android.com" || $dh = "captive.apple.com" || $dh = "msftconnecttest.com" || $dh = "www.msftconnecttest.com" || $dh = "msftncsi.com" || $dh = "www.msftncsi.com" || $dh = "www.google.com" || $dh = "generate_204" || $dh = "detectportal.firefox.com" || $dh = "nmcheck.gnome.org") do={
     /ip hotspot walled-garden remove $r
   }
 }
@@ -145,12 +143,7 @@
 :foreach r in=[/ip hotspot walled-garden ip find] do={
   :local dh [/ip hotspot walled-garden ip get $r dst-host]
   :local c [/ip hotspot walled-garden ip get $r comment]
-  :if ($dh = "connectivitycheck.gstatic.com" || $dh = "connectivitycheck.android.com" || \
-       $dh = "captive.apple.com" || $dh = "msftconnecttest.com" || \
-       $dh = "www.msftconnecttest.com" || $dh = "msftncsi.com" || \
-       $dh = "www.msftncsi.com" || $dh = "www.google.com" || \
-       $dh = "generate_204" || $dh = "detectportal.firefox.com" || \
-       $dh = "nmcheck.gnome.org" || $c = "captive" || $c = "HotBando captive") do={
+  :if ($dh = "connectivitycheck.gstatic.com" || $dh = "connectivitycheck.android.com" || $dh = "captive.apple.com" || $dh = "msftconnecttest.com" || $dh = "www.msftconnecttest.com" || $dh = "msftncsi.com" || $dh = "www.msftncsi.com" || $dh = "www.google.com" || $dh = "generate_204" || $dh = "detectportal.firefox.com" || $dh = "nmcheck.gnome.org" || $c = "captive" || $c = "HotBando captive") do={
     /ip hotspot walled-garden ip remove $r
   }
 }
@@ -233,18 +226,16 @@
 # ----------------------------------------------------------------------------
 :if ([:len [/interface bridge find name=$hsIface]] > 0) do={
   :do {
-    :foreach w in=[/interface wireless find] do={
-      :if ([:len [/interface bridge port find interface=$w bridge=$hsIface]] = 0) do={
-        :do { /interface bridge port remove [find interface=$w] } on-error={}
-        :do { /interface bridge port add bridge=$hsIface interface=$w } on-error={}
-      }
-    }
-  } on-error={}
-  :do {
-    :foreach w in=[/interface wifi find] do={
-      :if ([:len [/interface bridge port find interface=$w bridge=$hsIface]] = 0) do={
-        :do { /interface bridge port remove [find interface=$w] } on-error={}
-        :do { /interface bridge port add bridge=$hsIface interface=$w } on-error={}
+    # Version-agnostic: RouterOS 6 names radios wlan*, RouterOS 7 names them
+    # wifi*. Listing /interface works on BOTH (unlike /interface wifi, which
+    # does not exist on RouterOS 6 and can abort the whole import).
+    :foreach w in=[/interface find] do={
+      :local wname [/interface get $w name]
+      :if ([:pick $wname 0 3] = "wla" || [:pick $wname 0 4] = "wifi") do={
+        :if ([:len [/interface bridge port find interface=$wname bridge=$hsIface]] = 0) do={
+          :do { /interface bridge port remove [find interface=$wname] } on-error={}
+          :do { /interface bridge port add bridge=$hsIface interface=$wname } on-error={}
+        }
       }
     }
   } on-error={}
@@ -254,12 +245,22 @@
 # 5. Re-apply the RADIUS secret (a stale secret silently rejects every login)
 # ----------------------------------------------------------------------------
 :if ([:len [/radius find service=hotspot]] = 0) do={
-  /radius add service=hotspot address=10.7.0.1 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" \
-    authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10.7.0.5 \
-    comment="HotBando FreeRADIUS"
+  /radius add service=hotspot address=10.7.0.1 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10.7.0.5 comment="HotBando FreeRADIUS"
 } else={
-  /radius set [find service=hotspot] address=10.7.0.1 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" \
-    authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10.7.0.5
+  /radius set [find service=hotspot] address=10.7.0.1 secret="d75158fa554f26306ea6b4c5b732e0a4743f2cda96d56d7782d1352e95c76cd6" authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10.7.0.5
+}
+
+# ----------------------------------------------------------------------------
+# 5b. Close every free-internet hole
+#     A hotspot user who never pays must never reach the internet. Bypass
+#     ip-bindings skip the hotspot entirely, and the old bootstrap shipped a
+#     well-known "admin" login with the unlimited VIP profile.
+# ----------------------------------------------------------------------------
+:do { /ip hotspot ip-binding remove [find type=bypassed] } on-error={}
+:foreach u in=[/ip hotspot user find name="admin"] do={
+  :if ([/ip hotspot user get $u password] = "hotbando2024") do={
+    /ip hotspot user remove $u
+  }
 }
 
 # ----------------------------------------------------------------------------
