@@ -218,16 +218,29 @@ exports.checkStatus = async (req, res) => {
     if (!orderReference) return res.status(400).json({ error: 'Order reference inahitajika' });
 
     const [orders] = await db.execute(
-      'SELECT status, processed, extra_data, updated_at FROM clickpesa_transactions WHERE order_reference = ?',
+      'SELECT status, processed, purpose, user_id, extra_data, updated_at FROM clickpesa_transactions WHERE order_reference = ?',
       [orderReference]
     );
     if (!orders.length) return res.status(404).json({ error: 'Malipo hayajapatikana' });
     const tx = orders[0];
     const storedStatus = String(tx.status || '').toUpperCase();
     if (tx.processed) {
-      try {
-        await processAndActivate(orderReference);
-      } catch (e) {}
+      // The checkout modal polls this endpoint every few seconds. Only run
+      // the (transactional) recovery activation when the buyer really has no
+      // active entitlement — a cheap read-only check, not a transaction per poll.
+      if (tx.purpose === 'package_purchase' && tx.user_id) {
+        const [users] = await db.execute(
+          'SELECT usage_until, free_bytes FROM users WHERE id = ?',
+          [tx.user_id]
+        );
+        const u = users[0];
+        const hasEntitlement = u && (u.usage_until && new Date(u.usage_until) > new Date() || Number(u.free_bytes || 0) > 0);
+        if (!hasEntitlement) {
+          try {
+            await processAndActivate(orderReference);
+          } catch (e) {}
+        }
+      }
       const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
       return res.json({
         success: true,
@@ -236,7 +249,8 @@ exports.checkStatus = async (req, res) => {
         ...(extra.voucher_code ? { message: 'Malipo yamekamilika. Voucher yako iko tayari.' } : { message: 'Malipo yamekamilika!' }),
       });
     }
-    if (['SUCCESS', 'SETTLED', 'COMPLETED'].includes(storedStatus)) {nResult = await processAndActivate(orderReference);
+    if (['SUCCESS', 'SETTLED', 'COMPLETED'].includes(storedStatus)) {
+      const activationResult = await processAndActivate(orderReference);
       return res.json({ success: true, status: 'completed', activated: true, ...activationResult });
     }
     const ageMs = Date.now() - new Date(tx.updated_at).getTime();
@@ -358,18 +372,24 @@ exports.getBalance = async (req, res) => {
 
 async function processAndActivate(orderReference) {
   const conn = await db.getConnection();
+  const { fulfillClickPesaPayment, activatePackage, connectUserToRouterBestEffort } = require('../services/paymentFulfillment');
+  let connect = null;
+  let result;
   try {
-    const { fulfillClickPesaPayment, activatePackage } = require('../services/paymentFulfillment');
     await conn.beginTransaction();
     const [rows] = await conn.execute('SELECT * FROM clickpesa_transactions WHERE order_reference = ? FOR UPDATE', [orderReference]);
     if (!rows.length) throw new Error(`ClickPesa order not found: ${orderReference}`);
     const tx = rows[0];
-    const result = await fulfillClickPesaPayment({
+    result = await fulfillClickPesaPayment({
       orderReference,
       amount: tx.amount,
       currency: 'TZS',
       providerRef: tx.clickpesa_id,
     }, conn);
+    if (result && result.__connect) {
+      connect = result.__connect;
+      connect.orderReference = orderReference;
+    }
     if (result && result.alreadyProcessed && tx.user_id && tx.purpose === 'package_purchase') {
       try {
         const extra = tx.extra_data ? (typeof tx.extra_data === 'string' ? JSON.parse(tx.extra_data) : tx.extra_data) : {};
@@ -378,8 +398,19 @@ async function processAndActivate(orderReference) {
           const user = users[0];
           const now = new Date();
           const hasActive = user && user.usage_until && new Date(user.usage_until) > now;
-          if (!hasActive) {
-            await activatePackage(tx.user_id, extra.package_id, tx.amount, extra, conn);
+          // Recovery must never re-grant a package that was already applied
+          // once and simply expired — polling an old order reference must not
+          // become a free-package fountain.
+          const [applied] = await conn.execute(
+            'SELECT id FROM payments WHERE user_id = ? AND package_id = ? AND activated = 1 ORDER BY id DESC LIMIT 1',
+            [tx.user_id, extra.package_id]
+          );
+          if (!hasActive && !applied.length) {
+            const activation = await activatePackage(tx.user_id, extra.package_id, tx.amount, extra, conn);
+            if (activation && activation.connect) {
+              connect = activation.connect;
+              connect.orderReference = orderReference;
+            }
           }
         }
       } catch (e) {
@@ -387,14 +418,25 @@ async function processAndActivate(orderReference) {
       }
     }
     await conn.commit();
-    return result;
   } catch (error) {
     await conn.rollback();
+    conn.release();
     logger.error('Process and activate error', { error: error.message, orderReference });
     throw error;
-  } finally {
-    conn.release();
   }
+  conn.release();
+
+  // Never talk to the router while holding a DB connection/transaction: a
+  // slow router froze the whole portal before. Best-effort, post-commit.
+  if (result && result.__connect) {
+    // The fulfillment path already captured the connect info above; strip the
+    // internal field so it is not spread into JSON responses.
+    delete result.__connect;
+  }
+  if (connect) {
+    setImmediate(() => { connectUserToRouterBestEffort(connect); });
+  }
+  return result;
 }
 
 async function _activatePackage(userId, packageId, amount, extraData = {}) {

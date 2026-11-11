@@ -16,7 +16,28 @@ class MikrotikService {
     constructor() {
         this.connections = new Map();
         this.connectionTimeout = 10000; // 10 seconds
+        // Hard cap for any single router operation. getRouterConnection can
+        // retry the router password several times (5s each) when WireGuard
+        // caches are stale; without this cap a single unreachable router can
+        // block callers (and, historically, whole DB transactions) for 20-40s+.
+        this.operationTimeoutMs = parseInt(process.env.MIKROTIK_OPERATION_TIMEOUT_MS || '15000', 10);
     }
+
+    // Race a router operation against a hard deadline. On timeout the promise
+    // resolves false so callers treat it as a normal failure (the underlying
+    // socket work continues in the background and cleans itself up).
+    _withOperationTimeout(promise, label) {
+        let timer;
+        const timeout = new Promise((resolve) => {
+            timer = setTimeout(() => {
+                console.warn(`Router operation "${label}" timed out after ${this.operationTimeoutMs}ms (router slow/unreachable)`);
+                resolve(false);
+            }, this.operationTimeoutMs);
+            if (timer.unref) timer.unref();
+        });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
 
     /**
      * Get router connection - supports both direct and WireGuard connections
@@ -260,6 +281,13 @@ class MikrotikService {
      * the device automatically once the portal grants an entitlement.
      */
     async addUserToRouter(mac, routerID, uptimeSeconds = 0, bytes = 0, preserveBytes = false) {
+        return this._withOperationTimeout(
+            this._addUserToRouterImpl(mac, routerID, uptimeSeconds, bytes, preserveBytes),
+            `addUserToRouter:${mac}:${routerID}`
+        );
+    }
+
+    async _addUserToRouterImpl(mac, routerID, uptimeSeconds = 0, bytes = 0, preserveBytes = false) {
         try {
             if (!mac || !routerID) {
                 throw new Error('MAC address and router are required');
@@ -410,6 +438,13 @@ class MikrotikService {
     }
 
     async removeUserFromRouter(mac, routerID) {
+        return this._withOperationTimeout(
+            this._removeUserFromRouterImpl(mac, routerID),
+            `removeUserFromRouter:${mac}:${routerID}`
+        );
+    }
+
+    async _removeUserFromRouterImpl(mac, routerID) {
         if (!mac || !routerID) return false;
         const cleanMac = String(mac).toUpperCase().replace(/-/g, ':');
         try {

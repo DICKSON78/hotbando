@@ -19,13 +19,16 @@
         <p class="text-sm text-white/50 truncate">{{ user?.phone_number || 'HotBando Member' }}</p>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button class="relative h-10 w-10 rounded-full bg-[#111118] border border-[#1e1e2a] text-white/80" aria-label="Notifications" @click="showNotifications = !showNotifications">
+        <button class="relative h-10 w-10 rounded-full bg-[#111118] border border-[#1e1e2a] text-white/80 hover:bg-[#1a1a22] transition" aria-label="Notifications" @click="showNotifications = !showNotifications">
           <i class="fa-solid fa-bell"></i>
           <span v-if="unreadCount" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-bold leading-[18px]">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
         </button>
         <span class="flex items-center gap-1.5 text-xs font-medium text-white/60 bg-[#111118] border border-[#1e1e2a] rounded-full px-3 py-2">
           <i class="fas fa-wifi text-[#FF7A30]"></i>{{ store.ssidshow || 'WiFi' }}
         </span>
+        <button class="h-10 w-10 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 transition" title="Logout" @click="logout">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
       </div>
     </div>
 
@@ -213,7 +216,10 @@ async function loadData() {
   loading.value = true
   loadError.value = null
   try {
-    const r = await hotspotGet('/dashboard', { params: { t: Date.now() } })
+    const r = await hotspotGet('/dashboard', { 
+      params: { t: Date.now() },
+      timeout: 8000  // 8-second timeout to prevent hanging
+    })
     if (r.redirect) { router.push('/hotspot/login'); return }
     user.value = r.user || null
     if (r.user) {
@@ -235,14 +241,30 @@ async function loadData() {
     loadNotifications()
   } catch (e) {
     if (e.response?.status === 401) {
-      router.push('/hotspot/login')
+      // Session expired - redirect to login
+      loadError.value = 'Muda wa kulogeza umemalizika. Tafadhali ingia tena.'
+      setTimeout(() => router.push('/hotspot/login'), 2000)
     } else if (e.response?.status === 403) {
+      // Not on WiFi
       loadError.value = 'Tafadhali unganisha kwenye WiFi ya HotBando.'
+    } else if (e.response?.status === 503) {
+      // Service unavailable (router offline)
+      loadError.value = 'Router iko offline. Tafadhali jaribu baadaye.'
+      console.warn('Router offline:', e.response?.data)
     } else if (e.response?.status === 500) {
+      // Server error
       loadError.value = 'Tatizo la seva. Tafadhali jaribu tena.'
       console.error('Dashboard server error:', e.response?.data)
+    } else if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
+      // Timeout error
+      loadError.value = 'Ombi linachukua muda mrefu. Hakikisha unganishwa kwenye WiFi.'
+    } else if (!e.response) {
+      // Network error (no response from server)
+      loadError.value = 'Tatizo la mtandao. Hakikisha WiFi imeunganishwa vizuri.'
+      console.error('Dashboard network error:', e.message || e)
     } else {
-      loadError.value = 'Imeshindikana kupata taarifa. Tafadhali jaribu tena.'
+      // Unknown error
+      loadError.value = `Imeshindikana kupakia taarifa (${e.response?.status || 'unknown'}). Tafadhali jaribu tena.`
       console.error('Dashboard load error:', e.message || e)
     }
   } finally {
@@ -318,6 +340,24 @@ async function ensureRouterAccess() {
 }
 
 onMounted(async () => {
+  // CRITICAL: Check if user is authenticated BEFORE loading dashboard
+  // This prevents unauthorized access to dashboard
+  await store.init() // Make sure store is initialized first
+  
+  if (!store.user || !store.user.id) {
+    // User not authenticated - MUST redirect to login
+    console.log('❌ No authenticated user found - redirecting to login')
+    loadError.value = 'Tafadhali ingia kwenye akaunti yako.'
+    // Give user a moment to see the message, then redirect
+    setTimeout(() => {
+      router.replace('/hotspot/login') // Use replace to prevent back button
+    }, 500)
+    return
+  }
+  
+  // User is authenticated - proceed with loading
+  console.log('✅ User authenticated:', store.user.name)
+  
   await loadData()
   await loadUsage()
   // Do this in the background: render the account and bundle immediately,
@@ -362,6 +402,32 @@ async function toggleConnection() {
   } catch (e) {
     connError.value = true
     connMsg.value = 'Imeshindikana. Tafadhali jaribu tena.'
+  }
+}
+
+// LOGOUT FUNCTION - Clear session and redirect to login
+async function logout() {
+  try {
+    console.log('🚀 Logging out user...')
+    // Call backend logout endpoint
+    await hotspotPost('/logout').catch(() => {}) // Ignore errors, logout anyway
+    
+    // Clear store state completely
+    console.log('🧹 Clearing store...')
+    await store.logout()
+    
+    // Clear any cached data
+    localStorage.removeItem('hotbando_session')
+    sessionStorage.removeItem('hotbando_user')
+    
+    // Redirect to login with fresh session
+    console.log('🔐 Redirecting to login...')
+    router.replace('/hotspot/login')
+  } catch (e) {
+    console.error('Logout error:', e)
+    // Even if logout fails, clear state and redirect
+    await store.logout()
+    router.replace('/hotspot/login')
   }
 }
 </script>

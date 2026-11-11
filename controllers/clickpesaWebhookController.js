@@ -1,7 +1,7 @@
 const clickpesa = require('../utils/clickpesa');
 const db = require('../config/database');
 const logger = require('../utils/logger');
-const { fulfillClickPesaPayment } = require('../services/paymentFulfillment');
+const { fulfillClickPesaPayment, connectUserToRouterBestEffort } = require('../services/paymentFulfillment');
 
 function eventData(payload) {
   return payload?.data && typeof payload.data === 'object' ? payload.data : (payload || {});
@@ -103,6 +103,7 @@ async function notifyPaymentFailure(conn, orderRef, reason) {
 
 async function processEvent({ eventId, eventType, orderRef, providerRef, payload, verifiedData }) {
   const conn = await db.getConnection();
+  let connect = null;
   try {
     await conn.beginTransaction();
     if (eventType === 'PAYMENT RECEIVED') {
@@ -112,7 +113,11 @@ async function processEvent({ eventId, eventType, orderRef, providerRef, payload
       // unverified callback amount.
       const amount = getAmount(verifiedData);
       const currency = getCurrency(verifiedData);
-      await fulfillClickPesaPayment({ orderReference: orderRef, amount, currency, providerRef }, conn);
+      const result = await fulfillClickPesaPayment({ orderReference: orderRef, amount, currency, providerRef }, conn);
+      if (result && result.__connect) {
+        connect = result.__connect;
+        connect.orderReference = orderRef;
+      }
     } else if (eventType === 'PAYMENT FAILED') {
       const details = eventData(payload);
       await notifyPaymentFailure(conn, orderRef, details.message || details.failureReason);
@@ -132,6 +137,11 @@ async function processEvent({ eventId, eventType, orderRef, providerRef, payload
     throw error;
   } finally {
     conn.release();
+  }
+  // Connect the customer's device AFTER the transaction committed so a slow
+  // or unreachable router can never hold DB locks (portal freeze).
+  if (connect) {
+    setImmediate(() => { connectUserToRouterBestEffort(connect); });
   }
 }
 

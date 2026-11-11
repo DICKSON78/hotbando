@@ -213,14 +213,14 @@ const checkoutTotal = ref(0)
 
 onMounted(async () => {
   try {
-    const r = await hotspotGet('/packages')
+    const r = await hotspotGet('/packages', { timeout: 8000 })
     packages.value = r.packages || []
   } catch (e) {
     voucherMsg.value = 'Imeshindikana kupata kifurushi.'
     voucherError.value = true
   } finally { loading.value = false }
   try {
-    const d = await hotspotGet('/dashboard')
+    const d = await hotspotGet('/dashboard', { timeout: 8000 })
     const phone = d?.user?.phone_number
     if (phone) {
       myPhone.value = phone.startsWith('+') ? phone.slice(1) : phone
@@ -276,7 +276,7 @@ async function reconnectAfterPayment() {
   try {
     await store.refreshUser()
     reconnectMsg.value = 'Inaunganisha kifaa chako kwenye mtandao...'
-    const r = await hotspotPost('/connect')
+    const r = await hotspotPost('/connect', {}, { timeout: 8000 })
     if (r?.success) {
       reconnectOk.value = true
       reconnectMsg.value = 'Imefanikiwa! Umeunganishwa kwenye mtandao. Fungua Dashboard kuona muda na data uliobaki.'
@@ -461,7 +461,7 @@ async function copyVoucher() {
 async function redeemVoucher() {
   if (!voucherCode.value) return
   try {
-    const r = await hotspotPost('/voucher', { voucher_code: voucherCode.value })
+    const r = await hotspotPost('/voucher', { voucher_code: voucherCode.value }, { timeout: 8000 })
     voucherMsg.value = r?.message || 'Voucher redeemed!'
     voucherError.value = !(r?.success === 'success' || r?.success === true)
     if (!voucherError.value) voucherCode.value = ''

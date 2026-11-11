@@ -6,6 +6,12 @@ const hotspotController = require('../controllers/hotspotController');
 const mikrotikService = require('../utils/mikrotik');
 const { getRealClientMAC, getRealSSID, formatRemainingTime } = hotspotController.helpers;
 const { authRateLimit } = require('../middleware/security');
+const { fulfillOrder } = require('../services/paymentFulfillment');
+
+// Dashboard-poll fulfillment guard: once this process has tried to fulfill a
+// given order reference we never retry it here (the webhook, status poll and
+// reconciler all remain recovery paths). Prevents hammering the DB every 15s.
+const dashboardFulfillmentAttempts = new Set();
 
 function publicSessionUser(user) {
     if (!user) return null;
@@ -104,21 +110,51 @@ async function requireWifi(req, res, next) {
     // Heal stale sessions: a logged-in user's bound router counts as on-WiFi
     if (!req.session.onWifi && req.session.hotbando_user?.last_router_id) {
         try {
-            const [routers] = await db.execute(
-                'SELECT router_id FROM mikrotiks WHERE router_id = ? AND is_active = 1',
+            // Query with timeout to prevent hanging
+            const queryPromise = db.execute(
+                'SELECT router_id, status FROM mikrotiks WHERE router_id = ? AND is_active = 1 LIMIT 1',
                 [req.session.hotbando_user.last_router_id]
             );
-            if (routers.length > 0) {
-                req.session.routerID = routers[0].router_id;
-                req.session.onWifi = true;
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Router check timeout')), 2000)
+            );
+            
+            const [routers] = await Promise.race([queryPromise, timeoutPromise]);
+            
+            if (routers && routers.length > 0) {
+                const router = routers[0];
+                if (router.status === 'online') {
+                    req.session.routerID = router.router_id;
+                    req.session.onWifi = true;
+                    console.log(`[WiFi] ✓ User ${req.session.hotbando_user?.id} authenticated to router ${router.router_id}`);
+                } else {
+                    console.log(`[WiFi] ✗ Router ${router.router_id} is offline (status: ${router.status})`);
+                    // Router is offline - return 503 Service Unavailable
+                    return res.status(503).json({
+                        error: 'HotBando router is offline. Please try again later.',
+                        onWifi: false,
+                        routerStatus: 'offline'
+                    });
+                }
+            } else {
+                console.log(`[WiFi] ✗ Router ${req.session.hotbando_user?.last_router_id} not found or inactive`);
             }
-        } catch (_) {}
+        } catch (error) {
+            // If router check fails/times out, still allow WiFi check below
+            console.warn(`[WiFi] Query failed for user ${req.session.hotbando_user?.id}: ${error.message}`);
+            // This prevents captive portal from hanging
+        }
     }
     if (!req.session.onWifi) {
+        console.log(`[WiFi] ✗ User ${req.session.hotbando_user?.id || 'unknown'} not on WiFi`);
         return res.status(403).json({
             error: 'Please connect to HotBando WiFi first.',
             onWifi: false,
-            redirectTo: '/hotspot'
+            redirectTo: '/hotspot',
+            debug: {
+                hasSession: !!req.session.hotbando_user,
+                hasRouter: !!req.session.hotbando_user?.last_router_id
+            }
         });
     }
     next();
@@ -152,25 +188,17 @@ router.get('/dashboard', requireWifi, async (req, res) => {
                         "SELECT order_reference, amount, extra_data, processed FROM clickpesa_transactions WHERE user_id = ? AND purpose = 'package_purchase' AND status IN ('SUCCESS','SETTLED','COMPLETED') ORDER BY id DESC LIMIT 1",
                         [user.id]
                     );
-                    if (txs.length && !txs[0].processed) {
+                    if (txs.length && !txs[0].processed && !dashboardFulfillmentAttempts.has(txs[0].order_reference)) {
+                        dashboardFulfillmentAttempts.add(txs[0].order_reference);
                         try {
-                            const { activatePackage } = require('../services/paymentFulfillment');
-                            const extra = txs[0].extra_data ? (typeof txs[0].extra_data === 'string' ? JSON.parse(txs[0].extra_data) : txs[0].extra_data) : {};
-                            if (extra.package_id) {
-                                const conn = await db.getConnection();
-                                await conn.beginTransaction();
-                                try {
-                                    await activatePackage(user.id, extra.package_id, txs[0].amount, extra, conn);
-                                    await conn.commit();
-                                } catch (e) {
-                                    await conn.rollback();
-                                }
-                                conn.release();
-                                const [freshUsers2] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
-                                if (freshUsers2.length) {
-                                    req.session.hotbando_user = { ...publicSessionUser(freshUsers2[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
-                                    user = req.session.hotbando_user;
-                                }
+                            // fulfillOrder runs in its OWN transaction and connects
+                            // the device to the router AFTER commit, so an
+                            // unreachable router can no longer freeze this poll.
+                            await fulfillOrder(txs[0].order_reference, { amount: txs[0].amount, currency: 'TZS' });
+                            const [freshUsers2] = await db.execute('SELECT * FROM users WHERE id = ?', [user.id]);
+                            if (freshUsers2.length) {
+                                req.session.hotbando_user = { ...publicSessionUser(freshUsers2[0]), mac_address: req.session.hotbando_user.mac_address, last_router_id: req.session.hotbando_user.last_router_id };
+                                user = req.session.hotbando_user;
                             }
                         } catch (e) {}
                     }
@@ -329,6 +357,51 @@ router.get('/logout', async (req, res) => {
     }
     req.session.destroy(() => {
         res.json({ success: true });
+    });
+});
+
+// CAPTIVE PORTAL DETECTION ENDPOINTS
+router.get('/captive/generate_204', (req, res) => {
+  if (!req.session.hotbando_user) {
+    return res.status(200).send();
+  }
+  res.status(204).send();
+});
+
+router.get('/captive/ncsi.txt', (req, res) => {
+  if (!req.session.hotbando_user) {
+    return res.status(200).send('Microsoft NCSI');
+  }
+  res.status(204).send();
+});
+
+router.get('/captive/hotspotdetect.html', (req, res) => {
+  if (!req.session.hotbando_user) {
+    return res.status(200).send('<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>');
+  }
+  res.status(204).send();
+});
+
+router.get('/captive/status', (req, res) => {
+  const user = req.session.hotbando_user;
+  res.json({
+    authenticated: !!user,
+    user: user ? { id: user.id, name: user.name, phone: user.phone_number } : null,
+    timestamp: new Date().toISOString()
+  });
+});
+
+router.post('/logout', async (req, res) => {
+    const user = req.session.hotbando_user;
+    if (user) {
+        try {
+            await mikrotikService.removeUserFromRouter(user.mac_address, user.last_router_id);
+        } catch (routerError) {
+            console.warn('⚠️ Could not remove user from router during logout:', routerError.message);
+        }
+    }
+    req.session.destroy(() => {
+        res.json({ success: true, message: 'Logged out successfully' });
     });
 });
 

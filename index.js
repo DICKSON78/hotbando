@@ -182,6 +182,7 @@ app.use((req, res, next) => {
 
 // Routes
 const hotspotApiRoutes = require('./routes/hotspotApi');
+const captivePortalRoutes = require('./routes/captivePortal');
 const adminRoutes = require('./routes/admin');
 const campaignRoutes = require('./routes/campaignRoutes');
 const walletRoutes = require('./routes/walletRoutes');
@@ -215,6 +216,8 @@ function serveSPA(req, res) {
         res.status(404).json({ error: 'Frontend not built. Run: cd frontend && npm run build' });
     }
 }
+
+// Captive Portal routes (detect and redirect unauthenticated users)
 
 // ALL API routes FIRST (before SPA catch-all)
 app.use('/api/hotspot', hotspotApiRoutes);
@@ -410,7 +413,19 @@ app.get('/health', async (req, res) => {
     res.status(statusCode).json(health);
 });
 
+// Captive Portal Enforcer - redirect unauthenticated users to login
+const { ensureWiFiAuth } = require('./middleware/captivePortalEnforcer');
+
+// OS captive-portal probe endpoints (Android /generate_204, Windows /ncsi.txt,
+// Apple /hotspotdetect.html). The router's DNS-static/walled-garden rules
+// redirect these probe hosts to this server; an unauthenticated device must
+// get a non-204 answer so the OS pops the sign-in page. Mounted at the root
+// BEFORE the SPA catch-all, and always reachable without authentication.
+app.use('/', captivePortalRoutes);
+
 // All portal paths → Vue SPA (AFTER all API routes)
+// Check authentication before serving dashboard
+app.get('/hotspot/dashboard', ensureWiFiAuth, serveSPA);
 app.get(['/hotspot', '/hotspot/*'], serveSPA);
 app.get(['/admin', '/admin/*'], serveSPA);
 app.get(['/franchise', '/franchise/*'], serveSPA);

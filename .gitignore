@@ -15,3 +15,4 @@ Modelfile
 *.rsc
 data/host-arp.txt
 *-summary.md
+backups/

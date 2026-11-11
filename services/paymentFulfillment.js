@@ -13,6 +13,43 @@ async function notifyGiftRecipient(executor, recipientUserId, amount) {
   );
 }
 
+// RouterOS auto-connect is best-effort and must never run inside an open DB
+// transaction. When a router is unreachable the password-retry loop inside
+// getRouterConnection can block for 20s+; holding a pooled connection (and
+// FOR UPDATE row locks) for that long starves the pool and freezes the whole
+// portal ("Inapakia taarifa..." forever). All router connects therefore run
+// AFTER the surrounding transaction commits, with a hard time cap.
+const ROUTER_CONNECT_TIMEOUT_MS = 12000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+    if (timer.unref) timer.unref();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function connectUserToRouterBestEffort({ mac, routerID, uptimeSeconds = 0, bytes = 0, preserveBytes = false, orderReference = null }) {
+  if (!mac || !routerID) return false;
+  try {
+    const mikrotikService = require('../utils/mikrotik');
+    const ok = await withTimeout(
+      mikrotikService.addUserToRouter(mac, routerID, uptimeSeconds, bytes, preserveBytes),
+      ROUTER_CONNECT_TIMEOUT_MS
+    );
+    if (ok) {
+      logger.info('Auto-connected to router after fulfillment', { mac, router: routerID, uptimeSeconds, orderReference });
+    } else {
+      logger.warn('Auto-connect to router after fulfillment did not complete (router slow/unreachable)', { mac, router: routerID, orderReference });
+    }
+    return !!ok;
+  } catch (routerErr) {
+    logger.error('Auto-connect after payment fulfillment failed (non-critical)', { error: routerErr.message, mac, router: routerID, orderReference });
+    return false;
+  }
+}
+
 function generateVoucherCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const group = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -39,19 +76,20 @@ async function activatePackage(userId, packageId, amount, extraData = {}, conn =
     [userId, packageId, amount]
   );
 
-  // Auto-connect to MikroTik router after activation (best-effort, non-blocking)
-  try {
-    const mac = extraData.mac_address || user.mac_address;
-    const routerID = extraData.router_id || user.last_router_id;
-    if (mac && routerID) {
-      const mikrotikService = require('../utils/mikrotik');
-      const uptime = Math.max(0, (newUsageUntil.getTime() - now.getTime()) / 1000);
-      await mikrotikService.addUserToRouter(mac, routerID, uptime, 0);
-      logger.info(`Auto-connected to router after payment fulfillment: mac=${mac}, router=${routerID}, uptime=${uptime}s`);
-    }
-  } catch (routerErr) {
-    logger.error('Auto-connect after payment fulfillment failed (non-critical)', { error: routerErr.message });
-  }
+  // The router auto-connect info is RETURNED, not executed: the caller must
+  // run it only after the surrounding transaction commits (see
+  // connectUserToRouterBestEffort / fulfillOrder).
+  const mac = extraData.mac_address || user.mac_address;
+  const routerID = extraData.router_id || user.last_router_id;
+  const connect = (mac && routerID)
+    ? {
+        mac,
+        routerID,
+        uptimeSeconds: Math.max(0, (newUsageUntil.getTime() - now.getTime()) / 1000),
+        bytes: 0
+      }
+    : null;
+  return { connect };
 }
 
 async function creditWallet(userId, amount, orderReference, description, executor) {
@@ -133,8 +171,11 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
         [JSON.stringify(extra), orderReference]);
       result = { voucher: voucherCode, message: 'Voucher imegeneratiwa!' };
     } else if (packageId) {
-      await activatePackage(userId, packageId, tx.amount, extra, executor);
-      result = { activated: true, message: 'Kifurushi chako kimewashwa. Unganisha tena au refresh Wi-Fi ili kuanza kutumia.' };
+      const activation = await activatePackage(userId, packageId, tx.amount, extra, executor);
+      if (activation && activation.connect) {
+        result.__connect = activation.connect;
+      }
+      result = { ...result, activated: true, message: 'Kifurushi chako kimewashwa. Unganisha tena au refresh Wi-Fi ili kuanza kutumia.' };
     }
   } else if (purpose === 'package_purchase' && extra.gift && !userId && extra.recipient_user_id && extra.package_id) {
     await createGiftGrant(executor, extra.recipient_user_id, extra.package_id, orderReference, tx.phone || null);
@@ -217,10 +258,55 @@ async function fulfillClickPesaPayment({ orderReference, amount, currency, provi
     logger.warn('Failed to insert into payments ledger', { error: e.message });
   }
 
+  // Gift purchases carry their voucher code for display to the buyer.
+  if (result.voucher) {
+    try {
+      const [stored] = await executor.execute(
+        'SELECT extra_data FROM clickpesa_transactions WHERE order_reference = ?',
+        [orderReference]
+      );
+      const storedExtra = stored.length && stored[0].extra_data
+        ? (typeof stored[0].extra_data === 'string' ? JSON.parse(stored[0].extra_data) : stored[0].extra_data)
+        : {};
+      if (storedExtra.voucher_code) result.voucher = storedExtra.voucher_code;
+    } catch (e) { /* keep the in-memory voucher */ }
+  }
+
+  return result;
+}
+
+// Fulfill an order in its own transaction, then connect the customer's device
+// to the router AFTER the commit. This is the safe entry point for callers
+// that do not manage their own transaction (reconciler, dashboard fallback).
+async function fulfillOrder(orderReference, { amount, currency, providerRef } = {}) {
+  const conn = await db.getConnection();
+  let result;
+  let connect = null;
+  try {
+    await conn.beginTransaction();
+    result = await fulfillClickPesaPayment({ orderReference, amount, currency, providerRef }, conn);
+    await conn.commit();
+  } catch (error) {
+    await conn.rollback();
+    conn.release();
+    throw error;
+  }
+  conn.release();
+
+  if (result && result.__connect) {
+    connect = result.__connect;
+    delete result.__connect;
+    connect.orderReference = orderReference;
+    // Fire-and-forget with a hard cap: a slow router must never stall the
+    // HTTP response or the next DB operation.
+    setImmediate(() => { connectUserToRouterBestEffort(connect); });
+  }
   return result;
 }
 
 module.exports = {
   activatePackage,
-  fulfillClickPesaPayment
+  fulfillClickPesaPayment,
+  fulfillOrder,
+  connectUserToRouterBestEffort
 };

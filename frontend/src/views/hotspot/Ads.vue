@@ -178,7 +178,7 @@ watch(selectedAd, (ad) => {
 
 async function fetchList() {
   try {
-    const r = await hotspotGet('/ads-list')
+    const r = await hotspotGet('/ads-list', { timeout: 8000 })
     if (r.success) {
       adsList.value = r.ads || []
       adsWatchedToday.value = r.adsWatchedToday || 0
@@ -206,7 +206,7 @@ async function playAd(ad) {
   try {
     // Tell the server which ad is starting. complete-ad requires this
     // server-side start marker, otherwise the reward is rejected.
-    const r = await hotspotGet('/get-ad', { params: { ad_id: ad.id } })
+    const r = await hotspotGet('/get-ad', { params: { ad_id: ad.id }, timeout: 8000 })
     if (!r.success || !r.ad) {
       message.value = r.message || 'Imeshindikana kuanzisha tangazo.'
       messageError.value = true
