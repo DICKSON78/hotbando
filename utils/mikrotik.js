@@ -444,6 +444,38 @@ class MikrotikService {
         );
     }
 
+    /**
+     * Upload a RouterOS script to a router and run it once. Used for remote
+     * repairs pushed from the server (captive-portal repair delivered via the
+     * zero-touch heartbeat). The script is stored under /system script, so it
+     * stays on the router for auditing and can be re-run manually.
+     */
+    async applyRouterScript(routerID, scriptSource, scriptName = 'hotbando-repair') {
+        if (!routerID || !scriptSource) return false;
+        try {
+            const conn = await this.getRouterConnection(routerID);
+            // Idempotent: remove any previous copy with the same name first.
+            try {
+                const existing = await conn.write('/system/script/print', [`?name=${scriptName}`]);
+                for (const s of existing) {
+                    await conn.write('/system/script/remove', [`=.id=${s['.id']}`]);
+                }
+            } catch (e) { /* ignore */ }
+            await conn.write('/system/script/add', [
+                `=name=${scriptName}`,
+                `=source=${scriptSource}`
+            ]);
+            const scripts = await conn.write('/system/script/print', [`?name=${scriptName}`]);
+            if (!scripts.length) throw new Error('Script was not stored on the router');
+            await conn.write('/system/script/run', [`=.id=${scripts[0]['.id']}`]);
+            console.log(`Router script "${scriptName}" applied to ${routerID}`);
+            return true;
+        } catch (error) {
+            console.error(`Apply router script error (${routerID}/${scriptName}):`, error.message);
+            return false;
+        }
+    }
+
     async _removeUserFromRouterImpl(mac, routerID) {
         if (!mac || !routerID) return false;
         const cleanMac = String(mac).toUpperCase().replace(/-/g, ':');

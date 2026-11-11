@@ -17,9 +17,76 @@
 
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const { registerRouter, provisionRouter, generateBootstrapScript: genBootScript, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
 const db = require('../config/database');
 const logger = require('../utils/logger');
+const mikrotikService = require('../utils/mikrotik');
+
+// ── Remote repair delivery ─────────────────────────────────────────────────
+// A file data/router-repairs/<ROUTER_ID>.rsc is applied to that router via the
+// RouterOS API the next time it heartbeats. The file rename acts as a
+// cross-process lock (PM2 cluster = several processes share this directory):
+//   <id>.rsc       pending, will be applied on the next heartbeat
+//   <id>.applying  locked while a process is applying it
+//   <id>.applied   done (kept for audit)
+//   <id>.failed    gave up after 3 attempts (kept for diagnosis)
+const REPAIR_DIR = path.join(__dirname, '..', 'data', 'router-repairs');
+const repairInFlight = new Set();
+const MAX_REPAIR_ATTEMPTS = 3;
+
+function repairFilePath(safeId, suffix) {
+    return path.join(REPAIR_DIR, `${safeId}.${suffix}`);
+}
+
+function restorePendingRepair(safeId, reason) {
+    const attemptsPath = repairFilePath(safeId, 'attempts');
+    let attempts = 0;
+    try { attempts = parseInt(String(fs.readFileSync(attemptsPath, 'utf8')).trim() || '0', 10) || 0; } catch (e) {}
+    attempts += 1;
+    try {
+        if (attempts >= MAX_REPAIR_ATTEMPTS) {
+            fs.renameSync(repairFilePath(safeId, 'applying'), repairFilePath(safeId, 'failed'));
+            logger.error('Router repair failed permanently', { router: safeId, attempts, reason });
+        } else {
+            fs.writeFileSync(attemptsPath, String(attempts));
+            fs.renameSync(repairFilePath(safeId, 'applying'), repairFilePath(safeId, 'rsc'));
+            logger.warn('Router repair failed, retrying on next heartbeat', { router: safeId, attempts, reason });
+        }
+    } catch (e) {
+        logger.error('Router repair state update failed', { router: safeId, error: e.message });
+    }
+}
+
+// Fire-and-forget so the heartbeat response never waits on a router repair.
+function maybeApplyRouterRepair(routerID) {
+    if (!routerID || repairInFlight.has(routerID)) return;
+    const safeId = String(routerID).replace(/[^A-Za-z0-9._-]/g, '');
+    if (!safeId || safeId.includes('..')) return;
+    let source = null;
+    try { source = fs.readFileSync(repairFilePath(safeId, 'rsc'), 'utf8'); } catch (e) { return; }
+    try { fs.renameSync(repairFilePath(safeId, 'rsc'), repairFilePath(safeId, 'applying')); } catch (e) { return; }
+    repairInFlight.add(routerID);
+    logger.info('Applying pending router repair', { router: safeId });
+    setImmediate(async () => {
+        try {
+            const ok = await mikrotikService.applyRouterScript(routerID, source, `hotbando-repair-${safeId}`);
+            if (ok) {
+                try { fs.unlinkSync(repairFilePath(safeId, 'attempts')); } catch (e) {}
+                try { fs.renameSync(repairFilePath(safeId, 'applying'), repairFilePath(safeId, 'applied')); } catch (e) {}
+                logger.info('Router repair applied successfully', { router: safeId });
+            } else {
+                restorePendingRepair(safeId, 'apply returned false');
+            }
+        } catch (err) {
+            restorePendingRepair(safeId, err.message);
+        } finally {
+            repairInFlight.delete(routerID);
+        }
+    });
+}
+
 
 function authRegister(req, res, next) {
     const secret = (req.body && req.body.secret) || req.query.secret;
@@ -163,6 +230,9 @@ router.post('/heartbeat', authRegister, async (req, res) => {
         );
         const router = r[0] || null;
 
+        // Apply any pending remote repair (background, never blocks the reply)
+        maybeApplyRouterRepair(routerID);
+
         res.json({
             success: true,
             ok: true,
@@ -190,6 +260,9 @@ router.get('/heartbeat', authRegister, async (req, res) => {
             'SELECT setup_status, ssid, wireguard_ip FROM mikrotiks WHERE router_id = ?', [routerID]
         );
         const router = r[0] || null;
+
+        // Apply any pending remote repair (background, never blocks the reply)
+        maybeApplyRouterRepair(routerID);
 
         res.json({
             success: true,
