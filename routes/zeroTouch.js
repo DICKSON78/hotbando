@@ -51,6 +51,7 @@ function restorePendingRepair(safeId, reason) {
     try { attempts = parseInt(String(fs.readFileSync(attemptsPath, 'utf8')).trim() || '0', 10) || 0; } catch (e) {}
     attempts += 1;
     try {
+        fs.writeFileSync(repairFilePath(safeId, 'error'), `${new Date().toISOString()} attempt ${attempts}: ${reason}`);
         if (attempts >= MAX_REPAIR_ATTEMPTS) {
             fs.renameSync(repairFilePath(safeId, 'applying'), repairFilePath(safeId, 'failed'));
             logger.error('Router repair failed permanently', { router: safeId, attempts, reason });
@@ -141,10 +142,12 @@ function routerRepairState(routerID) {
     if (!safeId || safeId.includes('..')) return { state: 'unknown' };
     let attempts = 0;
     try { attempts = parseInt(String(fs.readFileSync(repairFilePath(safeId, 'attempts'), 'utf8')).trim() || '0', 10) || 0; } catch (e) {}
+    let lastError = null;
+    try { lastError = String(fs.readFileSync(repairFilePath(safeId, 'error'), 'utf8')).trim() || null; } catch (e) {}
     for (const state of ['applied', 'failed', 'applying', 'rsc']) {
         try {
             fs.statSync(repairFilePath(safeId, state));
-            return { router: safeId, state, attempts: attempts || undefined };
+            return { router: safeId, state, attempts: attempts || undefined, ...(lastError ? { lastError } : {}) };
         } catch (e) { /* try next */ }
     }
     return { router: safeId, state: 'none' };
