@@ -150,6 +150,10 @@ function maybeApplyRouterRepair(routerID) {
     try { fs.statSync(repairFilePath(safeId, 'rsc')); pendingExists = true; } catch (e) { /* none pending */ }
     if (!pendingExists) return;
     try { fs.renameSync(repairFilePath(safeId, 'rsc'), repairFilePath(safeId, 'applying')); } catch (e) { return; }
+    // fs.rename preserves mtime — and the tracked .rsc may be hours old — so
+    // TOUCH the lock now, otherwise every heartbeat mistakes the fresh lock
+    // for a stale one (> 5 min) and starts a duplicate apply.
+    try { fs.utimesSync(repairFilePath(safeId, 'applying'), new Date(), new Date()); } catch (e) { /* mtime stays, harmless */ }
     repairInFlight.add(routerID);
     logger.info('Applying pending router repair', { router: safeId });
     repairLog(safeId, `apply start (attempt ${(() => { try { return String(parseInt(String(fs.readFileSync(repairFilePath(safeId, 'attempts'), 'utf8')).trim() || '0', 10) || 0) + 1; } catch (e) { return '1'; } })()})`);

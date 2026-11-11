@@ -1,5 +1,18 @@
 // Handle !empty and other transient RouterOS replies globally (before any module loads)
 process.on('uncaughtException', (error) => {
+    // While a router repair is being applied, capture the real stack into the
+    // repair log so the operator can see WHY an apply died without SSH logs.
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const dir = path.join(__dirname, 'data', 'router-repairs');
+        for (const name of fs.readdirSync(dir)) {
+            if (!name.endsWith('.applying')) continue;
+            const logPath = path.join(dir, name.replace(/\.applying$/, '.log'));
+            fs.appendFileSync(logPath,
+                `${new Date().toISOString()} CRASH: ${(error && (error.stack || error.message)) || String(error)}\n`);
+        }
+    } catch (e) { /* diagnostics must never break error handling */ }
     if (error && error.message && (error.message.includes('!empty') || error.message.includes('UNKNOWNREPLY') || error.message.includes('Timed out') || (error.errno === 'UNKNOWNREPLY') || (error.errno === 'SOCKTMOUT'))) {
         console.warn('Ignoring transient RouterOS reply:', error.message || error.errno);
         return;
