@@ -13,7 +13,7 @@ process.on('uncaughtException', (error) => {
                 `${new Date().toISOString()} CRASH: ${(error && (error.stack || error.message)) || String(error)}\n`);
         }
     } catch (e) { /* diagnostics must never break error handling */ }
-    if (error && error.message && (error.message.includes('!empty') || error.message.includes('UNKNOWNREPLY') || error.message.includes('Timed out') || (error.errno === 'UNKNOWNREPLY') || (error.errno === 'SOCKTMOUT'))) {
+    if (error && error.message && (error.message.includes('!empty') || error.message.includes('UNKNOWNREPLY') || error.message.includes('Timed out') || error.message.includes('unregistered tag') || (error.errno === 'UNKNOWNREPLY') || (error.errno === 'SOCKTMOUT') || (error.errno === 'UNREGISTEREDTAG'))) {
         console.warn('Ignoring transient RouterOS reply:', error.message || error.errno);
         return;
     }
@@ -21,7 +21,7 @@ process.on('uncaughtException', (error) => {
     process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('UNKNOWNREPLY') || reason.message.includes('Timed out') || (reason.errno === 'UNKNOWNREPLY') || (reason.errno === 'SOCKTMOUT'))) {
+    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('UNKNOWNREPLY') || reason.message.includes('Timed out') || reason.message.includes('unregistered tag') || (reason.errno === 'UNKNOWNREPLY') || (reason.errno === 'SOCKTMOUT') || (reason.errno === 'UNREGISTEREDTAG'))) {
         console.warn('Ignoring transient RouterOS rejection:', reason.message || reason.errno);
         return;
     }

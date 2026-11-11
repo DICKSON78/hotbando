@@ -3,24 +3,28 @@
 const RouterOSAPI = require('node-routeros').RouterOSAPI;
 
 // Fix a node-routeros defect at the source: when a RouterOS print command
-// matches NOTHING the router replies "!empty". Channel.processPacket routes
-// that to the "unknown" handler, which throws an UNCAUGHT RosException — the
-// write() promise NEVER settles and every caller that awaits it hangs until
-// an outer timeout fires. This is what broke addUserToRouter for brand-new
-// (paying) customers ("/ip hotspot user print ?mac-address=..." never matched
-// because the user did not exist yet) and the remote repair fetch+import
-// ("/file print ?name=..." with no such file). "!empty" simply means "no
-// rows", so settle the write immediately with an empty result instead.
+// matches NOTHING the router replies "!empty" FOLLOWED BY "!done" (same
+// tag). The stock Channel.processPacket routes "!empty" to the "unknown"
+// handler, which throws an UNCAUGHT RosException — the write() promise then
+// never settles and callers hang until an outer timeout fires. This is what
+// broke addUserToRouter for brand-new (paying) customers ("/ip hotspot user
+// print ?mac-address=..." matched nothing because the user did not exist
+// yet) and the remote repair fetch+import ("/file print ?name=...").
+//
+// Treat "!empty" as "no rows": settle the write immediately but do NOT close
+// the channel — the trailing "!done" must close it through the normal path.
+// (Closing here would unregister the tag while "!done" is still in flight;
+// Receiver.sendTagData then throws UNREGISTEREDTAG as an uncaught exception
+// and kills the process — observed live as an 8-restart crash loop.)
 const { Channel: _RosChannel } = require('node-routeros/dist/Channel');
 if (_RosChannel && _RosChannel.prototype && !_RosChannel.prototype.__hotbandoEmptyFixed) {
-    const _originalOnUnknown = _RosChannel.prototype.onUnknown;
-    _RosChannel.prototype.onUnknown = function (reply) {
-        if (reply === '!empty') {
+    const _originalProcessPacket = _RosChannel.prototype.processPacket;
+    _RosChannel.prototype.processPacket = function (packet) {
+        if (packet && packet[0] === '!empty' && !this.trapped) {
             this.emit('done', this.data || []);
-            this.close();
             return;
         }
-        return _originalOnUnknown.call(this, reply);
+        return _originalProcessPacket.call(this, packet);
     };
     _RosChannel.prototype.__hotbandoEmptyFixed = true;
 }
@@ -28,7 +32,7 @@ if (_RosChannel && _RosChannel.prototype && !_RosChannel.prototype.__hotbandoEmp
 // Handle !empty and timeout replies from RouterOS - these are thrown
 // as uncaught exceptions by node-routeros and crash the process
 process.on('unhandledRejection', (reason, promise) => {
-    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('Timed out') || reason.errno === 'SOCKTMOUT' || reason.errno === 'UNKNOWNREPLY')) {
+    if (reason && reason.message && (reason.message.includes('!empty') || reason.message.includes('Timed out') || reason.message.includes('unregistered tag') || reason.errno === 'SOCKTMOUT' || reason.errno === 'UNKNOWNREPLY' || reason.errno === 'UNREGISTEREDTAG')) {
         console.warn('Ignoring transient RouterOS rejection:', reason.message || reason.errno);
         return;
     }
