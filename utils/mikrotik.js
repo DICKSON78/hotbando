@@ -2,6 +2,29 @@
 // Extended MikroTik Service with full remote management via WireGuard
 const RouterOSAPI = require('node-routeros').RouterOSAPI;
 
+// Fix a node-routeros defect at the source: when a RouterOS print command
+// matches NOTHING the router replies "!empty". Channel.processPacket routes
+// that to the "unknown" handler, which throws an UNCAUGHT RosException — the
+// write() promise NEVER settles and every caller that awaits it hangs until
+// an outer timeout fires. This is what broke addUserToRouter for brand-new
+// (paying) customers ("/ip hotspot user print ?mac-address=..." never matched
+// because the user did not exist yet) and the remote repair fetch+import
+// ("/file print ?name=..." with no such file). "!empty" simply means "no
+// rows", so settle the write immediately with an empty result instead.
+const { Channel: _RosChannel } = require('node-routeros/dist/Channel');
+if (_RosChannel && _RosChannel.prototype && !_RosChannel.prototype.__hotbandoEmptyFixed) {
+    const _originalOnUnknown = _RosChannel.prototype.onUnknown;
+    _RosChannel.prototype.onUnknown = function (reply) {
+        if (reply === '!empty') {
+            this.emit('done', this.data || []);
+            this.close();
+            return;
+        }
+        return _originalOnUnknown.call(this, reply);
+    };
+    _RosChannel.prototype.__hotbandoEmptyFixed = true;
+}
+
 // Handle !empty and timeout replies from RouterOS - these are thrown
 // as uncaught exceptions by node-routeros and crash the process
 process.on('unhandledRejection', (reason, promise) => {
@@ -21,6 +44,8 @@ class MikrotikService {
         // caches are stale; without this cap a single unreachable router can
         // block callers (and, historically, whole DB transactions) for 20-40s+.
         this.operationTimeoutMs = parseInt(process.env.MIKROTIK_OPERATION_TIMEOUT_MS || '15000', 10);
+        // Deadline for a single conn.write() — see _patchConnectionWrites.
+        this.writeTimeoutMs = parseInt(process.env.MIKROTIK_WRITE_TIMEOUT_MS || '8000', 10);
     }
 
     // Race a router operation against a hard deadline. On timeout the promise
@@ -38,6 +63,38 @@ class MikrotikService {
         return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
     }
 
+
+    // Second hardening layer: even with the !empty fix above, node-routeros
+    // can still leave a write() promise unsettled forever (socket timeouts,
+    // odd trap paths). Race every write against a deadline: print commands
+    // resolve to [] ("no rows"), mutations reject so callers treat them as
+    // failures. Pass an explicit ms budget as the LAST argument for slow
+    // commands such as /tool fetch and /import.
+    _patchConnectionWrites(conn) {
+        if (!conn || conn.__hbWriteBounded) return conn;
+        const originalWrite = conn.write.bind(conn);
+        const defaultMs = this.writeTimeoutMs;
+        conn.write = function (params, ...moreParams) {
+            let ms = defaultMs;
+            if (moreParams.length > 0 && typeof moreParams[moreParams.length - 1] === 'number') {
+                ms = moreParams.pop();
+            }
+            const command = Array.isArray(params) ? String(params[0]) : String(params || '');
+            const isPrint = command.includes('/print');
+            let timer;
+            const deadline = new Promise((resolve, reject) => {
+                timer = setTimeout(() => {
+                    if (isPrint) resolve([]);
+                    else reject(new Error(`RouterOS write timed out after ${ms}ms: ${command}`));
+                }, ms);
+                if (timer.unref) timer.unref();
+            });
+            return Promise.race([originalWrite(params, ...moreParams), deadline])
+                .finally(() => clearTimeout(timer));
+        };
+        conn.__hbWriteBounded = true;
+        return conn;
+    }
 
     /**
      * Get router connection - supports both direct and WireGuard connections
@@ -119,6 +176,7 @@ class MikrotikService {
                         conn.connect(),
                         new Promise((_, reject) => setTimeout(() => reject(new Error('connect-timeout')), 5000))
                     ]);
+                    this._patchConnectionWrites(conn);
                     this.connections.set(routerID, conn);
 
                     // If a different password worked, update DB to match
@@ -417,6 +475,24 @@ class MikrotikService {
                 console.warn(`Could not refresh active session for ${cleanMac}:`, reauthErr.message);
             }
 
+            // Force the router to retry MAC authentication NOW: the device
+            // joined the hotspot BEFORE this entitlement existed, so its
+            // earlier MAC login already failed and RouterOS will not retry it
+            // on its own. Removing the host entry makes the next packet from
+            // the device re-create it and re-run MAC login — the customer
+            // gets internet immediately without reconnecting Wi-Fi.
+            try {
+                const hosts = await conn.write('/ip/hotspot/host/print', [
+                    `?mac-address=${cleanMac}`
+                ]);
+                for (const h of hosts) {
+                    await conn.write('/ip/hotspot/host/remove', [`=.id=${h['.id']}`]);
+                    console.log(`Forced MAC re-authentication for ${cleanMac} on ${routerID}`);
+                }
+            } catch (hostErr) {
+                console.warn(`Could not force MAC re-auth for ${cleanMac}:`, hostErr.message);
+            }
+
             return true;
         } catch (error) {
             console.error(`Add user to router error:`, error.message);
@@ -462,11 +538,13 @@ class MikrotikService {
                     await conn.write('/file/remove', [`=.id=${f['.id']}`]);
                 }
             } catch (e) { /* ignore */ }
+            // /tool fetch downloads the whole file before replying — give it
+            // a generous budget, unlike ordinary commands.
             const fetchReply = await conn.write('/tool/fetch', [
                 `=url=${scriptUrl}`,
                 `=dst-path=${fileName}`,
                 '=check-certificate=no'
-            ]);
+            ], 75000);
             const status = fetchReply && fetchReply[0] && fetchReply[0].status;
             if (status && String(status).toLowerCase() !== 'finished') {
                 throw new Error(`Router fetch status: ${status}`);
@@ -475,7 +553,8 @@ class MikrotikService {
             if (!files.length) throw new Error('Script was not stored on the router');
             const size = Number(files[0].size || 0);
             if (size < 300) throw new Error(`Downloaded script too small (${size} bytes)`);
-            await conn.write('/import', [`=file-name=${fileName}`]);
+            // Importing executes the script; large scripts take a while.
+            await conn.write('/import', [`=file-name=${fileName}`], 120000);
             console.log(`Router script imported on ${routerID} (${size} bytes)`);
             return true;
         } catch (error) {
