@@ -45,6 +45,18 @@ function repairFilePath(safeId, suffix) {
     return path.join(REPAIR_DIR, `${safeId}.${suffix}`);
 }
 
+// Lightweight per-router progress log (appended, capped) so the operator can
+// see exactly where a remote repair is stuck without SSH access to the server.
+function repairLog(safeId, msg) {
+    try {
+        const logPath = repairFilePath(safeId, 'log');
+        let lines = [];
+        try { lines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean); } catch (e) {}
+        lines.push(`${new Date().toISOString()} ${msg}`);
+        fs.writeFileSync(logPath, lines.slice(-30).join('\n') + '\n');
+    } catch (e) { /* diagnostics must never break the repair */ }
+}
+
 function restorePendingRepair(safeId, reason) {
     const attemptsPath = repairFilePath(safeId, 'attempts');
     let attempts = 0;
@@ -67,17 +79,43 @@ function restorePendingRepair(safeId, reason) {
 
 // One-time, short-lived tokens so a router can download its repair script.
 // The router fetches the URL itself (/tool fetch), exactly like it does for
-// the heartbeat and provision scripts.
+// the heartbeat and provision scripts. Tokens are stored on DISK (not in
+// memory) so any process in the PM2 cluster can serve them.
 const repairScriptTokens = new Map();
 
 function issueRepairToken(safeId) {
     const token = crypto.randomBytes(24).toString('hex');
+    try {
+        fs.writeFileSync(
+            repairFilePath(safeId, 'token'),
+            JSON.stringify({ token, expires: Date.now() + 15 * 60 * 1000 })
+        );
+    } catch (e) { /* the in-memory lookup below still works for this process */ }
     repairScriptTokens.set(token, { safeId, expires: Date.now() + 15 * 60 * 1000 });
-    // Opportunistic cleanup
-    for (const [t, e] of repairScriptTokens) {
-        if (e.expires < Date.now()) repairScriptTokens.delete(t);
-    }
     return token;
+}
+
+function findRepairToken(token) {
+    const entry = repairScriptTokens.get(token);
+    if (entry && entry.expires >= Date.now()) return entry.safeId;
+    try {
+        for (const name of fs.readdirSync(REPAIR_DIR)) {
+            if (!name.endsWith('.token')) continue;
+            const safeId = name.slice(0, -'.token'.length);
+            let data = null;
+            try { data = JSON.parse(fs.readFileSync(repairFilePath(safeId, 'token'), 'utf8')); } catch (e) { continue; }
+            if (data && data.token === token) {
+                if (data.expires < Date.now()) return null;
+                return safeId;
+            }
+        }
+    } catch (e) { /* directory unreadable */ }
+    return null;
+}
+
+function consumeRepairToken(token, safeId) {
+    repairScriptTokens.delete(token);
+    try { fs.unlinkSync(repairFilePath(safeId, 'token')); } catch (e) { /* ignore */ }
 }
 
 // Fetch+import can legitimately take a while; never let it hang the state.
@@ -104,6 +142,7 @@ function maybeApplyRouterRepair(routerID) {
         const st = fs.statSync(lockPath);
         if (Date.now() - st.mtimeMs > 5 * 60 * 1000) {
             fs.renameSync(lockPath, repairFilePath(safeId, 'rsc'));
+            repairLog(safeId, `recovered stale lock after ${Math.round((Date.now() - st.mtimeMs) / 1000)}s`);
             logger.warn('Recovered stale router-repair lock', { router: safeId });
         }
     } catch (e) { /* no lock file, nothing to recover */ }
@@ -113,21 +152,27 @@ function maybeApplyRouterRepair(routerID) {
     try { fs.renameSync(repairFilePath(safeId, 'rsc'), repairFilePath(safeId, 'applying')); } catch (e) { return; }
     repairInFlight.add(routerID);
     logger.info('Applying pending router repair', { router: safeId });
+    repairLog(safeId, `apply start (attempt ${(() => { try { return String(parseInt(String(fs.readFileSync(repairFilePath(safeId, 'attempts'), 'utf8')).trim() || '0', 10) || 0) + 1; } catch (e) { return '1'; } })()})`);
     setImmediate(async () => {
         try {
             // The router downloads the script itself and imports it — avoids
             // the RouterOS API word-size limit on large =source= payloads.
             const token = issueRepairToken(safeId);
             const scriptUrl = `${REPAIR_SCRIPT_BASE_URL}/api/zero-touch/repair-script/${token}`;
-            const outcome = await withRepairTimeout(mikrotikService.fetchAndImportScript(routerID, scriptUrl));
+            const outcome = await withRepairTimeout(
+                mikrotikService.fetchAndImportScript(routerID, scriptUrl, 'hotbando-repair.rsc', (m) => repairLog(safeId, m))
+            );
+            repairLog(safeId, `outcome=${outcome === true ? 'applied' : outcome === 'timeout' ? 'timeout' : 'failed'}`);
             if (outcome === true) {
                 try { fs.unlinkSync(repairFilePath(safeId, 'attempts')); } catch (e) {}
+                try { fs.unlinkSync(repairFilePath(safeId, 'error')); } catch (e) {}
                 try { fs.renameSync(repairFilePath(safeId, 'applying'), repairFilePath(safeId, 'applied')); } catch (e) {}
                 logger.info('Router repair applied successfully', { router: safeId });
             } else {
                 restorePendingRepair(safeId, outcome === 'timeout' ? 'repair timed out' : 'apply returned false');
             }
         } catch (err) {
+            repairLog(safeId, `exception: ${err.message}`);
             restorePendingRepair(safeId, err.message);
         } finally {
             repairInFlight.delete(routerID);
@@ -144,13 +189,26 @@ function routerRepairState(routerID) {
     try { attempts = parseInt(String(fs.readFileSync(repairFilePath(safeId, 'attempts'), 'utf8')).trim() || '0', 10) || 0; } catch (e) {}
     let lastError = null;
     try { lastError = String(fs.readFileSync(repairFilePath(safeId, 'error'), 'utf8')).trim() || null; } catch (e) {}
+    let lastLog = null;
+    try { lastLog = String(fs.readFileSync(repairFilePath(safeId, 'log'), 'utf8')).trim() || null; } catch (e) {}
+    let applyingAgeSec;
+    try {
+        const st = fs.statSync(repairFilePath(safeId, 'applying'));
+        applyingAgeSec = Math.round((Date.now() - st.mtimeMs) / 1000);
+    } catch (e) { /* not applying */ }
     for (const state of ['applied', 'failed', 'applying', 'rsc']) {
         try {
             fs.statSync(repairFilePath(safeId, state));
-            return { router: safeId, state, attempts: attempts || undefined, ...(lastError ? { lastError } : {}) };
+            return {
+                router: safeId, state,
+                attempts: attempts || undefined,
+                ...(applyingAgeSec !== undefined ? { applyingAgeSec } : {}),
+                ...(lastError ? { lastError } : {}),
+                ...(lastLog ? { lastLog } : {})
+            };
         } catch (e) { /* try next */ }
     }
-    return { router: safeId, state: 'none' };
+    return { router: safeId, state: 'none', ...(lastLog ? { lastLog } : {}) };
 }
 
 
@@ -277,15 +335,18 @@ router.post('/provision/:routerID', authRegister, serveScript);
 
 // ── GET /repair-script/:token — one-time repair script download ──
 // Served only to a router holding a freshly issued token; the token dies on
-// first use and after 15 minutes.
+// first use and after 15 minutes. File-backed so any cluster process serves it.
 router.get('/repair-script/:token', (req, res) => {
     const token = String(req.params.token || '');
-    const entry = repairScriptTokens.get(token);
-    if (!entry || entry.expires < Date.now()) return res.status(404).send('not found');
-    repairScriptTokens.delete(token);
+    const safeId = findRepairToken(token);
+    if (!safeId) return res.status(404).send('not found');
     let source = null;
-    try { source = fs.readFileSync(repairFilePath(entry.safeId, 'applying'), 'utf8'); } catch (e) {}
+    for (const suffix of ['applying', 'rsc']) {
+        try { source = fs.readFileSync(repairFilePath(safeId, suffix), 'utf8'); break; } catch (e) { /* try next */ }
+    }
     if (!source) return res.status(404).send('not found');
+    consumeRepairToken(token, safeId);
+    repairLog(safeId, 'script downloaded by router');
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.set('Cache-Control', 'no-store');
     res.send(source);

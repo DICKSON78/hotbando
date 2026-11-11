@@ -526,10 +526,12 @@ class MikrotikService {
      * 6.x) that breaks large =source= payloads, and mirrors the proven
      * zero-touch poll pattern (/tool fetch + /import).
      */
-    async fetchAndImportScript(routerID, scriptUrl, fileName = 'hotbando-repair.rsc') {
+    async fetchAndImportScript(routerID, scriptUrl, fileName = 'hotbando-repair.rsc', onProgress = null) {
+        const step = (m) => { if (onProgress) { try { onProgress(m); } catch (e) { /* ignore */ } } };
         if (!routerID || !scriptUrl) return false;
         try {
             const conn = await this.getRouterConnection(routerID);
+            step('connected');
             // Remove a previous copy first (fetch refuses to overwrite on
             // some RouterOS versions).
             try {
@@ -546,18 +548,22 @@ class MikrotikService {
                 '=check-certificate=no'
             ], 75000);
             const status = fetchReply && fetchReply[0] && fetchReply[0].status;
+            step(`fetch status=${status || 'none'}`);
             if (status && String(status).toLowerCase() !== 'finished') {
                 throw new Error(`Router fetch status: ${status}`);
             }
             const files = await conn.write('/file/print', [`?name=${fileName}`]);
             if (!files.length) throw new Error('Script was not stored on the router');
             const size = Number(files[0].size || 0);
+            step(`file size=${size}`);
             if (size < 300) throw new Error(`Downloaded script too small (${size} bytes)`);
             // Importing executes the script; large scripts take a while.
             await conn.write('/import', [`=file-name=${fileName}`], 120000);
+            step('imported');
             console.log(`Router script imported on ${routerID} (${size} bytes)`);
             return true;
         } catch (error) {
+            step(`error: ${error.message}`);
             console.error(`Fetch+import script error (${routerID}):`, error.message);
             return false;
         }
