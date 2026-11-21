@@ -40,12 +40,52 @@ async function setupDatabase() {
         // Read and execute schema file
         console.log('\n📄 Reading schema file...');
         const schemaPath = path.join(__dirname, 'schema.sql');
-        const schema = await fs.readFile(schemaPath, 'utf8');
+        // Strip a UTF-8 BOM if present. MariaDB rejects it before the first
+        // comment/statement with ER_PARSE_ERROR (MySQL is more forgiving).
+        const schema = (await fs.readFile(schemaPath, 'utf8')).replace(/^\uFEFF/, '');
 
         console.log('⚙️  Executing schema...');
-        await connection.query(schema);
+        // Execute statement by statement instead of one multi-statement query.
+        // This lets the script complete even on a partially initialised database
+        // where tables/indexes from an earlier run already exist, and it surfaces
+        // exactly which statement fails if something is wrong.
+        const statements = schema
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => {
+                // Drop chunks that only contain comments/blank lines
+                return s.split('\n').some(line => {
+                    const t = line.trim();
+                    return t.length > 0 && !t.startsWith('--');
+                });
+            });
 
-        console.log('✅ Schema created successfully\n');
+        // Idempotency-related server errors that are safe to skip
+        const IGNORABLE_ERRNOS = new Set([
+            1050, // ER_TABLE_EXISTS_ERROR        - table already exists
+            1060, // ER_DUP_FIELDNAME             - column already exists
+            1061, // ER_DUP_KEYNAME               - index/key already exists
+            1091, // ER_CANT_DROP_FIELD_OR_KEY    - unknown key (DROP ... IF EXISTS style)
+        ]);
+
+        let executed = 0;
+        let skipped = 0;
+        for (const stmt of statements) {
+            try {
+                await connection.query(stmt);
+                executed++;
+            } catch (err) {
+                if (IGNORABLE_ERRNOS.has(err.errno)) {
+                    skipped++;
+                    const preview = stmt.replace(/\s+/g, ' ').slice(0, 90);
+                    console.log(`  ↩︎ skipped (errno ${err.errno}): ${preview}...`);
+                } else {
+                    throw new Error(`${err.message}\n  while executing: ${stmt.replace(/\s+/g, ' ').slice(0, 300)}`);
+                }
+            }
+        }
+
+        console.log(`✅ Schema created successfully (${executed} statements, ${skipped} skipped as already present)\n`);
 
         // Verify tables
         const [tables] = await connection.query('SHOW TABLES');
