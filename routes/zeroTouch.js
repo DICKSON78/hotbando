@@ -20,7 +20,9 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { registerRouter, provisionRouter, generateBootstrapScript: genBootScript, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
+const { registerRouter, provisionRouter, connectRouter, generateBootstrapScript: genBootScript, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
+const { httpStatusForIdentityError, isRouterIdentityError } = require('../utils/routerIdentity');
+const { safeSecretEqual } = require('../utils/secretComparison');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const mikrotikService = require('../utils/mikrotik');
@@ -216,13 +218,21 @@ function routerRepairState(routerID) {
 }
 
 
+// Preserve the existing JSON error shape; only the HTTP status changes for
+// the newly detected identity-conflict/validation cases.
+function sendRouterError(res, context, error) {
+    logger.error(context, error.message);
+    const status = (isRouterIdentityError(error) && httpStatusForIdentityError(error)) || 500;
+    return res.status(status).json({ success: false, message: error.message });
+}
+
 function authRegister(req, res, next) {
     const secret = (req.body && req.body.secret) || req.query.secret;
     const expected = ROUTER_REGISTRATION_SECRET;
     if (!expected) {
         return res.status(500).json({ success: false, message: 'Server registration secret not configured' });
     }
-    if (!secret || secret !== expected) {
+    if (!secret || !safeSecretEqual(String(secret), String(expected))) {
         return res.status(401).json({ success: false, message: 'Invalid registration secret' });
     }
     next();
@@ -270,8 +280,7 @@ async function handleRegister(req, res) {
         res.set('X-HotBando-Status', result.pending ? 'pending' : 'ready');
         res.send(result.script);
     } catch (error) {
-        logger.error('zero-touch register error:', error.message);
-        res.status(500).json({ success: false, message: error.message });
+        return sendRouterError(res, 'zero-touch register error:', error);
     }
 }
 router.post('/register', authRegister, handleRegister);
@@ -312,7 +321,7 @@ router.post('/register-json', authRegister, async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        return sendRouterError(res, 'zero-touch register-json error:', error);
     }
 });
 
@@ -330,8 +339,7 @@ async function serveScript(req, res) {
         res.set('X-HotBando-Status', result.pending ? 'pending' : 'ready');
         res.send(result.script);
     } catch (error) {
-        logger.error('provision error:', error.message);
-        res.status(500).json({ success: false, message: error.message });
+        return sendRouterError(res, 'provision error:', error);
     }
 }
 router.get('/provision/:routerID', authRegister, serveScript);

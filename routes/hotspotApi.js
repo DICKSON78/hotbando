@@ -5,6 +5,7 @@ const db = require('../config/database');
 const hotspotController = require('../controllers/hotspotController');
 const mikrotikService = require('../utils/mikrotik');
 const { getRealClientMAC, getRealSSID, formatRemainingTime } = hotspotController.helpers;
+const { collectRouterCandidates, assessPortalRouter } = require('../utils/portalRouterIdentity');
 const { authRateLimit } = require('../middleware/security');
 const { fulfillOrder } = require('../services/paymentFulfillment');
 
@@ -22,12 +23,14 @@ function publicSessionUser(user) {
 // Establish device session (mirrors GET /hotspot)
 router.get('/session', async (req, res) => {
     try {
-        const explicitRouterID = req.query.routerID || req.query.routerid || req.query.router_id;
-        const candidates = [...new Set([
-            explicitRouterID,
-            req.session.routerID,
-            req.session.hotbando_user?.last_router_id
-        ].filter(Boolean))];
+        // Accept the x-router-id header the controller already supports, while
+        // preserving query/session precedence for existing portal clients.
+        const candidates = collectRouterCandidates({
+            query: req.query,
+            headers: req.headers,
+            session: req.session,
+            user: req.session.hotbando_user
+        });
 
         // Only accept a router that is actually registered. A stale or
         // fabricated id (ROUTER_DEFAULT) must never overwrite a valid session.
@@ -59,7 +62,9 @@ router.get('/session', async (req, res) => {
         req.session.routerID = registeredRouter ? registeredRouter.router_id : null;
         req.session.ssidshow = ssidshow || req.session.ssidshow;
         req.session.location = location;
-        req.session.onWifi = !!registeredRouter;
+        // Default (non-strict) mode preserves the existing `!!registeredRouter`
+        // behavior. Strict eligibility is prepared for owner-controlled rollout.
+        req.session.onWifi = assessPortalRouter(registeredRouter).onWifi;
         req.session.clientIP = req.ip;
         req.session.userAgent = req.headers['user-agent'];
 

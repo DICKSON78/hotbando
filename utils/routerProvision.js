@@ -24,6 +24,7 @@ const db = require('../config/database');
 const wireguardService = require('./wireguard');
 const logger = require('./logger');
 const { encrypt } = require('./encryption');
+const { resolveRouterIdentity, normalizeRouterId } = require('./routerIdentity');
 
 const ROUTER_REGISTRATION_SECRET = process.env.ROUTER_REGISTRATION_SECRET || '';
 const SERVER_PUBLIC_HOST = process.env.SERVER_PUBLIC_HOST || process.env.SERVER_PUBLIC_IP || 'hotbandowifi.online';
@@ -69,26 +70,16 @@ function normalizeCidr(value, fallback = '10.5.50.0/24') {
  * Returns { router, created }
  */
 async function resolveRouter({ serial, identity, model, firmware, publicIp, routerId, locationId }) {
-    let router = null;
+    // Check BOTH identifiers independently before any write. If they point at
+    // different router records, resolveRouterIdentity throws a conflict and no
+    // INSERT/UPDATE is attempted. Existing records are reused unchanged.
+    const resolved = await resolveRouterIdentity({ routerId, serial }, db);
+    let router = resolved.router;
     let created = false;
 
-    if (routerId) {
-        const [rows] = await db.execute(
-            'SELECT * FROM mikrotiks WHERE router_id = ? OR serial_number = ? LIMIT 1',
-            [routerId, serial || null]
-        );
-        router = rows[0] || null;
-    }
-
-    if (!router && serial) {
-        const [rows] = await db.execute(
-            'SELECT * FROM mikrotiks WHERE serial_number = ? LIMIT 1', [serial]
-        );
-        router = rows[0] || null;
-    }
-
     if (!router) {
-        const id = routerId || `HB-${String(serial || Date.now()).replace(/[^A-Za-z0-9_-]/g, '').substring(0, 24)}`;
+        const normalizedId = normalizeRouterId(routerId);
+        const id = normalizedId || `HB-${String(serial || Date.now()).replace(/[^A-Za-z0-9_-]/g, '').substring(0, 24)}`;
         const name = identity || `HotBando ${id}`;
         const [result] = await db.execute(
             `INSERT INTO mikrotiks
