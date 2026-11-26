@@ -18,9 +18,7 @@ const wireguardService = require('../utils/wireguard');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const RouterOSAPI = require('node-routeros').RouterOSAPI;
-const net = require('net');
 
-// Fast TCP pre-check (1.5s): avoids the ~4s API timeout per unreachable WG IP
 function isPrivateLanIp(ip) {
     if (!ip) return false;
     if (String(ip).startsWith('10.7.')) return false;
@@ -32,18 +30,6 @@ function isPrivateLanIp(ip) {
         return second >= 16 && second <= 31;
     }
     return false;
-}
-
-function tcpOpen(ip, port, ms = 1500) {
-    return new Promise((resolve) => {
-        const s = new net.Socket();
-        const done = (v) => { try { s.destroy(); } catch (e) {} resolve(v); };
-        s.setTimeout(ms);
-        s.once('connect', () => done(true));
-        s.once('timeout', () => done(false));
-        s.once('error', () => done(false));
-        try { s.connect(port, ip); } catch (e) { done(false); }
-    });
 }
 
 router.use(adminAuth);
@@ -143,30 +129,12 @@ router.get('/detect', async (req, res) => {
 router.get('/scan', async (req, res) => {
     try {
         const devices = await mikrotikDetector.scanForMikroTik(req.query.network || null);
-        // Merge tunnel devices (remote routers reachable over WireGuard)
+        // Merge tunnel devices (remote routers reachable over WireGuard).
+        // Uses the same helper as /api/auto-detect/scan so both endpoints agree.
         try {
-            const [rows] = await db.execute(
-                `SELECT router_id, router_name, wireguard_ip, model, firmware_version, serial_number
-                 FROM mikrotiks WHERE wireguard_ip IS NOT NULL AND wireguard_ip != ''`
-            );
-            for (const r of rows) {
-                if (devices.some(d => d.ip === r.wireguard_ip)) continue;
-                // Fast pre-check first: skip the ~4s API timeout when the port is closed
-                let live = null;
-                try {
-                    if (await tcpOpen(r.wireguard_ip, 8728)) {
-                        live = await mikrotikDetector.verifyMikrotik(r.wireguard_ip, 8728, 'admin', '');
-                    }
-                } catch (e) { live = null; }
-                devices.push({
-                    ip: r.wireguard_ip, mac: null, source: 'tunnel',
-                    isMikrotik: !!(live && live.isMikrotik),
-                    identity: (live && live.identity) || r.router_name || r.router_id,
-                    model: (live && live.model) || r.model || null,
-                    firmware: (live && live.firmware) || r.firmware_version || null,
-                    inDatabase: true,
-                    existingRouter: { router_id: r.router_id, router_name: r.router_name }
-                });
+            const knownIps = new Set(devices.map(d => d.ip));
+            for (const device of await mikrotikDetector.getTunnelDevices()) {
+                if (!knownIps.has(device.ip)) devices.push(device);
             }
         } catch (e) { logger.warn('tunnel scan skipped: ' + e.message); }
         res.json({
@@ -174,7 +142,8 @@ router.get('/scan', async (req, res) => {
             count: devices.length,
             devices: devices.map(d => ({
                 ip: d.ip, mac: d.mac || null, source: d.source,
-                isMikrotik: d.isMikrotik, identity: d.identity,
+                isMikrotik: d.isMikrotik, needsCredentials: !!d.needsCredentials,
+                credentialsFound: !!d.credentialsFound, identity: d.identity,
                 model: d.model, firmware: d.firmware,
                 inDatabase: d.inDatabase, existingRouter: d.existingRouter
             }))

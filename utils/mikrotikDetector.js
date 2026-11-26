@@ -51,10 +51,23 @@ class MikrotikDetector {
             const dhcpDevices = await this.scanDhcpLeases();
             detected.push(...dhcpDevices);
 
-            // Method 3: Scan common MikroTik ports on network
-            if (networkRange) {
-                const portDevices = await this.scanPorts(networkRange);
-                detected.push(...portDevices);
+            // Method 3: Scan common MikroTik API ports. When the caller does
+            // not supply a range, use the host's own connected subnets —
+            // otherwise this method never ran at all and LAN routers were
+            // invisible unless someone typed a CIDR into the UI.
+            let ranges = networkRange ? [networkRange] : [];
+            if (!ranges.length) {
+                try {
+                    ranges = (await this.getNetworkInfo()).slice(0, 5)
+                        .map(n => `${n.network}/${n.cidr}`);
+                } catch (e) { ranges = []; }
+            }
+            for (const range of ranges) {
+                try {
+                    detected.push(...await this.scanPorts(range));
+                } catch (e) {
+                    console.warn(`⚠️ Port scan skipped for ${range}: ${e.message}`);
+                }
             }
 
             // Method 4: Check for MikroTik via mDNS/Bonjour
@@ -296,12 +309,15 @@ class MikrotikDetector {
         try {
             const RouterOSAPI = require('node-routeros').RouterOSAPI;
 
+            const apiPort = parseInt(port, 10);
             conn = new RouterOSAPI({
                 host: ip,
                 user: user,
                 password: password,
-                port: port,
-                timeout: 3000
+                port: apiPort,
+                timeout: 3000,
+                // api-ssl (8729) is common on secured routers.
+                ...(apiPort === 8729 ? { tls: { rejectUnauthorized: false } } : {})
             });
 
             await Promise.race([
@@ -353,30 +369,125 @@ class MikrotikDetector {
     }
 
     /**
+     * Probe a device without treating "authentication rejected" as "not a
+     * MikroTik". Tries both RouterOS API ports, the supplied credentials and
+     * the factory defaults. An auth failure is returned as a positive
+     * identification so the operator can enter the real password instead of
+     * the device silently disappearing from scan results.
+     */
+    async probeMikrotik(ip, user = 'admin', password = '') {
+        const defaults = [
+            ['admin', ''],
+            ['admin', 'admin'],
+            ['admin', '1234'],
+            ['admin', 'root']
+        ];
+        let authFailed = false;
+
+        for (const port of [8728, 8729]) {
+            const primary = await this.verifyMikrotik(ip, port, user, password);
+            if (primary.isMikrotik && !primary.authFailed) {
+                // Never put the password in a device object: /auto-detect/status
+                // returns those objects verbatim to the admin UI.
+                return { ...primary, port, user, credentialsFound: true };
+            }
+            if (!primary.authFailed) continue;
+
+            authFailed = true;
+            for (const [defaultUser, defaultPassword] of defaults) {
+                if (defaultUser === user && defaultPassword === password) continue;
+                const result = await this.verifyMikrotik(ip, port, defaultUser, defaultPassword);
+                if (result.isMikrotik && !result.authFailed) {
+                    return { ...result, port, user: defaultUser, credentialsFound: true };
+                }
+            }
+        }
+
+        return authFailed
+            ? { isMikrotik: true, authFailed: true, portsTried: [8728, 8729] }
+            : { isMikrotik: false };
+    }
+
+    /** Cheap TCP reachability check (used before a slow API probe). */
+    tcpOpen(host, port, timeout = 1500) {
+        return new Promise((resolve) => {
+            const net = require('net');
+            const socket = net.connect({ host, port });
+            let done = false;
+            const finish = (result) => {
+                if (done) return;
+                done = true;
+                try { socket.destroy(); } catch (e) {}
+                resolve(result);
+            };
+            socket.setTimeout(timeout);
+            socket.once('connect', () => finish(true));
+            socket.once('timeout', () => finish(false));
+            socket.once('error', () => finish(false));
+        });
+    }
+
+    /**
+     * Registered routers reachable over the WireGuard tunnel. They are not on
+     * the local LAN, so ARP/DHCP/mDNS can never see them — but the portal must
+     * still list them as detected/managed.
+     */
+    async getTunnelDevices() {
+        const [rows] = await db.execute(
+            `SELECT router_id, router_name, wireguard_ip, model, firmware_version
+               FROM mikrotiks WHERE wireguard_ip IS NOT NULL AND wireguard_ip != ''`
+        );
+        const devices = [];
+        for (const r of rows) {
+            let live = null;
+            if (await this.tcpOpen(r.wireguard_ip, 8728)) {
+                live = await this.verifyMikrotik(r.wireguard_ip, 8728, 'admin', '');
+            }
+            devices.push({
+                ip: r.wireguard_ip,
+                mac: null,
+                port: 8728,
+                source: 'tunnel',
+                confidence: live && live.isMikrotik ? 'high' : 'low',
+                isMikrotik: !!(live && live.isMikrotik),
+                identity: (live && live.identity) || r.router_name || r.router_id,
+                model: (live && live.model) || r.model || null,
+                firmware: (live && live.firmware) || r.firmware_version || null,
+                inDatabase: true,
+                existingRouter: { router_id: r.router_id, router_name: r.router_name }
+            });
+        }
+        return devices;
+    }
+
+    /**
      * Enrich device info with MikroTik details
      */
     async enrichDeviceInfo(devices) {
         const enriched = [];
 
         for (const device of devices) {
-            // If not sure it's MikroTik, try to verify
+            // If not sure it's MikroTik, verify it. A rejected login is still
+            // proof that the device is a RouterOS box — keep it in the results
+            // with needsCredentials so the operator can supply the password.
             if (!device.isMikrotik || device.confidence !== 'high') {
-                const verification = await this.verifyMikrotik(device.ip);
-                if (verification.isMikrotik) {
-                    device.isMikrotik = true;
-                    device.identity = verification.identity;
-                    device.model = verification.model;
-                    device.firmware = verification.firmware;
-                    device.uptime = verification.uptime;
-                } else {
-                    continue; // Skip non-MikroTik devices
+                const verification = await this.probeMikrotik(
+                    device.ip,
+                    'admin',
+                    process.env.MIKROTIK_API_PASSWORD || ''
+                );
+                if (!verification.isMikrotik) {
+                    continue; // Genuinely not a MikroTik device
                 }
+                Object.assign(device, verification);
+                if (verification.authFailed) device.needsCredentials = true;
             }
 
-            // Check if already in database
+            // Check if already in database (LAN host or assigned tunnel IP)
             const [existing] = await db.execute(
-                'SELECT router_id, router_name, setup_status FROM mikrotiks WHERE host = ?',
-                [device.ip]
+                `SELECT router_id, router_name, setup_status FROM mikrotiks
+                  WHERE host = ? OR wireguard_ip = ? LIMIT 1`,
+                [device.ip, device.ip]
             );
 
             device.inDatabase = existing.length > 0;

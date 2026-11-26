@@ -17,7 +17,10 @@
 # ============================================================================
 
 :global hotbandoBaseUrl "https://hotbandowifi.online"
-:global hotbandoSecret "d5c45011dbdf3936688cc316ce6f5e00e66102d52736378a"
+# Replace <REGISTRATION_SECRET> with the current ROUTER_REGISTRATION_SECRET.
+# Safer: use Admin Portal -> Routers -> Site Setup, which generates this script
+# with the server's current secret and never stores it in the repository.
+:global hotbandoSecret "<REGISTRATION_SECRET>"
 :global hbSerial [/system routerboard get serial-number]
 :global hbIdentity [/system identity get name]
 :global hbModel [/system resource get board-name]
