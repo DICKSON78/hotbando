@@ -74,15 +74,37 @@ describe('zero-touch registration endpoints (mocked)', () => {
         }));
     });
 
-    test('auto_connect=1 calls connectRouter and returns the FULL script (D1 regression)', async () => {
+    test('auto_connect=1 is ignored: registration stays pending and never connects automatically', async () => {
         const response = await request(app)
             .post('/api/zero-touch/register?auto_connect=1')
             .send({ secret: 'test-registration-secret', serial: 'S-001', router_id: 'RT-001' });
 
         expect(response.status).toBe(200);
-        expect(response.text).toContain('full provisioning');
-        expect(response.headers['x-hotbando-status']).toBe('configuring');
-        expect(mockConnectRouter).toHaveBeenCalledWith('RT-001', expect.objectContaining({ serial: 'S-001' }));
+        // Wait script, not the full provisioning script.
+        expect(response.text).toContain('wait-and-poll');
+        expect(response.text).not.toContain('full provisioning');
+        expect(response.headers['x-hotbando-status']).toBe('pending');
+        // The bypass is gone: registration must NEVER call connectRouter().
+        expect(mockConnectRouter).not.toHaveBeenCalled();
+        expect(mockRegisterRouter).toHaveBeenCalledTimes(1);
+    });
+
+    test('auto_connect via JSON body is also ignored', async () => {
+        const response = await request(app)
+            .post('/api/zero-touch/register')
+            .send({ secret: 'test-registration-secret', serial: 'S-001', router_id: 'RT-001', auto_connect: true });
+
+        expect(response.status).toBe(200);
+        expect(response.headers['x-hotbando-status']).toBe('pending');
+        expect(mockConnectRouter).not.toHaveBeenCalled();
+    });
+
+    test('the secret-bearing /bootstrap endpoint is not exposed publicly', async () => {
+        const response = await request(app).get('/api/zero-touch/bootstrap');
+        // Route removed entirely: no script and no registration secret is served.
+        expect(response.status).toBe(404);
+        expect(response.text || '').not.toContain('test-registration-secret');
+        expect(response.text || '').not.toContain('hotbandoSecret');
     });
 
     test('invalid secret is rejected before any registration logic', async () => {

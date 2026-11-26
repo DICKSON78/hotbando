@@ -39,9 +39,11 @@ function resolvePublicBaseUrl() {
 }
 
 const PUBLIC_BASE_URL = resolvePublicBaseUrl();
-const PUBLIC_FETCH_MODE = PUBLIC_BASE_URL.startsWith('https://') ? 'https' : 'http';
 const RADIUS_SECRET = process.env.RADIUS_SECRET || '';
-const MIKROTIK_API_PASSWORD = process.env.MIKROTIK_API_PASSWORD || 'HotBandoApi2024!Secure';
+// No hardcoded fallbacks. When these are unset the generated script simply does
+// not create the corresponding credentials (fail closed — never a weak default).
+const MIKROTIK_API_PASSWORD = process.env.MIKROTIK_API_PASSWORD || '';
+const HOTSPOT_ADMIN_PASSWORD = process.env.HOTSPOT_ADMIN_PASSWORD || '';
 // RouterOS /radius expects an IP address, so prefer the numeric public IP.
 const RADIUS_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(process.env.SERVER_PUBLIC_IP || '')
     ? process.env.SERVER_PUBLIC_IP
@@ -168,6 +170,14 @@ async function connectRouter(routerID, payload = {}) {
     const [rows] = await db.execute('SELECT * FROM mikrotiks WHERE router_id = ?', [routerID]);
     if (!rows.length) throw new Error('Router not found');
     const router = rows[0];
+
+    // Defense in depth: only a router still awaiting owner approval may be
+    // connected. Registration never sets a state other than 'pending', and
+    // this guards against any future caller bypassing the admin route.
+    const approvable = router.setup_status === 'pending' || router.setup_status === 'configuring';
+    if (!approvable) {
+        throw new Error(`Router is not awaiting approval (setup_status=${router.setup_status || 'unknown'})`);
+    }
 
     if (!router.wireguard_public_key || !router.wireguard_private_key || !router.wireguard_ip) {
         const keypair = wireguardService.generateKeyPair();
@@ -303,52 +313,41 @@ function generateBootstrapScript() {
 :put ("Firmware: " . $hbFirmware)
 :put "============================================="
 
-# --- Step 2: Download provisioning script (with retry + HTTP fallback) ---
-:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean . "&auto_connect=1")
+# --- Step 2: Download provisioning script (HTTPS only, certificate verified) ---
+# auto_connect is intentionally NOT sent: registration always stays PENDING and
+# only an authenticated owner action can approve/connect the router.
+:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean)
 
 # Use :global for variables modified across blocks (avoids scoping issues)
 :global dlOk false
-:global dlMode "${PUBLIC_FETCH_MODE}"
 
-# Try HTTPS first (check-certificate=no is essential on fresh routers with no installed CAs)
+# Remove any stale copy first so a failed/old download can never be imported.
+:do { /file remove [find name="universal-bootstrap.rsc"] } on-error={}
+
 :for i from=1 to=3 do={
-    :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
+    # Clear the destination before every attempt (no partial file survives)
+    :do { /file remove [find name="universal-bootstrap.rsc"] } on-error={}
+    :put ("Attempt " . $i . " of 3 (HTTPS, certificate verified)...")
     :do {
-        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=$dlMode check-certificate=no
+        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=https check-certificate=yes
     } on-error={
         :put "  fetch failed, retrying..."
     }
     :delay 3
-    :if ([:len [/file find name="universal-bootstrap.rsc"]] > 0) do={
+    :local gotSize 0
+    :do { :set gotSize [/file get [/file find name="universal-bootstrap.rsc"] size] } on-error={}
+    :if ($gotSize > 100) do={
         :set dlOk true
         :put "Download successful!"
     }
 }
 
-# Fall back to HTTP if HTTPS failed
 :if (!$dlOk) do={
-    :put "HTTPS failed, trying HTTP..."
-    :set dlMode "http"
-    :for i from=1 to=3 do={
-        :put ("HTTP attempt " . $i . " of 3...")
-        :do {
-            /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=http check-certificate=no
-        } on-error={
-            :put "  HTTP fetch failed, retrying..."
-        }
-        :delay 3
-        :if ([:len [/file find name="universal-bootstrap.rsc"]] > 0) do={
-            :set dlOk true
-            :put "HTTP download successful!"
-        }
-    }
-}
-
-:if (!$dlOk) do={
+    :do { /file remove [find name="universal-bootstrap.rsc"] } on-error={}
     :put "============================================="
-    :put "ERROR: could not download provisioning script!"
+    :put "ERROR: could not download provisioning script over HTTPS!"
     :put "Check internet on the router (ping 8.8.8.8)."
-    :put "Check server IP/port and secret."
+    :put "Check the server certificate, host and secret."
     :put "============================================="
     :error "HotBando phone-home failed"
 }
@@ -419,7 +418,8 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 /system scheduler add name="hotbando-poll" interval=2m start-time=startup on-event={
   :local tmp "hb-latest.rsc"
   :do { /file remove $tmp } on-error={}
-  :do { /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE} } on-error={
+  :do { /tool fetch url=$hbPollUrl dst-path=$tmp mode=https check-certificate=yes } on-error={
+    :do { /file remove [find name=$tmp] } on-error={}
     :log warning "HotBando poll fetch failed"
   }
   :delay 3
@@ -439,7 +439,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
-  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=yes } on-error={}
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=https keep-result=no check-certificate=yes } on-error={}
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -569,11 +569,12 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 /system identity set name="${sanitize(router.router_name || routerID)}"
 
-# Create dedicated HotBando API user (least privilege)
-:do { /user remove [find name="hotbando-api"] } on-error={}
+# Create dedicated HotBando API user (least privilege).
+# Only emitted when MIKROTIK_API_PASSWORD is configured — never a weak default.
+${MIKROTIK_API_PASSWORD ? `:do { /user remove [find name="hotbando-api"] } on-error={}
 :do { /user group remove [find name="hotbando-api"] } on-error={}
 :do { /user group add name="hotbando-api" policy=read,api,rest-api skin=default } on-error={}
-:do { /user add name="hotbando-api" group="hotbando-api" password="${MIKROTIK_API_PASSWORD}" comment="HotBando API (least privilege)" } on-error={}
+:do { /user add name="hotbando-api" group="hotbando-api" password="${sanitize(MIKROTIK_API_PASSWORD)}" comment="HotBando API (least privilege)" } on-error={}` : `# HotBando API user not created: MIKROTIK_API_PASSWORD is not configured`}
 
 # ----------------------------------------------------------------------------
 # 1. INTERFACE DETECTION
@@ -741,7 +742,8 @@ ${serverWalledGardenRules()}
 /ip hotspot user profile add name="hotbando-vip" rate-limit="50M/50M 5M/5M 10000/10000" idle-timeout=2h session-timeout=168h comment="HotBando VIP"
 
 /ip hotspot user remove [find comment~"HotBando"]
-/ip hotspot user add name="admin" password="hotbando2024" profile=hotbando-vip server=hotbando-server comment="HotBando admin"
+# Only emit the admin hotspot user when a strong password is configured.
+${HOTSPOT_ADMIN_PASSWORD ? `/ip hotspot user add name="admin" password="${sanitize(HOTSPOT_ADMIN_PASSWORD)}" profile=hotbando-vip server=hotbando-server comment="HotBando admin"` : `# HotBando admin hotspot user not created: HOTSPOT_ADMIN_PASSWORD is not configured`}
 
 /ip hotspot ip-binding remove [find comment~"HotBando"]
 
@@ -771,7 +773,7 @@ ${serverWalledGardenRules()}
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
-  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=yes } on-error={}
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=https keep-result=no check-certificate=yes } on-error={}
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------
@@ -800,5 +802,6 @@ module.exports = {
     provisionRouter,
     generateProvisionScript,
     generateBootstrapScript,
+    generateWaitScript,
     ROUTER_REGISTRATION_SECRET
 };

@@ -20,7 +20,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { registerRouter, provisionRouter, connectRouter, generateBootstrapScript: genBootScript, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
+const { registerRouter, provisionRouter, ROUTER_REGISTRATION_SECRET } = require('../utils/routerProvision');
 const { httpStatusForIdentityError, isRouterIdentityError } = require('../utils/routerIdentity');
 const { safeSecretEqual } = require('../utils/secretComparison');
 const db = require('../config/database');
@@ -260,24 +260,17 @@ function extractRouterPayload(req) {
 async function handleRegister(req, res) {
     try {
         const payload = extractRouterPayload(req);
-        const autoConnect = req.query.auto_connect === '1' || req.query.auto_connect === 'true' || req.body?.auto_connect === true || req.body?.auto_connect === '1';
 
-        let result = await registerRouter(payload);
-
-        if (autoConnect) {
-            // Automatically connect and generate the full provision script immediately
-            const connectResult = await connectRouter(result.router.router_id, payload);
-            res.set('Content-Type', 'text/plain; charset=utf-8');
-            res.set('X-HotBando-Router-ID', result.router.router_id);
-            res.set('X-HotBando-WG-IP', result.assignedIp);
-            res.set('X-HotBando-Status', 'configuring');
-            return res.send(connectResult.script);
-        }
+        // Registration ALWAYS stays pending. A router can never be connected or
+        // fully provisioned here, regardless of any client-supplied flag: only
+        // an authenticated owner action (POST /api/routers/:id/connect) may do
+        // that. The old auto_connect bypass has been removed.
+        const result = await registerRouter(payload);
 
         res.set('Content-Type', 'text/plain; charset=utf-8');
         res.set('X-HotBando-Router-ID', result.router.router_id);
         res.set('X-HotBando-WG-IP', result.assignedIp);
-        res.set('X-HotBando-Status', result.pending ? 'pending' : 'ready');
+        res.set('X-HotBando-Status', 'pending');
         res.send(result.script);
     } catch (error) {
         return sendRouterError(res, 'zero-touch register error:', error);
@@ -286,19 +279,11 @@ async function handleRegister(req, res) {
 router.post('/register', authRegister, handleRegister);
 router.get('/register', authRegister, handleRegister);
 
-// ── GET /bootstrap — public bootstrap script (no auth, router not yet registered) ──
-// Router fetches this once on first boot: /tool fetch url=.../bootstrap dst-path=bootstrap.rsc
-router.get('/bootstrap', async (req, res) => {
-    try {
-        const script = genBootScript();
-        res.set('Content-Type', 'text/plain; charset=utf-8');
-        res.set('X-HotBando-Script', 'bootstrap');
-        res.send(script);
-    } catch (error) {
-        logger.error('bootstrap error:', error.message);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
+// NOTE: there is intentionally NO public /bootstrap endpoint here. The
+// bootstrap script embeds the registration secret, so it is served ONLY to
+// authenticated admins via GET /api/admin/mikrotik-setup/bootstrap
+// (routes/mikrotikSetup.js, protected by adminAuth). The former public route
+// leaked the secret to anyone who could reach the server.
 
 // ── POST /register-json — same but returns structured payload (for debugging) ──
 router.post('/register-json', authRegister, async (req, res) => {

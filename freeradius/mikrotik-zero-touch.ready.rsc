@@ -34,14 +34,27 @@
 # ---------------------------------------------------------------------------
 # 1. Phone home (GET with query params — robust, no JSON quoting needed)
 # ---------------------------------------------------------------------------
-:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial . "&auto_connect=1")
+# Registration always stays PENDING: auto_connect is never sent. Only an
+# authenticated owner action in the panel can approve/connect the router.
+:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
 
-/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none check-certificate=no
+# Remove any stale copy before fetching so an old/failed download is never imported.
+:do { /file remove [find name="hotbando-provision.rsc"] } on-error={}
+
+/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none check-certificate=yes
 :delay 2
 
 :if ([:len [/file find name="hotbando-provision.rsc"]] = 0) do={
     :put "ERROR: could not download provisioning script!"
     :put "Check internet on the router, server IP/port, and secret."
+    :error "HotBando phone-home failed"
+}
+
+:local hbFileSize 0
+:do { :set hbFileSize [/file get [/file find name="hotbando-provision.rsc"] size] } on-error={}
+:if ($hbFileSize < 100) do={
+    :do { /file remove [find name="hotbando-provision.rsc"] } on-error={}
+    :put "ERROR: downloaded provisioning script is invalid (too small)."
     :error "HotBando phone-home failed"
 }
 
