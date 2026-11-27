@@ -173,6 +173,12 @@ class WireGuardService {
     }
 
     // Publish every router the owner has approved (configuring/configured).
+    //
+    // setup_status is the approval source of truth. Do NOT filter on
+    // wireguard_configured here: that flag is only a reporting column, and a
+    // query that requires it (plus the reaper below) silently drops the peer
+    // descriptor of an approved router whenever the flag is still 0 — which is
+    // exactly how a connected router loses its tunnel peer after a resync.
     async syncPeerFilesFromDb() {
         if (!this.ensurePeersDir()) return false;
 
@@ -181,10 +187,9 @@ class WireGuardService {
             const [rows] = await db.execute(`
                 SELECT router_id, router_name, wireguard_ip, wireguard_public_key, wireguard_preshared_key
                 FROM mikrotiks
-                WHERE wireguard_configured = 1
+                WHERE setup_status IN ('configuring', 'configured')
                   AND wireguard_ip IS NOT NULL AND wireguard_ip != ''
                   AND wireguard_public_key IS NOT NULL AND wireguard_public_key != ''
-                  AND setup_status IN ('configuring', 'configured')
             `);
             peers = rows;
         } catch (e) {
@@ -318,6 +323,17 @@ class WireGuardService {
         try {
             if (fs.existsSync(statusResult)) {
                 const data = JSON.parse(fs.readFileSync(statusResult, 'utf8'));
+                // The host watcher reports what wg0 is really bound to. Surface
+                // a divergence with WG_PORT instead of silently generating router
+                // scripts whose endpoint-port can never handshake.
+                const hostPort = Number(data.listenPort) || 0;
+                if (hostPort && hostPort !== this.listenPort) {
+                    logger.warn(
+                        `WireGuard listen port mismatch: WG_PORT=${this.listenPort} ` +
+                        `but host wg0 listens on ${hostPort}. Router scripts will use ` +
+                        `${this.listenPort} — align WG_PORT with the host before provisioning.`
+                    );
+                }
                 return { ...base, ...data };
             }
         } catch (e) { /* fall through */ }

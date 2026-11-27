@@ -8,36 +8,140 @@
 # applies it to the live wg0 interface.
 #
 # The app never receives the server private key and never writes wg0.conf.
+#
+# Usage:
+#   hotbando-wg-apply                 apply descriptors (default)
+#   hotbando-wg-apply --preflight     peer-preservation check ONLY. Computes
+#                                     the EXACT config the apply would write
+#                                     and refuses if any currently live peer
+#                                     would be removed or have its AllowedIPs
+#                                     changed. Writes nothing at all (not even
+#                                     the status file).
+#
+# Exit codes: 0 = ok, 2 = preflight refusal, 3 = cannot verify safely.
+#
+# HB_WG_PREFIX is a test-only prefix for all five host paths. Production runs
+# with it unset, i.e. the absolute /etc/wireguard and /run paths below.
 
 set -u
 
-CONF=/etc/wireguard/wg0.conf
-PEERS_DIR=/etc/wireguard/hotbando-peers
-STATUS=/etc/wireguard/.wg-status-result
-APPLIED_AT=/etc/wireguard/.wg-applied-at
-LOCK=/run/hotbando-wg-apply.lock
+PREFIX="${HB_WG_PREFIX:-}"
+CONF="${PREFIX}/etc/wireguard/wg0.conf"
+PEERS_DIR="${PREFIX}/etc/wireguard/hotbando-peers"
+STATUS="${PREFIX}/etc/wireguard/.wg-status-result"
+APPLIED_AT="${PREFIX}/etc/wireguard/.wg-applied-at"
+LOCK="${PREFIX}/run/hotbando-wg-apply.lock"
 
-exec 9>"$LOCK" 2>/dev/null || true
-flock -n 9 2>/dev/null || exit 0
+MODE=apply
+case "${1:-}" in
+    --preflight) MODE=preflight ;;
+    ''|apply)    MODE=apply ;;
+    *) echo "usage: $0 [--preflight]" >&2; exit 64 ;;
+esac
 
-mkdir -p "$PEERS_DIR"
-chmod 700 "$PEERS_DIR" 2>/dev/null || true
+# Temporary paths cleaned up on EVERY exit: the preflight candidate and the
+# live-peer snapshot. Apply mode never uses CANDIDATE_TMP, so it is untouched.
+LIVE_TMP=""
+CANDIDATE_TMP=""
+cleanup() {
+    [ -n "$LIVE_TMP" ] && rm -f "$LIVE_TMP"
+    [ -n "$CANDIDATE_TMP" ] && rm -f "$CANDIDATE_TMP"
+    return 0
+}
+trap cleanup EXIT
+
+# The preflight and the write must share one critical section: both the
+# installer's early gate and this script's own apply take the same lock.
+# The lock file is opened read-write WITHOUT truncating it, so acquiring the
+# lock never clobbers a concurrent apply's lock contents.
+if ! command -v flock >/dev/null 2>&1; then
+    echo "ERROR: flock (util-linux) is missing; refusing to run without the apply lock" >&2
+    exit 3
+fi
+mkdir -p "$(dirname "$LOCK")" 2>/dev/null || true
+exec 9<>"$LOCK" || { echo "ERROR: cannot open apply lock: $LOCK" >&2; exit 3; }
+if ! flock -n 9 2>/dev/null; then
+    # Another apply holds the lock. Preflight must NEVER report success in this
+    # state (it would certify a config while a write is in flight); apply mode
+    # simply skips, since the path unit / timer will re-run it.
+    if [ "$MODE" = 'preflight' ]; then
+        echo "PREFLIGHT BLOCKED: another apply is running (lock held); refusing" >&2
+        exit 3
+    fi
+    exit 0
+fi
+
+# Apply mode: prepare the shared peer directory. Preflight mode must be
+# strictly read-only — it only READS descriptors and never creates or perms
+# the directory.
+if [ "$MODE" = 'apply' ]; then
+    mkdir -p "$PEERS_DIR"
+    # Only tighten the mode when it is actually wrong. chmod(2) always emits
+    # IN_ATTRIB on the directory, and hotbando-wg-apply.path watches this
+    # directory — an unconditional chmod would retrigger the service forever.
+    if [ "$(stat -c '%a' "$PEERS_DIR" 2>/dev/null)" != '700' ]; then
+        chmod 700 "$PEERS_DIR" 2>/dev/null || true
+    fi
+fi
+
+# ── STATUS (aggregate, public state only; no keys are ever written) ──────
+publish_status() {
+    apply_blocked="$1"
+    blocked_peers="${2:-[]}"
+    [ -n "$blocked_peers" ] || blocked_peers="[]"
+
+    running=false
+    ip link show wg0 >/dev/null 2>&1 && running=true
+    lport=$(wg show wg0 listen-port 2>/dev/null || true); lport=${lport:-0}
+    peers=$(wg show wg0 peers 2>/dev/null | wc -l)
+    active=$(wg show wg0 latest-handshakes 2>/dev/null | awk '$2 > 0' | wc -l)
+    handshakes=$(wg show wg0 latest-handshakes 2>/dev/null \
+        | awk 'BEGIN { sep = "" } { printf "%s\"%s\":%s", sep, $1, $2; sep = "," }')
+    allowed=$(wg show wg0 allowed-ips 2>/dev/null \
+        | awk -F'[ \t]+' 'BEGIN { sep = "" } { for (i = 2; i <= NF; i++) { split($i, a, "/"); if (a[1] != "") { printf "%s\"%s\"", sep, a[1]; sep = "," } } }')
+
+    printf '{"running":%s,"listenPort":%d,"wgPeers":%d,"activePeers":%d,"peerHandshakes":{%s},"allowedIps":[%s],"applyBlocked":%s,"applyBlockedPeers":[%s],"updatedAt":%d}\n' \
+        "$running" "$lport" "$peers" "$active" "$handshakes" "$allowed" "$apply_blocked" "$blocked_peers" "$(date +%s)" > "$STATUS"
+}
 
 CHANGED=0
+PY_OK=1
+
+# Candidate config the rewrite produces. Apply mode keeps it beside wg0.conf so
+# the atomic rename works; preflight uses a temp file outside the config paths,
+# removed on every exit by the EXIT trap above.
+if [ "$MODE" = 'apply' ]; then
+    CANDIDATE="$CONF.tmp"
+    CANDIDATE_TMP=""
+else
+    CANDIDATE_TMP=$(mktemp "${TMPDIR:-/tmp}/hotbando-wg-preflight.XXXXXX" 2>/dev/null) || {
+        echo "ERROR: cannot create a temp candidate for preflight" >&2
+        exit 3
+    }
+    CANDIDATE="$CANDIDATE_TMP"
+fi
+
 if [ -f "$CONF" ]; then
-    CHANGED=$(python3 - "$CONF" "$PEERS_DIR" <<'PY'
+    if command -v python3 >/dev/null 2>&1; then
+        CHANGED=$(python3 - "$CONF" "$PEERS_DIR" "$CANDIDATE" <<'PY'
 import os
 import re
 import sys
 
-conf_path, peers_dir = sys.argv[1], sys.argv[2]
+conf_path, peers_dir, candidate_path = sys.argv[1], sys.argv[2], sys.argv[3]
 
 BEGIN = '# BEGIN HOTBANDO MANAGED PEERS'
 END = '# END HOTBANDO MANAGED PEERS'
 BLOCK_RE = re.compile(r'# BEGIN HOTBANDO MANAGED PEERS.*?# END HOTBANDO MANAGED PEERS\n?', re.S)
 
 desired = []
-for name in sorted(os.listdir(peers_dir)):
+try:
+    peer_names = sorted(os.listdir(peers_dir))
+except OSError:
+    # Preflight mode never creates the peer directory; treat a missing one as
+    # "no descriptors" rather than failing the whole rewrite.
+    peer_names = []
+for name in peer_names:
     if not name.endswith('.peer'):
         continue
     path = os.path.join(peers_dir, name)
@@ -96,14 +200,195 @@ else:
 if updated == content:
     print('0')
 else:
-    tmp = conf_path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as handle:
+    with open(candidate_path, 'w', encoding='utf-8') as handle:
         handle.write(updated)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, conf_path)
+    os.chmod(candidate_path, 0o600)
     print('1')
 PY
 )
+        [ "${CHANGED:-0}" = '1' ] || CHANGED=0
+    else
+        PY_OK=0
+        echo "ERROR: python3 is not installed; peer descriptors cannot be applied" >&2
+    fi
+fi
+
+# The exact candidate config the apply would install. When the rewrite engine
+# made no change, the candidate is simply the current wg0.conf.
+if [ "$CHANGED" = '1' ] && [ -f "$CANDIDATE" ]; then
+    NEXT_CONF="$CANDIDATE"
+else
+    NEXT_CONF="$CONF"
+fi
+
+# ── PEER PREFLIGHT ────────────────────────────────────────────────────────
+# Snapshot live peers BEFORE touching wg0.conf, then compare that snapshot
+# with the candidate config. A live peer that would disappear from the file,
+# or whose AllowedIPs would change, blocks the apply. Only PUBLIC keys and
+# IPs are ever printed — [Interface] PrivateKey is never read by this check.
+PREFLIGHT_OUT=""
+PREFLIGHT_RC=0
+BLOCKED=0
+LIVE_TMP=""
+
+snapshot_live_peers() {
+    out="$1"
+    if ! command -v wg >/dev/null 2>&1; then
+        if command -v ip >/dev/null 2>&1 && ip link show wg0 >/dev/null 2>&1; then
+            echo "ERROR: wg0 exists but wireguard-tools (wg) is unavailable; cannot snapshot live peers" >&2
+            return 3
+        fi
+        : > "$out"
+        return 0
+    fi
+    wg show wg0 allowed-ips 2>/dev/null > "$out" || :
+    if command -v ip >/dev/null 2>&1 && ip link show wg0 >/dev/null 2>&1; then
+        while IFS= read -r pk; do
+            [ -n "$pk" ] || continue
+            grep -qF "$pk" "$out" 2>/dev/null || printf '%s\t\n' "$pk" >> "$out"
+        done < <(wg show wg0 peers 2>/dev/null)
+    fi
+    return 0
+}
+
+if [ -f "$NEXT_CONF" ]; then
+    LIVE_TMP=$(mktemp "${TMPDIR:-/tmp}/hotbando-wg-live.XXXXXX" 2>/dev/null) || {
+        echo "ERROR: cannot create a temp file for the live peer snapshot" >&2
+        rm -f "$CANDIDATE" 2>/dev/null || true
+        exit 3
+    }
+    if ! snapshot_live_peers "$LIVE_TMP"; then
+        rm -f "$LIVE_TMP" "$CANDIDATE" 2>/dev/null || true
+        exit 3
+    fi
+    LIVE_COUNT=$(grep -c . "$LIVE_TMP" 2>/dev/null); LIVE_COUNT=${LIVE_COUNT:-0}
+
+    PREFLIGHT_OUT=$(awk -v livepath="$LIVE_TMP" -v confpath="$NEXT_CONF" '
+        function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+        function value_after_eq(line) { sub(/^[^=]*=[ \t]*/, "", line); return trim(line) }
+        function present(v, csv,   n, a, i) {
+            n = split(csv, a, "[,\t ]+")
+            for (i = 1; i <= n; i++) if (a[i] != "" && a[i] == v) return 1
+            return 0
+        }
+        function same_set(x, y,   n, a, i, cx, cy) {
+            cx = 0; cy = 0
+            n = split(x, a, "[,\t ]+")
+            for (i = 1; i <= n; i++) if (a[i] != "") { cx++; if (!present(a[i], y)) return 0 }
+            n = split(y, a, "[,\t ]+")
+            for (i = 1; i <= n; i++) if (a[i] != "") { cy++; if (!present(a[i], x)) return 0 }
+            return (cx == cy)
+        }
+        BEGIN {
+            while ((getline line < livepath) > 0) {
+                if (line == "") continue
+                tab = index(line, "\t")
+                pk = (tab > 0) ? substr(line, 1, tab - 1) : line
+                ips = (tab > 0) ? substr(line, tab + 1) : ""
+                if (pk == "") continue
+                if (pk in live) {
+                    if (ips != "") live[pk] = live[pk] "," ips
+                } else {
+                    live[pk] = ips
+                    order[++n_live] = pk
+                }
+            }
+            close(livepath)
+
+            in_peer = 0; cur_pk = ""; cur_ips = ""
+            while ((getline line < confpath) > 0) {
+                if (line ~ /^[ \t]*\[Peer\][ \t]*$/) {
+                    if (in_peer && cur_pk != "" && !(cur_pk in nxt)) nxt[cur_pk] = cur_ips
+                    in_peer = 1; cur_pk = ""; cur_ips = ""; continue
+                }
+                if (line ~ /^[ \t]*\[/) {
+                    if (in_peer && cur_pk != "" && !(cur_pk in nxt)) nxt[cur_pk] = cur_ips
+                    in_peer = 0; cur_pk = ""; cur_ips = ""; continue
+                }
+                if (in_peer && line ~ /^[ \t]*PublicKey[ \t]*=/) {
+                    cur_pk = value_after_eq(line)
+                } else if (in_peer && line ~ /^[ \t]*AllowedIPs[ \t]*=/) {
+                    cur_ips = value_after_eq(line)
+                }
+            }
+            if (in_peer && cur_pk != "" && !(cur_pk in nxt)) nxt[cur_pk] = cur_ips
+            close(confpath)
+
+            for (i = 1; i <= n_live; i++) {
+                pk = order[i]
+                live_ips = live[pk]
+                if (!(pk in nxt)) {
+                    printf "REMOVED\t%s\t%s\n", pk, (live_ips == "" ? "(none)" : live_ips)
+                    bad++
+                } else {
+                    next_ips = nxt[pk]
+                    if (live_ips == "" && next_ips != "") {
+                        printf "CHANGED\t%s\t%s\t%s\n", pk, "(none)", next_ips
+                        bad++
+                    } else if (live_ips != "" && next_ips == "") {
+                        printf "CHANGED\t%s\t%s\t%s\n", pk, live_ips, "(none)"
+                        bad++
+                    } else if (live_ips != "" && !same_set(live_ips, next_ips)) {
+                        printf "CHANGED\t%s\t%s\t%s\n", pk, live_ips, next_ips
+                        bad++
+                    }
+                }
+            }
+            exit (bad ? 1 : 0)
+        }')
+    PREFLIGHT_RC=$?
+    rm -f "$LIVE_TMP" 2>/dev/null || true
+else
+    LIVE_COUNT=0
+fi
+
+if [ "$PREFLIGHT_RC" -ne 0 ]; then
+    BLOCKED=1
+fi
+
+if [ "$PY_OK" -ne 1 ] && [ "$MODE" = 'preflight' ]; then
+    # No rewrite engine means we cannot know the candidate config; refuse.
+    echo "PREFLIGHT BLOCKED: python3 is unavailable — cannot verify the next config" >&2
+    BLOCKED=1
+fi
+
+if [ "$BLOCKED" = '1' ]; then
+    while IFS=$'\t' read -r kind pk ips extra; do
+        case "$kind" in
+            REMOVED) printf 'PREFLIGHT BLOCKED: live peer pubkey=%s allowed-ips=%s would be REMOVED\n' "$pk" "$ips" >&2 ;;
+            CHANGED) printf 'PREFLIGHT BLOCKED: live peer pubkey=%s allowed-ips=%s would be CHANGED to %s\n' "$pk" "$ips" "$extra" >&2 ;;
+        esac
+    done <<< "$PREFLIGHT_OUT"
+    COUNT=$(printf '%s\n' "$PREFLIGHT_OUT" | grep -c . 2>/dev/null); COUNT=${COUNT:-0}
+    echo "PREFLIGHT BLOCKED: $COUNT live peer(s) would be lost or changed — refusing to apply" >&2
+    rm -f "$CANDIDATE" 2>/dev/null || true
+    if [ "$MODE" = 'preflight' ]; then
+        echo "PREFLIGHT FAILED: wg0.conf and wg0 were not modified" >&2
+        exit 2
+    fi
+    # Apply mode: consume the trigger (as every run does) so a blocked run
+    # cannot immediately re-arm the path unit, but publish read-only status
+    # so the dashboard keeps working and can see the blocked state.
+    rm -f "$PEERS_DIR/.apply" 2>/dev/null || true
+    BLOCKED_JSON=$(printf '%s\n' "$PREFLIGHT_OUT" | awk -F'\t' 'NF > 1 { printf "%s\"%s\"", (c++ ? "," : ""), $2 }')
+    publish_status true "$BLOCKED_JSON"
+    exit 2
+fi
+
+if [ "$MODE" = 'preflight' ]; then
+    echo "PREFLIGHT OK: $LIVE_COUNT live peer(s) preserved; wg0.conf and wg0 were not modified"
+    exit 0
+fi
+
+# ── APPLY ─────────────────────────────────────────────────────────────────
+# Preflight passed. The rename is atomic (same directory / same filesystem)
+# and happens while holding the same lock as the preflight above.
+if [ "$CHANGED" = '1' ] && [ -f "$CANDIDATE" ]; then
+    chmod 600 "$CANDIDATE" 2>/dev/null || true
+    if ! mv -f "$CANDIDATE" "$CONF"; then
+        echo "ERROR: could not install the new wg0.conf" >&2
+        exit 3
+    fi
 fi
 
 if [ -f "$CONF" ]; then
@@ -121,14 +406,4 @@ if [ -f "$CONF" ]; then
 fi
 rm -f "$PEERS_DIR/.apply" 2>/dev/null || true
 
-RUNNING=false
-ip link show wg0 >/dev/null 2>&1 && RUNNING=true
-PEERS=$(wg show wg0 peers 2>/dev/null | wc -l)
-ACTIVE=$(wg show wg0 latest-handshakes 2>/dev/null | awk '$2 > 0' | wc -l)
-HANDSHAKES=$(wg show wg0 latest-handshakes 2>/dev/null \
-    | awk 'BEGIN { sep = "" } { printf "%s\"%s\":%s", sep, $1, $2; sep = "," }')
-ALLOWED_JSON=$(wg show wg0 allowed-ips 2>/dev/null \
-    | awk -F'[ \t]+' 'BEGIN { sep = "" } { for (i = 2; i <= NF; i++) { split($i, a, "/"); if (a[1] != "") { printf "%s\"%s\"", sep, a[1]; sep = "," } } }')
-
-printf '{"running":%s,"wgPeers":%d,"activePeers":%d,"peerHandshakes":{%s},"allowedIps":[%s],"updatedAt":%d}\n' \
-    "$RUNNING" "$PEERS" "$ACTIVE" "$HANDSHAKES" "$ALLOWED_JSON" "$(date +%s)" > "$STATUS"
+publish_status false ""

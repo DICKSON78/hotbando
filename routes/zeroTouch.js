@@ -230,9 +230,21 @@ function authRegister(req, res, next) {
     const secret = (req.body && req.body.secret) || req.query.secret;
     const expected = ROUTER_REGISTRATION_SECRET;
     if (!expected) {
+        logger.error('zero-touch endpoint misconfigured: ROUTER_REGISTRATION_SECRET is empty', {
+            path: req.path
+        });
         return res.status(500).json({ success: false, message: 'Server registration secret not configured' });
     }
     if (!secret || !safeSecretEqual(String(secret), String(expected))) {
+        // A router polling with a stale secret (e.g. the env was rotated after
+        // registration) is otherwise completely invisible: the router just sees
+        // a tiny body under its size gate and gives up. Log WHO was rejected —
+        // never the presented or configured secret value.
+        logger.warn('zero-touch rejected: invalid registration secret', {
+            routerId: (req.query && req.query.router_id) || req.params.routerID || null,
+            path: req.path,
+            ip: req.ip
+        });
         return res.status(401).json({ success: false, message: 'Invalid registration secret' });
     }
     next();
@@ -322,6 +334,11 @@ async function serveScript(req, res) {
         res.set('X-HotBando-Router-ID', routerID);
         if (result.assignedIp) res.set('X-HotBando-WG-IP', result.assignedIp);
         res.set('X-HotBando-Status', result.pending ? 'pending' : 'ready');
+        // Delivering the FULL script is the moment the router gets its tunnel;
+        // make it observable (id only — the script itself is never logged).
+        if (!result.pending) {
+            logger.info('Provisioning script delivered to router', { routerID });
+        }
         res.send(result.script);
     } catch (error) {
         return sendRouterError(res, 'provision error:', error);

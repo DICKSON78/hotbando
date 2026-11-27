@@ -28,6 +28,16 @@ services:
       - uploads:/app/public/uploads
       - ./logs:/app/logs
       - ./data/host-arp.txt:/host-arp:ro
+      # Expose only aggregate runtime state; never mount host WireGuard keys/config.
+      # The host file MUST exist as a FILE before `up` (see scripts/install-wg-watcher.sh),
+      # otherwise Docker creates a directory and the status path breaks for good.
+      - /etc/wireguard/.wg-status-result:/var/run/hotbando/wg-status-result:ro
+      # Public peer descriptors only (utils/wireguard.js expects
+      # /host-wireguard-peers). The host watcher (scripts/hotbando-wg-apply)
+      # validates them and applies them to wg0; the server private key never
+      # enters the container. Without this mount descriptors are written to the
+      # container's private /etc/wireguard/hotbando-peers and never reach wg0.
+      - /etc/wireguard/hotbando-peers:/host-wireguard-peers:rw
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

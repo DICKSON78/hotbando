@@ -199,9 +199,12 @@ async function connectRouter(routerID, payload = {}) {
 
     // Set management host = WG IP (tunnel management, configurable from anywhere)
     // status uses the ENUM (offline until the router heartbeats ONLINE once configured)
+    // wireguard_configured = 1 marks the router APPROVED: it makes the row
+    // eligible for syncPeerFilesFromDb() so the peer descriptor survives
+    // restarts/re-syncs instead of being reaped as "never configured".
     await db.execute(
         `UPDATE mikrotiks SET host = ?, status = 'offline', setup_status = 'configuring', setup_step = 2,
-            last_seen = NOW(), ssid = COALESCE(?, ssid)
+            wireguard_configured = 1, last_seen = NOW(), ssid = COALESCE(?, ssid)
          WHERE router_id = ?`,
         [assignedIp, ssid || null, routerID]
     );
@@ -485,7 +488,7 @@ async function provisionRouter(payload = {}) {
 
     await db.execute(
         `UPDATE mikrotiks SET host = ?, status = 'online', last_seen = NOW(), setup_status = 'configured', setup_step = 3,
-            ssid = COALESCE(?, ssid)
+            wireguard_configured = 1, ssid = COALESCE(?, ssid)
          WHERE router_id = ?`,
         [assignedIp, ssid || null, routerID]
     );
@@ -637,7 +640,10 @@ ${MIKROTIK_API_PASSWORD ? `:do { /user remove [find name="hotbando-api"] } on-er
   persistent-keepalive=25s
 
 /ip address add address=${assignedIp}/32 interface="wg-hotbando"
-/ip route add dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando"
+# Drop the route we own before re-adding: RouterOS allows parallel routes to
+# the same dst, so re-provisioning would otherwise accumulate dead entries.
+:do { /ip route remove [find dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando"] } on-error={}
+/ip route add dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando" comment="HotBando WG route"
 
 # Firewall: allow WG tunnel traffic, router input & restrict API to tunnel
 /ip firewall filter remove [find comment="HotBando WG"]
@@ -656,7 +662,7 @@ ${MIKROTIK_API_PASSWORD ? `:do { /user remove [find name="hotbando-api"] } on-er
 # Hotspot bridge already created in section 1 with wlan1 attached
 # Just ensure it has the right IP and DHCP
 
-/ip dhcp-server remove [find interface=$hotspotIface]
+/ip dhcp-server remove [find interface=$hotspotIface comment~"HotBando"]
 /ip address remove [find interface=$hotspotIface]
 /ip address add address=${HOTSPOT_IP}/${hotspotPrefixLen} interface=$hotspotIface network=${hotspotNetBase} comment="HotBando hotspot gateway"
 
@@ -694,7 +700,8 @@ ${MIKROTIK_API_PASSWORD ? `:do { /user remove [find name="hotbando-api"] } on-er
 /ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=$hotspotIface action=accept place-before=0 comment="HotBando DNS"
 /ip firewall filter add chain=input protocol=tcp dst-port=53 in-interface=$hotspotIface action=accept place-before=0 comment="HotBando DNS"
 
-/ip hotspot remove [find]
+# Only OUR hotspot server is removed — never a pre-existing site hotspot.
+/ip hotspot remove [find name="hotbando-server"]
 /ip hotspot profile remove [find name="hotbando-profile"]
 /ip hotspot profile add name="hotbando-profile" \\
   login-by=http-pap,http-chap,mac \\
@@ -730,7 +737,9 @@ ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
 
 /radius remove [find comment~"HotBando"]
-/radius remove [find service=hotspot]
+# Never touch a non-HotBando /radius entry (service=hotspot alone would wipe a
+# site's own RADIUS configuration).
+/radius remove [find service=hotspot comment~"HotBando"]
 /radius add address=${wireguardService.serverIp} secret=${RADIUS_SECRET} service=hotspot \\
   authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=${assignedIp} \\
   comment="HotBando FreeRADIUS"
@@ -783,7 +792,9 @@ ${HOTSPOT_ADMIN_PASSWORD ? `/ip hotspot user add name="admin" password="${saniti
 #    visible button as a fallback if the meta refresh is blocked.
 # ----------------------------------------------------------------------------
 :delay 1
-/file remove hotspot/login.html
+# A missing login.html must never abort the whole import (import stops at the
+# first uncaught error, which would strand the router mid-provision).
+:do { /file remove hotspot/login.html } on-error={}
 :local portalUrl "${PUBLIC_BASE_URL}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)"
 :local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta charset='utf-8'>\\n<meta http-equiv='refresh' content='0;url=$portalUrl'>\\n<meta name='viewport' content='width=device-width,initial-scale=1'>\\n<title>HotBando WiFi</title>\\n</head>\\n<body style='margin:0;font-family:system-ui,Arial,sans-serif;background:#0b0b12;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh'>\\n<div style='text-align:center;padding:24px;max-width:340px'>\\n<div style='font-size:42px;margin-bottom:12px'>&#128246;</div>\\n<h2 style='margin:0 0 8px'>HotBando WiFi</h2>\\n<p style='color:#9ca3af;margin:0 0 18px'>Inafungua HotBando portal...</p>\\n<a href='$portalUrl' style='display:inline-block;background:#FF7A30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700'>Open HotBando</a>\\n</div>\\n<script>window.location.href='$portalUrl';</script>\\n</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml

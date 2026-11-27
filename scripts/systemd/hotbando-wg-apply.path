@@ -1,0 +1,34 @@
+[Unit]
+Description=Watch HotBando peer descriptors + .apply trigger
+Before=hotbando-wg-apply.service
+
+[Path]
+# MakeDirectory only creates the directory before watching; it does NOT
+# activate the service (unlike DirectoryNotEmpty=/PathExists=).
+MakeDirectory=yes
+DirectoryMode=0700
+
+# EVENT-BASED triggers only.
+#
+# systemd.path(5) documents that "If a ... directory already is not empty (in
+# case of DirectoryNotEmpty=) at the time the path unit is activated, then the
+# configured unit is immediately activated as well" and that "When a service
+# unit triggered by a path unit terminates ..., monitored paths are checked
+# immediately again". With a non-empty descriptor directory those two facts
+# chained into a permanent activate -> run -> activate loop, which hit
+# TriggerLimitBurst and put the path unit into failure mode (no more watching).
+#
+# PathChanged=/PathModified= have no activation-time check, so they only fire
+# on real filesystem events:
+#   - descriptor added / removed / renamed -> change to an entry directly
+#     inside the watched directory (systemd.path(5): directories are not
+#     watched recursively, but changes to entries directly inside are noticed)
+#   - .apply marker written by the app -> PathModified=
+#   - an in-place descriptor edit, or a missed event -> hotbando-wg-apply.timer
+#     (60s fallback) converges within one interval
+PathChanged=/etc/wireguard/hotbando-peers
+PathChanged=/etc/wireguard/hotbando-peers/.apply
+PathModified=/etc/wireguard/hotbando-peers/.apply
+
+[Install]
+WantedBy=multi-user.target
