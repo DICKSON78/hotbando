@@ -4,6 +4,7 @@ const mikrotikService = require('../utils/mikrotik');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const { hasHotspotSessions, routerCustomerCountSql } = require('../utils/hotspotSessionsSupport');
 
 function stripRouterSecrets(router) {
   if (!router) return router;
@@ -1214,28 +1215,17 @@ async getAdViewsForAnalytics(req, res) {
   // ==================== MIKROTIK ROUTER METHODS ====================
   async getRouters(req, res) {
     try {
+      // hotspot_sessions is optional in production: use it when present, else
+      // fall back to users-only counts so admin requests never hit ER_NO_SUCH_TABLE.
+      const counts = routerCustomerCountSql(await hasHotspotSessions());
       const [routers] = await db.execute(`
         SELECT m.*,
                COALESCE(l.name, m.location_name) as location_name,
                COALESCE(l.city, m.location_city) as city,
                COALESCE(l.region, m.location_region) as region,
                b.name as branch_name,
-               (SELECT COUNT(DISTINCT u.id) FROM users u 
-                  LEFT JOIN hotspot_sessions hs ON hs.user_id = u.id AND (hs.router_id = m.router_id OR hs.router_id = m.id)
-                  WHERE u.role = 'customer' AND (
-                    u.last_router_id = m.router_id OR 
-                    u.last_router_id = m.id OR 
-                    hs.router_id = m.router_id OR 
-                    hs.router_id = m.id
-                  )) as customer_count,
-               (SELECT COUNT(DISTINCT u.id) FROM users u 
-                  LEFT JOIN hotspot_sessions hs ON hs.user_id = u.id AND (hs.router_id = m.router_id OR hs.router_id = m.id)
-                  WHERE u.role = 'customer' AND (
-                    u.last_router_id = m.router_id OR 
-                    u.last_router_id = m.id OR 
-                    hs.router_id = m.router_id OR 
-                    hs.router_id = m.id
-                  ) AND u.usage_until IS NOT NULL AND u.usage_until > NOW()) as active_bundle_users
+               ${counts.customerCount} as customer_count,
+               ${counts.activeBundleUsers} as active_bundle_users
         FROM mikrotiks m
         LEFT JOIN locations l ON m.location_id = l.id
         LEFT JOIN branches b ON b.id = l.branch_id
@@ -1585,13 +1575,16 @@ async getAdViewsForAnalytics(req, res) {
     try {
       const { routerID } = req.params;
 
+      // hotspot_sessions is optional in production: use it when present, else
+      // fall back to users-only counts so admin requests never hit ER_NO_SUCH_TABLE.
+      const counts = routerCustomerCountSql(await hasHotspotSessions());
       const [router] = await db.execute(`
         SELECT m.*,
                l.name as location_name, l.city, l.region, l.address as location_address,
                l.latitude, l.longitude, l.location_type,
                b.name as branch_name,
                fo.name as owner_name, fo.phone_number as owner_phone, fo.email as owner_email,
-               (SELECT COUNT(DISTINCT u.id) FROM users u LEFT JOIN hotspot_sessions hs ON hs.user_id = u.id AND (hs.router_id = m.router_id OR hs.router_id = m.id) WHERE u.role = 'customer' AND (u.last_router_id = m.router_id OR u.last_router_id = m.id OR hs.router_id = m.router_id OR hs.router_id = m.id) AND u.usage_until IS NOT NULL AND u.usage_until > NOW()) as active_users_count,
+               ${counts.activeUsersCount} as active_users_count,
                (SELECT COUNT(*) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_users_count,
                (SELECT COALESCE(SUM(moneyspent), 0) FROM users WHERE last_router_id = m.router_id AND role = 'customer') as total_revenue
         FROM mikrotiks m

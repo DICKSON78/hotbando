@@ -21,6 +21,21 @@ const CLOUD_WS_URL = process.env.CLOUD_WS_URL || 'wss://hotbandowifi.online/api/
 const HEARTBEAT_MS = 15000;
 const RECONNECT_MS = 5000;
 
+// Router discovery is configurable: a site is not required to use the
+// MikroTik factory gateway (192.168.88.1) or the default admin/blank login.
+const API_USER = process.env.COLLECTOR_API_USER || 'admin';
+const API_PASSWORD = process.env.COLLECTOR_API_PASSWORD || '';
+
+function parseRouterCandidates(raw) {
+    const fallback = ['192.168.88.1', '192.168.1.1', '192.168.0.1', '10.0.0.1', '10.7.0.5'];
+    const entries = raw ? String(raw).split(',').map(s => s.trim()).filter(Boolean) : fallback;
+    return entries.map((entry) => {
+        const [host, port] = entry.split(':');
+        return { host, port: parseInt(port, 10) || 8728 };
+    });
+}
+const ROUTER_CANDIDATES = parseRouterCandidates(process.env.COLLECTOR_ROUTER_HOSTS);
+
 const app = express();
 app.use(express.json());
 
@@ -35,22 +50,19 @@ let wsConn = null;
 let wsPingTimer = null;
 
 function connectRouter(entry) {
-  if (entry.conn) {
-    try {
-      entry.conn.write('/system/identity/print');
-      return entry.conn;
-    } catch (_) {
-      try { entry.conn.close(); } catch (_) {}
-      entry.conn = null;
-    }
-  }
+  if (entry.conn) return entry.conn;
+  // Avoid opening a second connection when discovery and a proxy command
+  // arrive for the same router at the same time.
+  if (entry.connecting) return null;
+  entry.connecting = true;
 
   const conn = new RouterOSAPI({
     host: entry.host,
     user: entry.user,
     password: entry.password,
     port: entry.port || 8728,
-    timeout: 8
+    timeout: 8,
+    ...(entry.port === 8729 ? { tls: { rejectUnauthorized: false } } : {})
   });
 
   conn.connect().then(async () => {
@@ -70,24 +82,31 @@ function connectRouter(entry) {
     entry.conn = null;
     entry.error = err.message;
     console.error(`[collector] connect ${entry.host} failed:`, err.message);
+  }).finally(() => {
+    entry.connecting = false;
   });
 
   return conn;
 }
 
 function discoverLocalRouters() {
-  const candidates = [
-    { host: '192.168.1.1', port: 8728 },
-    { host: '192.168.0.1', port: 8728 },
-    { host: '10.0.0.1', port: 8728 },
-    { host: '10.7.0.5', port: 8728 }
-  ];
-
-  for (const c of candidates) {
+  for (const c of ROUTER_CANDIDATES) {
     const key = `${c.host}:${c.port}`;
-    if (routers.has(key)) continue;
-    const entry = { host: c.host, port: c.port, user: 'admin', password: '', conn: null,
-                    lastSeen: null, error: null, identity: null, model: null, firmware: null };
+    // Retry entries that failed previously: a router may have been powered off
+    // during the first scan. Only live connections are skipped.
+    const existing = routers.get(key);
+    if (existing && (existing.conn || existing.connecting)) continue;
+    if (existing) {
+      // Retry a previously failed entry with the current credentials.
+      existing.user = API_USER;
+      existing.password = API_PASSWORD;
+      existing.error = null;
+      connectRouter(existing);
+      continue;
+    }
+    const entry = { host: c.host, port: c.port, user: API_USER, password: API_PASSWORD,
+                    conn: null, connecting: false, lastSeen: null, error: null,
+                    identity: null, model: null, firmware: null };
     routers.set(key, entry);
     connectRouter(entry);
   }
@@ -118,7 +137,20 @@ function reportHeartbeat() {
 }
 
 function handleCloudMessage(msg) {
-  if (!msg || msg.type !== 'mikrotik') return;
+  if (!msg) return;
+
+  // Cloud "detect" button. Previously ignored entirely — the operator got a
+  // success response while the collector did nothing.
+  if (msg.type === 'scan') {
+    discoverLocalRouters();
+    reportHeartbeat();
+    // Give the API connections a moment to identify themselves before the
+    // cloud displays the result.
+    setTimeout(reportHeartbeat, 4000);
+    return;
+  }
+
+  if (msg.type !== 'mikrotik') return;
 
   const { id, path, args = {} } = msg;
   const routerKey = msg.router || msg.routerId || msg.router_id;

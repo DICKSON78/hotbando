@@ -9,6 +9,12 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../config/database');
 const logger = require('./logger');
+const {
+    allocateWireGuardIp,
+    parseReservedList,
+    markAllocated,
+    releaseAllocation
+} = require('./wireguardAllocation');
 
 const WG_INTERFACE = process.env.WG_INTERFACE || 'wg0';
 const WG_PORT = parseInt(process.env.WG_PORT) || 51820;
@@ -104,43 +110,19 @@ class WireGuardService {
     // ── Next available IP ──
 
     async getNextAvailableIp() {
-        try {
-            const [rows] = await db.execute(`
-                SELECT wireguard_ip FROM mikrotiks
-                WHERE wireguard_ip IS NOT NULL AND wireguard_ip != ''
-                ORDER BY wireguard_ip
-            `);
-            const usedIps = new Set(rows.map(r => r.wireguard_ip));
-
-            // Also consider peers already published to the host watcher so a
-            // stale/removed DB row can never cause an IP collision on wg0.
-            try {
-                for (const name of fs.readdirSync(WG_PEERS_DIR)) {
-                    if (name.endsWith('.peer')) usedIps.add(name.slice(0, -5));
-                }
-            } catch (e) { /* peers dir may not exist yet */ }
-
-            // Include every live host peer, including static peers that were
-            // configured before the app existed (e.g. 10.7.0.2 / 10.7.0.4).
-            try {
-                const status = JSON.parse(fs.readFileSync(WG_STATUS_FILE, 'utf8'));
-                for (const ip of (status.allowedIps || [])) {
-                    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) usedIps.add(ip);
-                }
-            } catch (e) { /* status file may not exist yet */ }
-
-            // Scan the full /16 (10.7.0.2 .. 10.7.255.254) for scale
-            for (let b = 0; b <= 255; b++) {
-                for (let i = (b === 0 ? 2 : 1); i <= 254; i++) {
-                    const ip = `10.7.${b}.${i}`;
-                    if (!usedIps.has(ip)) return ip;
-                }
-            }
-            throw new Error('No available IPs in WireGuard network');
-        } catch (error) {
-            if (error.message.includes('No available')) throw error;
-            return '10.7.0.2';
-        }
+        // Delegates to the safe allocator. It consults DB rows, published peer
+        // descriptors and the host status file, honours WG_NETWORK / reserved
+        // addresses, serializes concurrent requests, and NEVER returns a
+        // hard-coded fallback address on failure.
+        return allocateWireGuardIp({
+            db,
+            fs,
+            peersDir: WG_PEERS_DIR,
+            statusFile: WG_STATUS_FILE,
+            network: WG_NETWORK,
+            serverIp: WG_SERVER_IP,
+            reservedIps: parseReservedList(process.env.WG_RESERVED_IPS)
+        });
     }
 
     // ── Peer descriptors (safe hand-off to the host watcher) ──
@@ -191,6 +173,12 @@ class WireGuardService {
     }
 
     // Publish every router the owner has approved (configuring/configured).
+    //
+    // setup_status is the approval source of truth. Do NOT filter on
+    // wireguard_configured here: that flag is only a reporting column, and a
+    // query that requires it (plus the reaper below) silently drops the peer
+    // descriptor of an approved router whenever the flag is still 0 — which is
+    // exactly how a connected router loses its tunnel peer after a resync.
     async syncPeerFilesFromDb() {
         if (!this.ensurePeersDir()) return false;
 
@@ -199,10 +187,9 @@ class WireGuardService {
             const [rows] = await db.execute(`
                 SELECT router_id, router_name, wireguard_ip, wireguard_public_key, wireguard_preshared_key
                 FROM mikrotiks
-                WHERE wireguard_configured = 1
+                WHERE setup_status IN ('configuring', 'configured')
                   AND wireguard_ip IS NOT NULL AND wireguard_ip != ''
                   AND wireguard_public_key IS NOT NULL AND wireguard_public_key != ''
-                  AND setup_status IN ('configuring', 'configured')
             `);
             peers = rows;
         } catch (e) {
@@ -336,6 +323,17 @@ class WireGuardService {
         try {
             if (fs.existsSync(statusResult)) {
                 const data = JSON.parse(fs.readFileSync(statusResult, 'utf8'));
+                // The host watcher reports what wg0 is really bound to. Surface
+                // a divergence with WG_PORT instead of silently generating router
+                // scripts whose endpoint-port can never handshake.
+                const hostPort = Number(data.listenPort) || 0;
+                if (hostPort && hostPort !== this.listenPort) {
+                    logger.warn(
+                        `WireGuard listen port mismatch: WG_PORT=${this.listenPort} ` +
+                        `but host wg0 listens on ${hostPort}. Router scripts will use ` +
+                        `${this.listenPort} — align WG_PORT with the host before provisioning.`
+                    );
+                }
                 return { ...base, ...data };
             }
         } catch (e) { /* fall through */ }
@@ -421,7 +419,9 @@ class WireGuardService {
                     updated_at = NOW()
                 WHERE router_id = ?
             `, [assignedIp, publicKey, privateKey, presharedKey, routerId]);
+            markAllocated(assignedIp);
         } catch (e) {
+            releaseAllocation(assignedIp);
             logger.warn('Could not save WireGuard info to DB (columns may not exist): ' + e.message);
         }
     }

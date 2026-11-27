@@ -17,7 +17,10 @@
 # ============================================================================
 
 :global hotbandoBaseUrl "https://hotbandowifi.online"
-:global hotbandoSecret "d5c45011dbdf3936688cc316ce6f5e00e66102d52736378a"
+# Replace <REGISTRATION_SECRET> with the current ROUTER_REGISTRATION_SECRET.
+# Safer: use Admin Portal -> Routers -> Site Setup, which generates this script
+# with the server's current secret and never stores it in the repository.
+:global hotbandoSecret "<REGISTRATION_SECRET>"
 :global hbSerial [/system routerboard get serial-number]
 :global hbIdentity [/system identity get name]
 :global hbModel [/system resource get board-name]
@@ -31,14 +34,27 @@
 # ---------------------------------------------------------------------------
 # 1. Phone home (GET with query params — robust, no JSON quoting needed)
 # ---------------------------------------------------------------------------
-:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial . "&auto_connect=1")
+# Registration always stays PENDING: auto_connect is never sent. Only an
+# authenticated owner action in the panel can approve/connect the router.
+:global hbRegUrl ($hotbandoBaseUrl . "/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerial)
 
-/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none check-certificate=no
+# Remove any stale copy before fetching so an old/failed download is never imported.
+:do { /file remove [find name="hotbando-provision.rsc"] } on-error={}
+
+/tool fetch url=$hbRegUrl dst-path="hotbando-provision.rsc" mode=https output=none check-certificate=yes
 :delay 2
 
 :if ([:len [/file find name="hotbando-provision.rsc"]] = 0) do={
     :put "ERROR: could not download provisioning script!"
     :put "Check internet on the router, server IP/port, and secret."
+    :error "HotBando phone-home failed"
+}
+
+:local hbFileSize 0
+:do { :set hbFileSize [/file get [/file find name="hotbando-provision.rsc"] size] } on-error={}
+:if ($hbFileSize < 100) do={
+    :do { /file remove [find name="hotbando-provision.rsc"] } on-error={}
+    :put "ERROR: downloaded provisioning script is invalid (too small)."
     :error "HotBando phone-home failed"
 }
 

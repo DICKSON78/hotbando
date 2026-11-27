@@ -1,0 +1,10 @@
+[Unit]
+Description=HotBando WireGuard peer-descriptor apply (app -> wg0)
+Documentation=file:///opt/hotbando/scripts/hotbando-wg-apply
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hotbando-wg-apply
+# The script takes flock itself; a second run while one is active exits 0.

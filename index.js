@@ -189,7 +189,8 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
     console.log('=== GLOBAL MIDDLEWARE HIT ===', req.method, req.path);
     const logger = require('./utils/logger');
-    logger.info('GLOBAL REQUEST', { method: req.method, path: req.path, query: req.query, ip: req.ip, session: !!req.session.admin_user });
+    const { redactQuery } = require('./utils/logRedaction');
+    logger.info('GLOBAL REQUEST', { method: req.method, path: req.path, query: redactQuery(req.query), ip: req.ip, session: !!req.session.admin_user });
     next();
 });
 

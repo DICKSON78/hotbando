@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `phone_number` VARCHAR(20) NOT NULL UNIQUE,
   `email` VARCHAR(255) NULL,
   `password` VARCHAR(255) NOT NULL,
-  `role` ENUM('customer', 'admin', 'sponsor', 'bank_partner', 'franchise_owner', 'super_admin') DEFAULT 'customer',
+  `role` ENUM('customer', 'admin', 'sponsor', 'bank_partner', 'franchise_owner', 'super_admin', 'reseller', 'investor') DEFAULT 'customer',
 
   -- Customer specific fields
   `mac_address` VARCHAR(50) NULL,
@@ -617,7 +617,8 @@ CREATE TABLE IF NOT EXISTS `packages` (
   `sort_order` INT DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_packages_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Voucher batches
@@ -794,7 +795,7 @@ ALTER TABLE users ADD INDEX idx_user_role_active (role, is_active);
 ALTER TABLE campaigns ADD INDEX idx_campaign_active_dates (is_active, start_date, end_date);
 ALTER TABLE campaign_completions ADD INDEX idx_completion_campaign_user (campaign_id, user_id);
 CREATE INDEX idx_transaction_user_type ON transactions(user_id, transaction_type, created_at);
-CREATE INDEX idx_connection_user_timestamp ON user_connection_logs(mac_address, created_at);
+CREATE INDEX idx_connection_user_timestamp ON user_connection_logs(mac_address, timestamp);
 
 -- ============================================================================
 -- PUBLIC WEBSITE FORMS (partner applications & contact messages)
@@ -869,7 +870,7 @@ CREATE TABLE IF NOT EXISTS `investment_returns` (
 -- RESELLER SYSTEM
 -- ============================================================================
 
-ALTER TABLE users MODIFY COLUMN role ENUM('customer', 'admin', 'sponsor', 'bank_partner', 'franchise_owner', 'super_admin', 'reseller') DEFAULT 'customer';
+ALTER TABLE users MODIFY COLUMN role ENUM('customer', 'admin', 'sponsor', 'bank_partner', 'franchise_owner', 'super_admin', 'reseller', 'investor') DEFAULT 'customer';
 
 CREATE TABLE IF NOT EXISTS `resellers` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -953,3 +954,4 @@ CREATE TABLE IF NOT EXISTS `payment_events` (
 -- ============================================================================
 -- END OF SCHEMA
 -- ============================================================================
+

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic HotBando WireGuard peer apply (fallback for missed triggers)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

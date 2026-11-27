@@ -24,16 +24,31 @@ router.get('/scan', async (req, res) => {
         
         logger.info('🔍 Starting network scan...');
         const devices = await mikrotikDetector.scanForMikroTik(network || null);
-        
+
+        // LAN discovery cannot see routers behind NAT. Registered routers are
+        // reachable over the WireGuard tunnel and must appear in the same list.
+        try {
+            const tunnelDevices = await mikrotikDetector.getTunnelDevices();
+            const knownIps = new Set(devices.map(d => d.ip));
+            for (const device of tunnelDevices) {
+                if (!knownIps.has(device.ip)) devices.push(device);
+            }
+        } catch (e) {
+            logger.warn('Tunnel scan skipped: ' + e.message);
+        }
+
         res.json({
             success: true,
             message: `Found ${devices.length} MikroTik device(s)`,
             devices: devices.map(d => ({
                 ip: d.ip,
                 mac: d.mac || null,
+                port: d.port || null,
                 source: d.source,
                 confidence: d.confidence,
                 isMikrotik: d.isMikrotik,
+                needsCredentials: !!d.needsCredentials,
+                credentialsFound: !!d.credentialsFound,
                 identity: d.identity || null,
                 model: d.model || null,
                 firmware: d.firmware || null,

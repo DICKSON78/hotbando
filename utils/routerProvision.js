@@ -24,6 +24,7 @@ const db = require('../config/database');
 const wireguardService = require('./wireguard');
 const logger = require('./logger');
 const { encrypt } = require('./encryption');
+const { resolveRouterIdentity, normalizeRouterId } = require('./routerIdentity');
 
 const ROUTER_REGISTRATION_SECRET = process.env.ROUTER_REGISTRATION_SECRET || '';
 const SERVER_PUBLIC_HOST = process.env.SERVER_PUBLIC_HOST || process.env.SERVER_PUBLIC_IP || 'hotbandowifi.online';
@@ -38,9 +39,11 @@ function resolvePublicBaseUrl() {
 }
 
 const PUBLIC_BASE_URL = resolvePublicBaseUrl();
-const PUBLIC_FETCH_MODE = PUBLIC_BASE_URL.startsWith('https://') ? 'https' : 'http';
 const RADIUS_SECRET = process.env.RADIUS_SECRET || '';
-const MIKROTIK_API_PASSWORD = process.env.MIKROTIK_API_PASSWORD || 'HotBandoApi2024!Secure';
+// No hardcoded fallbacks. When these are unset the generated script simply does
+// not create the corresponding credentials (fail closed — never a weak default).
+const MIKROTIK_API_PASSWORD = process.env.MIKROTIK_API_PASSWORD || '';
+const HOTSPOT_ADMIN_PASSWORD = process.env.HOTSPOT_ADMIN_PASSWORD || '';
 // RouterOS /radius expects an IP address, so prefer the numeric public IP.
 const RADIUS_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(process.env.SERVER_PUBLIC_IP || '')
     ? process.env.SERVER_PUBLIC_IP
@@ -69,26 +72,16 @@ function normalizeCidr(value, fallback = '10.5.50.0/24') {
  * Returns { router, created }
  */
 async function resolveRouter({ serial, identity, model, firmware, publicIp, routerId, locationId }) {
-    let router = null;
+    // Check BOTH identifiers independently before any write. If they point at
+    // different router records, resolveRouterIdentity throws a conflict and no
+    // INSERT/UPDATE is attempted. Existing records are reused unchanged.
+    const resolved = await resolveRouterIdentity({ routerId, serial }, db);
+    let router = resolved.router;
     let created = false;
 
-    if (routerId) {
-        const [rows] = await db.execute(
-            'SELECT * FROM mikrotiks WHERE router_id = ? OR serial_number = ? LIMIT 1',
-            [routerId, serial || null]
-        );
-        router = rows[0] || null;
-    }
-
-    if (!router && serial) {
-        const [rows] = await db.execute(
-            'SELECT * FROM mikrotiks WHERE serial_number = ? LIMIT 1', [serial]
-        );
-        router = rows[0] || null;
-    }
-
     if (!router) {
-        const id = routerId || `HB-${String(serial || Date.now()).replace(/[^A-Za-z0-9_-]/g, '').substring(0, 24)}`;
+        const normalizedId = normalizeRouterId(routerId);
+        const id = normalizedId || `HB-${String(serial || Date.now()).replace(/[^A-Za-z0-9_-]/g, '').substring(0, 24)}`;
         const name = identity || `HotBando ${id}`;
         const [result] = await db.execute(
             `INSERT INTO mikrotiks
@@ -178,6 +171,14 @@ async function connectRouter(routerID, payload = {}) {
     if (!rows.length) throw new Error('Router not found');
     const router = rows[0];
 
+    // Defense in depth: only a router still awaiting owner approval may be
+    // connected. Registration never sets a state other than 'pending', and
+    // this guards against any future caller bypassing the admin route.
+    const approvable = router.setup_status === 'pending' || router.setup_status === 'configuring';
+    if (!approvable) {
+        throw new Error(`Router is not awaiting approval (setup_status=${router.setup_status || 'unknown'})`);
+    }
+
     if (!router.wireguard_public_key || !router.wireguard_private_key || !router.wireguard_ip) {
         const keypair = wireguardService.generateKeyPair();
         const presharedKey = wireguardService.generatePresharedKey();
@@ -198,9 +199,12 @@ async function connectRouter(routerID, payload = {}) {
 
     // Set management host = WG IP (tunnel management, configurable from anywhere)
     // status uses the ENUM (offline until the router heartbeats ONLINE once configured)
+    // wireguard_configured = 1 marks the router APPROVED: it makes the row
+    // eligible for syncPeerFilesFromDb() so the peer descriptor survives
+    // restarts/re-syncs instead of being reaped as "never configured".
     await db.execute(
         `UPDATE mikrotiks SET host = ?, status = 'offline', setup_status = 'configuring', setup_step = 2,
-            last_seen = NOW(), ssid = COALESCE(?, ssid)
+            wireguard_configured = 1, last_seen = NOW(), ssid = COALESCE(?, ssid)
          WHERE router_id = ?`,
         [assignedIp, ssid || null, routerID]
     );
@@ -312,52 +316,41 @@ function generateBootstrapScript() {
 :put ("Firmware: " . $hbFirmware)
 :put "============================================="
 
-# --- Step 2: Download provisioning script (with retry + HTTP fallback) ---
-:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean . "&auto_connect=1")
+# --- Step 2: Download provisioning script (HTTPS only, certificate verified) ---
+# auto_connect is intentionally NOT sent: registration always stays PENDING and
+# only an authenticated owner action can approve/connect the router.
+:global hbRegUrl ("${PUBLIC_BASE_URL}/api/zero-touch/register?secret=" . $hotbandoSecret . "&serial=" . $hbSerialClean)
 
 # Use :global for variables modified across blocks (avoids scoping issues)
 :global dlOk false
-:global dlMode "${PUBLIC_FETCH_MODE}"
 
-# Try HTTPS first (check-certificate=no is essential on fresh routers with no installed CAs)
+# Remove any stale copy first so a failed/old download can never be imported.
+:do { /file remove [find name="universal-bootstrap.rsc"] } on-error={}
+
 :for i from=1 to=3 do={
-    :put ("Attempt " . $i . " of 3 (mode=" . $dlMode . ")...")
+    # Clear the destination before every attempt (no partial file survives)
+    :do { /file remove [find name="universal-bootstrap.rsc"] } on-error={}
+    :put ("Attempt " . $i . " of 3 (HTTPS, certificate verified)...")
     :do {
-        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=$dlMode check-certificate=no
+        /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=https check-certificate=yes
     } on-error={
         :put "  fetch failed, retrying..."
     }
     :delay 3
-    :if ([:len [/file find name="universal-bootstrap.rsc"]] > 0) do={
+    :local gotSize 0
+    :do { :set gotSize [/file get [/file find name="universal-bootstrap.rsc"] size] } on-error={}
+    :if ($gotSize > 100) do={
         :set dlOk true
         :put "Download successful!"
     }
 }
 
-# Fall back to HTTP if HTTPS failed
 :if (!$dlOk) do={
-    :put "HTTPS failed, trying HTTP..."
-    :set dlMode "http"
-    :for i from=1 to=3 do={
-        :put ("HTTP attempt " . $i . " of 3...")
-        :do {
-            /tool fetch url=$hbRegUrl dst-path="universal-bootstrap.rsc" mode=http check-certificate=no
-        } on-error={
-            :put "  HTTP fetch failed, retrying..."
-        }
-        :delay 3
-        :if ([:len [/file find name="universal-bootstrap.rsc"]] > 0) do={
-            :set dlOk true
-            :put "HTTP download successful!"
-        }
-    }
-}
-
-:if (!$dlOk) do={
+    :do { /file remove [find name="universal-bootstrap.rsc"] } on-error={}
     :put "============================================="
-    :put "ERROR: could not download provisioning script!"
+    :put "ERROR: could not download provisioning script over HTTPS!"
     :put "Check internet on the router (ping 8.8.8.8)."
-    :put "Check server IP/port and secret."
+    :put "Check the server certificate, host and secret."
     :put "============================================="
     :error "HotBando phone-home failed"
 }
@@ -428,7 +421,8 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 /system scheduler add name="hotbando-poll" interval=2m start-time=startup on-event={
   :local tmp "hb-latest.rsc"
   :do { /file remove $tmp } on-error={}
-  :do { /tool fetch url=$hbPollUrl dst-path=$tmp mode=${PUBLIC_FETCH_MODE} } on-error={
+  :do { /tool fetch url=$hbPollUrl dst-path=$tmp mode=https check-certificate=yes } on-error={
+    :do { /file remove [find name=$tmp] } on-error={}
     :log warning "HotBando poll fetch failed"
   }
   :delay 3
@@ -448,7 +442,7 @@ function generateWaitScript({ routerID, routerName, assignedIp }) {
 # Also keep a heartbeat-style ping so the panel can see the router attempted
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
-  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=yes } on-error={}
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=https keep-result=no check-certificate=yes } on-error={}
 } comment="HotBando heartbeat"
 
 :put "Polling for approval every 2 minutes..."
@@ -494,7 +488,7 @@ async function provisionRouter(payload = {}) {
 
     await db.execute(
         `UPDATE mikrotiks SET host = ?, status = 'online', last_seen = NOW(), setup_status = 'configured', setup_step = 3,
-            ssid = COALESCE(?, ssid)
+            wireguard_configured = 1, ssid = COALESCE(?, ssid)
          WHERE router_id = ?`,
         [assignedIp, ssid || null, routerID]
     );
@@ -578,11 +572,12 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # ----------------------------------------------------------------------------
 /system identity set name="${sanitize(router.router_name || routerID)}"
 
-# Create dedicated HotBando API user (least privilege)
-:do { /user remove [find name="hotbando-api"] } on-error={}
+# Create dedicated HotBando API user (least privilege).
+# Only emitted when MIKROTIK_API_PASSWORD is configured — never a weak default.
+${MIKROTIK_API_PASSWORD ? `:do { /user remove [find name="hotbando-api"] } on-error={}
 :do { /user group remove [find name="hotbando-api"] } on-error={}
 :do { /user group add name="hotbando-api" policy=read,api,rest-api skin=default } on-error={}
-:do { /user add name="hotbando-api" group="hotbando-api" password="${MIKROTIK_API_PASSWORD}" comment="HotBando API (least privilege)" } on-error={}
+:do { /user add name="hotbando-api" group="hotbando-api" password="${sanitize(MIKROTIK_API_PASSWORD)}" comment="HotBando API (least privilege)" } on-error={}` : `# HotBando API user not created: MIKROTIK_API_PASSWORD is not configured`}
 
 # ----------------------------------------------------------------------------
 # 1. INTERFACE DETECTION
@@ -645,7 +640,10 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
   persistent-keepalive=25s
 
 /ip address add address=${assignedIp}/32 interface="wg-hotbando"
-/ip route add dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando"
+# Drop the route we own before re-adding: RouterOS allows parallel routes to
+# the same dst, so re-provisioning would otherwise accumulate dead entries.
+:do { /ip route remove [find dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando"] } on-error={}
+/ip route add dst-address=${wireguardService.serverIp}/32 gateway="wg-hotbando" comment="HotBando WG route"
 
 # Firewall: allow WG tunnel traffic, router input & restrict API to tunnel
 /ip firewall filter remove [find comment="HotBando WG"]
@@ -664,7 +662,7 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 # Hotspot bridge already created in section 1 with wlan1 attached
 # Just ensure it has the right IP and DHCP
 
-/ip dhcp-server remove [find interface=$hotspotIface]
+/ip dhcp-server remove [find interface=$hotspotIface comment~"HotBando"]
 /ip address remove [find interface=$hotspotIface]
 /ip address add address=${HOTSPOT_IP}/${hotspotPrefixLen} interface=$hotspotIface network=${hotspotNetBase} comment="HotBando hotspot gateway"
 
@@ -702,7 +700,8 @@ function generateProvisionScript({ router, routerID, assignedIp, wireguard }) {
 /ip firewall filter add chain=input protocol=udp dst-port=53 in-interface=$hotspotIface action=accept place-before=0 comment="HotBando DNS"
 /ip firewall filter add chain=input protocol=tcp dst-port=53 in-interface=$hotspotIface action=accept place-before=0 comment="HotBando DNS"
 
-/ip hotspot remove [find]
+# Only OUR hotspot server is removed — never a pre-existing site hotspot.
+/ip hotspot remove [find name="hotbando-server"]
 /ip hotspot profile remove [find name="hotbando-profile"]
 /ip hotspot profile add name="hotbando-profile" \\
   login-by=http-pap,http-chap,mac \\
@@ -738,7 +737,9 @@ ${serverWalledGardenRules()}
 /ip hotspot walled-garden add action=allow dst-host="cdn.jsdelivr.net" comment="HotBando portal libs"
 
 /radius remove [find comment~"HotBando"]
-/radius remove [find service=hotspot]
+# Never touch a non-HotBando /radius entry (service=hotspot alone would wipe a
+# site's own RADIUS configuration).
+/radius remove [find service=hotspot comment~"HotBando"]
 /radius add address=${wireguardService.serverIp} secret=${RADIUS_SECRET} service=hotspot \\
   authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=${assignedIp} \\
   comment="HotBando FreeRADIUS"
@@ -750,7 +751,8 @@ ${serverWalledGardenRules()}
 /ip hotspot user profile add name="hotbando-vip" rate-limit="50M/50M 5M/5M 10000/10000" idle-timeout=2h session-timeout=168h comment="HotBando VIP"
 
 /ip hotspot user remove [find comment~"HotBando"]
-/ip hotspot user add name="admin" password="hotbando2024" profile=hotbando-vip server=hotbando-server comment="HotBando admin"
+# Only emit the admin hotspot user when a strong password is configured.
+${HOTSPOT_ADMIN_PASSWORD ? `/ip hotspot user add name="admin" password="${sanitize(HOTSPOT_ADMIN_PASSWORD)}" profile=hotbando-vip server=hotbando-server comment="HotBando admin"` : `# HotBando admin hotspot user not created: HOTSPOT_ADMIN_PASSWORD is not configured`}
 
 /ip hotspot ip-binding remove [find comment~"HotBando"]
 
@@ -780,7 +782,7 @@ ${serverWalledGardenRules()}
 
 /system scheduler remove [find name="hotbando-heartbeat"]
 /system scheduler add name="hotbando-heartbeat" interval=2m start-time=startup on-event={
-  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=${PUBLIC_FETCH_MODE} keep-result=no check-certificate=yes } on-error={}
+  :do { /tool fetch url=("${PUBLIC_BASE_URL}/api/zero-touch/heartbeat?router_id=${routerID}&secret=${ROUTER_REGISTRATION_SECRET}") mode=https keep-result=no check-certificate=yes } on-error={}
 } comment="HotBando heartbeat"
 
 # ----------------------------------------------------------------------------
@@ -790,7 +792,9 @@ ${serverWalledGardenRules()}
 #    visible button as a fallback if the meta refresh is blocked.
 # ----------------------------------------------------------------------------
 :delay 1
-/file remove hotspot/login.html
+# A missing login.html must never abort the whole import (import stops at the
+# first uncaught error, which would strand the router mid-provision).
+:do { /file remove hotspot/login.html } on-error={}
 :local portalUrl "${PUBLIC_BASE_URL}/hotspot?router_id=${routerID}&mac=\\$(mac)&ip=\\$(ip)"
 :local loginHtml "<!-- HotBando -->\\n<html>\\n<head>\\n<meta charset='utf-8'>\\n<meta http-equiv='refresh' content='0;url=$portalUrl'>\\n<meta name='viewport' content='width=device-width,initial-scale=1'>\\n<title>HotBando WiFi</title>\\n</head>\\n<body style='margin:0;font-family:system-ui,Arial,sans-serif;background:#0b0b12;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh'>\\n<div style='text-align:center;padding:24px;max-width:340px'>\\n<div style='font-size:42px;margin-bottom:12px'>&#128246;</div>\\n<h2 style='margin:0 0 8px'>HotBando WiFi</h2>\\n<p style='color:#9ca3af;margin:0 0 18px'>Inafungua HotBando portal...</p>\\n<a href='$portalUrl' style='display:inline-block;background:#FF7A30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700'>Open HotBando</a>\\n</div>\\n<script>window.location.href='$portalUrl';</script>\\n</body>\\n</html>\\n"
 /file add name="hotspot/login.html" contents=$loginHtml
@@ -809,5 +813,6 @@ module.exports = {
     provisionRouter,
     generateProvisionScript,
     generateBootstrapScript,
+    generateWaitScript,
     ROUTER_REGISTRATION_SECRET
 };
